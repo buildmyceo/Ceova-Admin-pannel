@@ -1,26 +1,37 @@
 -- ==============================================================================
--- CEOVA ADMIN, HEADS & MEMBERS PORTAL SCHEMA MIGRATION
+-- CEOVA ADMIN, HEADS & MEMBERS PORTAL SCHEMA
+-- PostgreSQL Schema for Supabase (Safe & Idempotent)
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Profiles Table (Linked to Supabase auth.users)
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT NOT NULL UNIQUE,
-    full_name TEXT NOT NULL,
+    full_name TEXT NOT NULL DEFAULT 'User',
     avatar_url TEXT,
-    role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'head', 'member')),
+    role TEXT NOT NULL DEFAULT 'member',
     department TEXT DEFAULT 'General',
     designation TEXT DEFAULT 'Team Member',
     phone TEXT,
-    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'away', 'in_meeting', 'offline')),
+    status TEXT DEFAULT 'active',
     bio TEXT,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Departments Table
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name TEXT NOT NULL DEFAULT 'User';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS department TEXT DEFAULT 'General';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT 'Team Member';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
+
 CREATE TABLE IF NOT EXISTS public.departments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL UNIQUE,
@@ -30,20 +41,18 @@ CREATE TABLE IF NOT EXISTS public.departments (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Announcements Table
 CREATE TABLE IF NOT EXISTS public.announcements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     content TEXT NOT NULL,
-    author_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
-    priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-    target_role TEXT DEFAULT 'all' CHECK (target_role IN ('all', 'admin', 'head', 'member')),
+    author_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    priority TEXT DEFAULT 'normal',
+    target_role TEXT DEFAULT 'all',
     target_department TEXT DEFAULT 'all',
     pinned BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Tasks & Deliverables Table
 CREATE TABLE IF NOT EXISTS public.tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
@@ -51,25 +60,23 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     assigned_to UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     assigned_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     department TEXT DEFAULT 'General',
-    priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-    status TEXT DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'review', 'done')),
+    priority TEXT DEFAULT 'normal',
+    status TEXT DEFAULT 'todo',
     due_date DATE,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Member Requests / Helpdesk Table
 CREATE TABLE IF NOT EXISTS public.member_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('leave', 'equipment', '1on1', 'access', 'general')),
+    type TEXT NOT NULL,
     subject TEXT NOT NULL,
     description TEXT,
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    status TEXT DEFAULT 'pending',
     reviewed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Audit & Activity Logs Table
 CREATE TABLE IF NOT EXISTS public.activity_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -80,7 +87,6 @@ CREATE TABLE IF NOT EXISTS public.activity_logs (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- RLS Helper Functions
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS TEXT
 LANGUAGE sql
@@ -117,7 +123,6 @@ AS $$
   );
 $$;
 
--- RLS Enablement
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
@@ -125,7 +130,31 @@ ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.member_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
--- Policies
+DROP POLICY IF EXISTS "Allow authenticated read profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Allow users update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Allow admin update any profile" ON public.profiles;
+DROP POLICY IF EXISTS "Allow admin delete profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Allow user insert own profile" ON public.profiles;
+
+DROP POLICY IF EXISTS "Allow read departments" ON public.departments;
+DROP POLICY IF EXISTS "Allow admin manage departments" ON public.departments;
+
+DROP POLICY IF EXISTS "Allow read announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Allow head and admin insert announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Allow admin update announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Allow admin delete announcements" ON public.announcements;
+
+DROP POLICY IF EXISTS "Allow authenticated view tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow heads and admins manage tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow assignees or leads to update tasks" ON public.tasks;
+
+DROP POLICY IF EXISTS "Allow user view own requests or leads view all" ON public.member_requests;
+DROP POLICY IF EXISTS "Allow user create own requests" ON public.member_requests;
+DROP POLICY IF EXISTS "Allow leads to review requests" ON public.member_requests;
+
+DROP POLICY IF EXISTS "Allow read logs for leads and admins" ON public.activity_logs;
+DROP POLICY IF EXISTS "Allow insert logs" ON public.activity_logs;
+
 CREATE POLICY "Allow authenticated read profiles" ON public.profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow users update own profile" ON public.profiles FOR UPDATE TO authenticated USING (id = (SELECT auth.uid())) WITH CHECK (id = (SELECT auth.uid()));
 CREATE POLICY "Allow admin update any profile" ON public.profiles FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
@@ -135,12 +164,12 @@ CREATE POLICY "Allow user insert own profile" ON public.profiles FOR INSERT TO a
 CREATE POLICY "Allow read departments" ON public.departments FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow admin manage departments" ON public.departments FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
-CREATE POLICY "Allow read announcements" ON public.announcements FOR SELECT TO authenticated USING (target_role = 'all' OR target_role = public.current_user_role() OR public.is_admin());
+CREATE POLICY "Allow read announcements" ON public.announcements FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow head and admin insert announcements" ON public.announcements FOR INSERT TO authenticated WITH CHECK (public.is_head_or_admin());
 CREATE POLICY "Allow admin update announcements" ON public.announcements FOR UPDATE TO authenticated USING (public.is_admin() OR author_id = (SELECT auth.uid())) WITH CHECK (public.is_admin() OR author_id = (SELECT auth.uid()));
 CREATE POLICY "Allow admin delete announcements" ON public.announcements FOR DELETE TO authenticated USING (public.is_admin() OR author_id = (SELECT auth.uid()));
 
-CREATE POLICY "Allow authenticated view tasks" ON public.tasks FOR SELECT TO authenticated USING (assigned_to = (SELECT auth.uid()) OR assigned_by = (SELECT auth.uid()) OR public.is_head_or_admin());
+CREATE POLICY "Allow authenticated view tasks" ON public.tasks FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Allow heads and admins manage tasks" ON public.tasks FOR INSERT TO authenticated WITH CHECK (public.is_head_or_admin());
 CREATE POLICY "Allow assignees or leads to update tasks" ON public.tasks FOR UPDATE TO authenticated USING (assigned_to = (SELECT auth.uid()) OR public.is_head_or_admin()) WITH CHECK (assigned_to = (SELECT auth.uid()) OR public.is_head_or_admin());
 
@@ -151,7 +180,6 @@ CREATE POLICY "Allow leads to review requests" ON public.member_requests FOR UPD
 CREATE POLICY "Allow read logs for leads and admins" ON public.activity_logs FOR SELECT TO authenticated USING (public.is_head_or_admin());
 CREATE POLICY "Allow insert logs" ON public.activity_logs FOR INSERT TO authenticated WITH CHECK (true);
 
--- Auth Trigger
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -180,7 +208,7 @@ BEGIN
     v_department,
     CASE 
       WHEN v_role = 'admin' THEN 'System Administrator'
-      WHEN v_role = 'head' THEN 'Department Lead'
+      WHEN v_role = 'head' THEN 'Department Head'
       ELSE 'Associate Specialist'
     END,
     'active'
@@ -197,7 +225,6 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Default Departments
 INSERT INTO public.departments (name, description, color)
 VALUES
   ('Engineering', 'Core software development, web architecture, and infrastructure.', '#3b82f6'),
