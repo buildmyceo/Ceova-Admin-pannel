@@ -203,15 +203,8 @@ const PortalMain: React.FC = () => {
     return (
       <div className="login-gateway-container">
         <LoginPage
-          onOpenAuth={() => setIsAuthOpen(true)}
-          onOpenWaitlist={() => setIsWaitlistOpen(true)}
-        />
-
-        {/* Global Modals accessible from Login Gateway */}
-        <AuthModal
-          isOpen={isAuthOpen}
-          onClose={() => setIsAuthOpen(false)}
           onLoginSuccess={handleEnterPortal}
+          onOpenWaitlist={() => setIsWaitlistOpen(true)}
         />
 
         <WaitlistModal

@@ -1,33 +1,84 @@
-import React, { useEffect } from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { usePortalData } from '../context/PortalDataContext';
+import { Eye, EyeOff, Lock, Mail, User, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 
 interface LoginPageProps {
-  onOpenAuth: () => void;
+  onLoginSuccess: () => void;
   onOpenWaitlist?: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
-  onOpenAuth,
-  onOpenWaitlist,
+  onLoginSuccess,
 }) => {
-  // Listen for keyboard Enter or Space to open login modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onOpenAuth();
+  const { loginWithEmail, signUpWithEmail } = useAuth();
+  const { submitWaitlistRequest } = usePortalData();
+
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    if (mode === 'signin') {
+      const res = await loginWithEmail(email, password);
+      setLoading(false);
+      if (res.success) {
+        onLoginSuccess();
+      } else {
+        setErrorMessage(res.error || 'Failed to sign in. Please verify your email and password.');
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onOpenAuth]);
+    } else {
+      if (!fullName.trim()) {
+        setErrorMessage('Please provide your full name.');
+        setLoading(false);
+        return;
+      }
+
+      // Submit to CEO Waiting List queue and sign up
+      try {
+        await submitWaitlistRequest({
+          full_name: fullName.trim(),
+          email: email.trim(),
+          requested_role: 'member',
+          department: 'Development',
+          reason: 'Direct portal account registration',
+        });
+
+        const signRes = await signUpWithEmail(email, password, {
+          fullName: fullName.trim(),
+          role: 'member',
+          department: 'Development',
+        });
+
+        setLoading(false);
+        if (signRes.success) {
+          setSuccessMessage(
+            'Registration submitted successfully! Your account is queued on the Waiting List for CEO clearance.'
+          );
+        } else {
+          setErrorMessage(signRes.error || 'Registration failed. Please try again.');
+        }
+      } catch (err: any) {
+        setLoading(false);
+        setErrorMessage(err.message || 'Registration request failed.');
+      }
+    }
+  };
 
   return (
-    <div 
+    <div
       className="ceova-login-viewport"
-      onClick={onOpenAuth}
-      role="button"
-      tabIndex={0}
-      aria-label="Click to sign in to Ceova Portal"
       style={{
         position: 'fixed',
         inset: 0,
@@ -37,12 +88,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         backgroundColor: '#000000',
         overflowX: 'hidden',
         overflowY: 'auto',
-        userSelect: 'none',
-        cursor: 'pointer',
-        zIndex: 50
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 16px',
+        zIndex: 50,
       }}
     >
-      {/* 1. BACKGROUND VIDEO (First child, semantic video, opacity 1, no overlay) */}
+      {/* 1. BACKGROUND VIDEO */}
       <video
         autoPlay
         loop
@@ -57,78 +110,328 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           objectFit: 'cover',
           opacity: 1,
           zIndex: 0,
-          pointerEvents: 'none'
+          pointerEvents: 'none',
         }}
       >
-        <source 
-          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260801_001207_ec20d138-aa45-4b2b-ab8c-bdc71607f240.mp4" 
-          type="video/mp4" 
+        <source
+          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260801_001207_ec20d138-aa45-4b2b-ab8c-bdc71607f240.mp4"
+          type="video/mp4"
         />
       </video>
 
-      {/* 2. HEADER LOGO (Centered at top) */}
-      <header className="ceova-login-header-logo">
-        <div 
-          className="ceova-logo-frame"
+      {/* 2. CENTERED LOGIN CARD */}
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 10,
+          width: '100%',
+          maxWidth: '440px',
+          background: 'rgba(8, 8, 8, 0.88)',
+          backdropFilter: 'blur(28px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: '18px',
+          padding: '32px 28px',
+          boxShadow: '0 24px 70px rgba(0, 0, 0, 0.85), 0 0 40px rgba(59, 130, 246, 0.12)',
+        }}
+      >
+        {/* Brand Header */}
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              margin: '0 auto 14px auto',
+              borderRadius: '12px',
+              background: '#000000',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 4,
+              boxShadow: '0 0 20px rgba(59, 130, 246, 0.25)',
+            }}
+          >
+            <img
+              src="/ceovaimage.png"
+              alt="Ceova Logo"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          </div>
+
+          <h2
+            style={{
+              fontSize: '22px',
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
+              margin: '0 0 6px 0',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+          >
+            CEOVA
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                padding: '2px 8px',
+                borderRadius: '9999px',
+                background: 'rgba(59, 130, 246, 0.15)',
+                color: '#3b82f6',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+              }}
+            >
+              Team OS
+            </span>
+          </h2>
+          <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.55)', margin: 0 }}>
+            Internal Company Management Platform
+          </p>
+        </div>
+
+        {/* Tab Switcher: Sign In & Sign Up */}
+        <div
           style={{
             display: 'flex',
-            alignItems: 'center',
-            width: '233px',
-            height: '40px'
+            background: 'rgba(0, 0, 0, 0.65)',
+            padding: 4,
+            borderRadius: '10px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            marginBottom: 20,
           }}
         >
-          {/* Geometric pixel symbol (54px x 40px) */}
-          <svg 
-            width="54" 
-            height="40" 
-            viewBox="0 0 54 40" 
-            fill="none" 
-            xmlns="http://www.w3.org/2000/svg"
-            style={{ flexShrink: 0 }}
+          <button
+            type="button"
+            style={{
+              flex: 1,
+              padding: '10px 14px',
+              border: 'none',
+              background: mode === 'signin' ? '#ffffff' : 'transparent',
+              color: mode === 'signin' ? '#000000' : 'rgba(255, 255, 255, 0.6)',
+              fontWeight: 700,
+              fontSize: '13px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.18s ease',
+            }}
+            onClick={() => {
+              setMode('signin');
+              setErrorMessage('');
+              setSuccessMessage('');
+            }}
           >
-            <path d="M38 0H26V12H38V0Z" fill="white"/>
-            <path d="M54 12H38V28H54V12Z" fill="white"/>
-            <path d="M38 28H26V40H38V28Z" fill="white"/>
-            <path d="M26 12H16V22H26V12Z" fill="white"/>
-            <path d="M16 22H8V30H16V22Z" fill="white"/>
-            <path d="M16 2H6V12H16V2Z" fill="white"/>
-            <path d="M6 12H0V18H6V12Z" fill="white"/>
-          </svg>
-
-          {/* Logotype SVG (14px to the right of the mark, viewBox="0 0 164.311 100") */}
-          <div style={{ marginLeft: '14px', width: '165px', height: '40px', display: 'flex', alignItems: 'center' }}>
-            <svg 
-              width="165" 
-              height="40" 
-              viewBox="0 0 164.311 100" 
-              fill="none" 
-              xmlns="http://www.w3.org/2000/svg"
-              style={{ width: '100%', height: '100%' }}
-            >
-              <path 
-                d="M122.498 37.4573H131.321L139.533 51.6222L147.772 37.4573H156.595V56.0604H152.449V37.6433L141.739 56.0604H137.354L126.617 37.6433V56.0604H122.498V37.4573ZM95.921 48.8317C92.785 48.8317 90.261 46.307 90.261 43.1445C90.261 40.0086 92.785 37.4573 95.921 37.4573H119.972V41.6031H95.921C95.071 41.6031 94.38 42.2941 94.38 43.1445C94.38 44.0215 95.071 44.7125 95.921 44.7125H114.285C117.421 44.7125 119.972 47.2372 119.972 50.3997C119.972 53.5357 117.421 56.0604 114.285 56.0604H90.261V51.9411H114.285C115.136 51.9411 115.827 51.2501 115.827 50.3997C115.827 49.5227 115.136 48.8317 114.285 48.8317H95.921ZM80.857 37.4573C84.843 37.4573 88.086 40.6995 88.086 44.7125C88.086 48.6989 84.843 51.9411 80.857 51.9411H62.254V56.0604H58.135V37.4573H80.857ZM80.83 47.7953C82.558 47.7953 83.94 46.4133 83.94 44.7125C83.94 42.985 82.558 41.6031 80.83 41.6031H62.254V47.7953H80.83ZM35.975 41.6031C33.105 41.6031 30.7927 43.9152 30.7927 46.7588C30.7927 49.629 33.105 51.9411 35.975 51.9411H51.336V48.6989H35.576V44.5796H55.482V56.0604H35.975C30.8192 56.0604 26.6734 51.9145 26.6734 46.7588C26.6734 41.6297 30.8192 37.4573 35.975 37.4573H55.482V41.6031H35.975ZM0 56.0604V37.4573H4.1192V51.9411H24.9281V56.0604H0ZM164.311 36.4177C164.311 37.7529 163.228 38.8354 161.893 38.8354C160.558 38.8354 159.475 37.7529 159.475 36.4177C159.475 35.0824 160.558 34 161.893 34C163.228 34 164.311 35.0824 164.311 36.4177Z" 
-                fill="white"
-              />
-            </svg>
-          </div>
+            Sign In
+          </button>
+          <button
+            type="button"
+            style={{
+              flex: 1,
+              padding: '10px 14px',
+              border: 'none',
+              background: mode === 'signup' ? '#ffffff' : 'transparent',
+              color: mode === 'signup' ? '#000000' : 'rgba(255, 255, 255, 0.6)',
+              fontWeight: 700,
+              fontSize: '13px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.18s ease',
+            }}
+            onClick={() => {
+              setMode('signup');
+              setErrorMessage('');
+              setSuccessMessage('');
+            }}
+          >
+            Sign Up
+          </button>
         </div>
-      </header>
 
-      {/* 3. CENTER CONTENT GROUP (Exactly centered in viewport, desktop width: 483px, 44px gap) */}
-      <main className="ceova-login-content-group">
-        {/* Large Heading */}
-        <h1 className="ceova-login-heading">
-          ceova portal
-        </h1>
+        {/* Alert Messages */}
+        {errorMessage && (
+          <div
+            style={{
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: 16,
+              color: '#f87171',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+            }}
+          >
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
-        {/* Thin Horizontal Divider (425px width, 1px solid white) */}
-        <div className="ceova-login-divider" />
+        {successMessage && (
+          <div
+            style={{
+              background: 'rgba(34, 197, 94, 0.12)',
+              border: '1px solid rgba(34, 197, 94, 0.35)',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: 16,
+              color: '#4ade80',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+            }}
+          >
+            <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{successMessage}</span>
+          </div>
+        )}
 
-        {/* Message */}
-        <p className="ceova-login-message">
-          The path may be broken, but the journey isn't. Let's get you back.
-        </p>
-      </main>
+        {/* Form */}
+        <form onSubmit={handleSubmit}>
+          {mode === 'signup' && (
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label className="form-label" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)', marginBottom: 6 }}>
+                Full Name
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Elena Rostova"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 36px',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    outline: 'none',
+                  }}
+                />
+                <User size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)' }} />
+              </div>
+            </div>
+          )}
+
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)', marginBottom: 6 }}>
+              Email Address
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="email"
+                className="form-input"
+                placeholder="name@ceova.online"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 36px',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  outline: 'none',
+                }}
+              />
+              <Mail size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)' }} />
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)', marginBottom: 6 }}>
+              Password
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="form-input"
+                placeholder="••••••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '10px 38px 10px 36px',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  outline: 'none',
+                }}
+              />
+              <Lock size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)' }} />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255, 255, 255, 0.5)',
+                  cursor: 'pointer',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              borderRadius: '8px',
+              backgroundColor: '#3b82f6',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '14px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow: '0 4px 16px rgba(59, 130, 246, 0.35)',
+              transition: 'all 0.15s ease',
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? (
+              'Processing...'
+            ) : mode === 'signin' ? (
+              <>
+                Sign In to Portal <ArrowRight size={16} />
+              </>
+            ) : (
+              'Complete Registration'
+            )}
+          </button>
+        </form>
+      </div>
     </div>
   );
 };
+
+export default LoginPage;
