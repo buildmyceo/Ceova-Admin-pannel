@@ -7,9 +7,10 @@ import { UserRole } from '../types';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onLoginSuccess?: () => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
   const { loginWithEmail, signUpWithEmail, quickLoginAs, isSupabaseConfigured } = useAuth();
   const { submitWaitlistRequest } = usePortalData();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -50,6 +51,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       const res = await loginWithEmail(email, password);
       setLoading(false);
       if (res.success) {
+        if (onLoginSuccess) onLoginSuccess();
         onClose();
       } else {
         setErrorMessage(res.error || 'Failed to sign in. Please verify your credentials.');
@@ -77,6 +79,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
   const handleDemoLogin = (targetRole: UserRole) => {
     quickLoginAs(targetRole);
+    if (onLoginSuccess) onLoginSuccess();
     onClose();
   };
 

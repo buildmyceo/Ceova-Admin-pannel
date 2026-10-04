@@ -16,7 +16,8 @@ import {
   DollarSign,
   Briefcase,
   GraduationCap,
-  UserCheck
+  UserCheck,
+  Lock
 } from 'lucide-react';
 import { UserRole } from '../types';
 import { usePortalData } from '../context/PortalDataContext';
@@ -27,6 +28,7 @@ interface NavbarProps {
   onOpenNotifications: () => void;
   onNavigateToProfile: () => void;
   onOpenWaitlist: () => void;
+  onLockGateway?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -35,6 +37,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNotifications,
   onNavigateToProfile,
   onOpenWaitlist,
+  onLockGateway,
 }) => {
   const { user, role, logout, quickLoginAs, isSupabaseConfigured, updateCurrentProfile } = useAuth();
   const { waitlistRequests } = usePortalData();
@@ -283,12 +286,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Database & Auth
                 </button>
 
+                {onLockGateway && (
+                  <button
+                    type="button"
+                    className="nav-item"
+                    style={{ padding: '8px 10px', fontSize: 13 }}
+                    onClick={() => {
+                      onLockGateway();
+                      setShowProfileMenu(false);
+                    }}
+                  >
+                    <Lock size={15} />
+                    Lock Gateway Screen
+                  </button>
+                )}
+
                 <button
                   type="button"
                   className="nav-item"
                   style={{ padding: '8px 10px', fontSize: 13, color: 'var(--danger)' }}
                   onClick={() => {
                     logout();
+                    if (onLockGateway) onLockGateway();
                     setShowProfileMenu(false);
                   }}
                 >

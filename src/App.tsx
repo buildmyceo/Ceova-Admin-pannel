@@ -31,10 +31,16 @@ import { CreateTaskModal } from './components/CreateTaskModal';
 import { SubmitRequestModal } from './components/SubmitRequestModal';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { WaitlistModal } from './components/WaitlistModal';
+import { LoginPage } from './views/LoginPage';
 
 const PortalMain: React.FC = () => {
   const { user, role, isCSuite } = useAuth();
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+
+  // Gateway / Login Page State: Show login page first until session has entered portal
+  const [showLoginPage, setShowLoginPage] = useState<boolean>(() => {
+    return sessionStorage.getItem('ceova_portal_entered') !== 'true';
+  });
 
   // Modal states
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -46,6 +52,16 @@ const PortalMain: React.FC = () => {
   const [isRequestOpen, setIsRequestOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
+
+  const handleEnterPortal = () => {
+    sessionStorage.setItem('ceova_portal_entered', 'true');
+    setShowLoginPage(false);
+  };
+
+  const handleLockGateway = () => {
+    sessionStorage.removeItem('ceova_portal_entered');
+    setShowLoginPage(true);
+  };
 
   const handleSelectTab = (tab: NavTab) => {
     setCurrentTab(tab);
@@ -181,6 +197,34 @@ const PortalMain: React.FC = () => {
     }
   };
 
+  // If viewing the Login Gateway Screen first
+  if (showLoginPage) {
+    return (
+      <div className="login-gateway-container">
+        <LoginPage
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onOpenWaitlist={() => setIsWaitlistOpen(true)}
+        />
+
+        {/* Global Modals accessible from Login Gateway */}
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+          onLoginSuccess={handleEnterPortal}
+        />
+
+        <WaitlistModal
+          isOpen={isWaitlistOpen}
+          onClose={() => setIsWaitlistOpen(false)}
+          onSwitchToCEO={() => {
+            handleEnterPortal();
+            setCurrentTab('dashboard');
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       <Navbar
@@ -189,6 +233,7 @@ const PortalMain: React.FC = () => {
         onOpenNotifications={() => setIsNotificationsOpen(true)}
         onNavigateToProfile={() => setCurrentTab('profile')}
         onOpenWaitlist={() => setIsWaitlistOpen(true)}
+        onLockGateway={handleLockGateway}
       />
 
       <div className="portal-body">
@@ -208,6 +253,7 @@ const PortalMain: React.FC = () => {
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
+        onLoginSuccess={handleEnterPortal}
       />
 
       <SupabaseConfigModal
