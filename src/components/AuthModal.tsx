@@ -215,21 +215,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                     />
                   </div>
                 </div>
-
-                <div className="form-group">
-                  <label className="form-label">Department</label>
-                  <select
-                    className="form-input"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                  >
-                    <option value="Engineering">Engineering</option>
-                    <option value="AI & Machine Learning">AI & ML</option>
-                    <option value="Product & Design">Product & Design</option>
-                    <option value="Operations & HR">Operations & HR</option>
-                    <option value="Marketing & Growth">Marketing</option>
-                  </select>
-                </div>
               </>
             )}
 
@@ -291,12 +276,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                   : 'Complete Registration'}
             </button>
           </form>
-
-          <div style={{ marginTop: 16, textAlign: 'center', fontSize: 12, color: 'var(--text-subtle)' }}>
-            {isSupabaseConfigured 
-              ? '🔐 Connected to live Supabase Authentication' 
-              : '⚡ Demo Mode Active: Use any demo role or enter any credentials'}
-          </div>
         </div>
       </div>
     </div>

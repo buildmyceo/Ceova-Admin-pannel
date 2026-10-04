@@ -7,6 +7,7 @@ export type UserRole =
   | 'lead' 
   | 'member' 
   | 'intern' 
+  | 'student'
   | 'admin' 
   | 'head';
 
