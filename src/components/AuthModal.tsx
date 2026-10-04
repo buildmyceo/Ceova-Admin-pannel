@@ -77,12 +77,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     }
   };
 
-  const handleDemoLogin = (targetRole: UserRole) => {
-    quickLoginAs(targetRole);
-    if (onLoginSuccess) onLoginSuccess();
-    onClose();
-  };
-
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -104,10 +98,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: 16 }}>
-                {mode === 'signin' ? 'Sign In to Ceova Team OS' : 'Apply for Access Clearance'}
+                {mode === 'signin' ? 'Sign In' : 'Sign Up'}
               </h3>
               <div style={{ fontSize: 11, color: 'var(--accent-primary)', fontWeight: 600 }}>
-                {mode === 'signin' ? 'Secured Internal Environment' : 'CEO Executive Clearance Required'}
+                {mode === 'signin' ? 'Ceova Team OS • Internal Access' : 'Register for Portal Access'}
               </div>
             </div>
           </div>
@@ -122,52 +116,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         </div>
 
         <div className="modal-body">
-          {/* Quick Demo Switcher helper */}
-          <div 
-            style={{ 
-              background: 'rgba(99, 102, 241, 0.08)', 
-              border: '1px solid rgba(99, 102, 241, 0.2)',
-              borderRadius: 'var(--radius-md)',
-              padding: '12px 14px',
-              marginBottom: 20
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--text-main)', marginBottom: 8 }}>
-              <Sparkles size={14} style={{ color: 'var(--accent-primary)' }} />
-              <span>Instant 1-Click Role Login:</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              <button
-                type="button"
-                className="btn btn-sm"
-                style={{ background: 'var(--role-admin-bg)', color: 'var(--role-admin)', border: '1px solid var(--role-admin-border)' }}
-                onClick={() => handleDemoLogin('admin')}
-              >
-                <Shield size={12} />
-                Admin
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                style={{ background: 'var(--role-head-bg)', color: 'var(--role-head)', border: '1px solid var(--role-head-border)' }}
-                onClick={() => handleDemoLogin('head')}
-              >
-                <Crown size={12} />
-                Head
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                style={{ background: 'var(--role-member-bg)', color: 'var(--role-member)', border: '1px solid var(--role-member-border)' }}
-                onClick={() => handleDemoLogin('member')}
-              >
-                <User size={12} />
-                Member
-              </button>
-            </div>
-          </div>
-
-          {/* Mode Switch Tabs */}
+          {/* Mode Switch Tabs: Only Sign In and Sign Up */}
           <div 
             style={{ 
               display: 'flex', 
@@ -193,7 +142,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               }}
               onClick={() => { setMode('signin'); setErrorMessage(''); setSuccessMessage(''); }}
             >
-              Email Login
+              Sign In
             </button>
             <button
               type="button"
@@ -210,7 +159,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               }}
               onClick={() => { setMode('signup'); setErrorMessage(''); setSuccessMessage(''); }}
             >
-              Register New User
+              Sign Up
             </button>
           </div>
 
@@ -267,34 +216,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Role</label>
-                    <select
-                      className="form-input"
-                      value={selectedRole}
-                      onChange={(e) => setSelectedRole(e.target.value as UserRole)}
-                    >
-                      <option value="member">Member</option>
-                      <option value="head">Department Head</option>
-                      <option value="admin">Administrator</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Department</label>
-                    <select
-                      className="form-input"
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                    >
-                      <option value="Engineering">Engineering</option>
-                      <option value="AI & Machine Learning">AI & ML</option>
-                      <option value="Product & Design">Product & Design</option>
-                      <option value="Operations & HR">Operations & HR</option>
-                      <option value="Marketing & Growth">Marketing</option>
-                    </select>
-                  </div>
+                <div className="form-group">
+                  <label className="form-label">Department</label>
+                  <select
+                    className="form-input"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                  >
+                    <option value="Engineering">Engineering</option>
+                    <option value="AI & Machine Learning">AI & ML</option>
+                    <option value="Product & Design">Product & Design</option>
+                    <option value="Operations & HR">Operations & HR</option>
+                    <option value="Marketing & Growth">Marketing</option>
+                  </select>
                 </div>
               </>
             )}

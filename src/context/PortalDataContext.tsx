@@ -724,15 +724,15 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const createTaskFromMessage = async (message: ChatMessage) => {
     if (!message.suggested_task) return;
     const { title, assignee, project, priority } = message.suggested_task;
-    const assignedUser = members.find(m => m.full_name.toLowerCase().includes(assignee.toLowerCase())) || members[0];
+    const assignedUser = members.find(m => m.full_name?.toLowerCase().includes((assignee || '').toLowerCase())) || members[0];
 
     await addTask({
       title,
       description: `Created directly from chat message by ${message.sender_name}: "${message.text}"`,
-      assigned_to_id: assignedUser.id,
-      department: assignedUser.department || 'Development',
+      assigned_to_id: assignedUser?.id || members[0]?.id || 'usr-1',
+      department: assignedUser?.department || 'Development',
       project_name: project,
-      priority: priority.toLowerCase() as any,
+      priority: (priority || 'medium').toLowerCase() as any,
       due_date: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0]
     });
   };

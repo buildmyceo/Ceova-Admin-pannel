@@ -3384,14 +3384,17 @@ body {
    ========================================================================== */
 
 .ceova-login-viewport {
-  position: relative;
-  width: 100%;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
   min-height: 100svh;
   background-color: #000000;
   overflow-x: hidden;
   overflow-y: auto;
   user-select: none;
   cursor: pointer;
+  z-index: 50;
 }
 
 .ceova-login-bg-video {

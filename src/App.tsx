@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PortalDataProvider } from './context/PortalDataContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navbar } from './components/Navbar';
 import { Sidebar, NavTab } from './components/Sidebar';
 
@@ -302,11 +303,13 @@ const PortalMain: React.FC = () => {
 
 export function App() {
   return (
-    <AuthProvider>
-      <PortalDataProvider>
-        <PortalMain />
-      </PortalDataProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <PortalDataProvider>
+          <PortalMain />
+        </PortalDataProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

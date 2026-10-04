@@ -238,8 +238,8 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                           {['I', 'II', 'III', 'IV'][index]} •
                         </span>
                         <h4>{dept.name}</h4>
-                        <span className={`status-pill status-${dept.status.toLowerCase().replace(' ', '-')}`}>
-                          {dept.status}
+                        <span className={`status-pill status-${(dept.status || 'Active').toLowerCase().replace(' ', '-')}`}>
+                          {dept.status || 'Active'}
                         </span>
                       </div>
                       <div className="dept-lead-label">Lead: {dept.c_suite_leader}</div>
@@ -260,7 +260,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                   <span className="dept-stat"><strong>{dept.pending_tasks_count}</strong> pending tasks</span>
                 </div>
 
-                {dept.critical_issues.length > 0 && (
+                {dept.critical_issues && dept.critical_issues.length > 0 && (
                   <div className="dept-issue-box">
                     <AlertTriangle size={13} style={{ color: 'var(--warning)', flexShrink: 0 }} />
                     <span>{dept.critical_issues[0]}</span>
@@ -291,8 +291,8 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                     </span>
                     <h5>{decision.title}</h5>
                   </div>
-                  <span className={`impact-badge ${decision.impact.toLowerCase()}`}>
-                    {decision.impact}
+                  <span className={`impact-badge ${(decision.impact || 'medium').toLowerCase()}`}>
+                    {decision.impact || 'Medium'}
                   </span>
                 </div>
                 <p className="decision-desc">{decision.description}</p>

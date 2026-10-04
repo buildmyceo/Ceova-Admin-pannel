@@ -29,14 +29,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       tabIndex={0}
       aria-label="Click to sign in to Ceova Portal"
       style={{
-        position: 'relative',
-        width: '100%',
+        position: 'fixed',
+        inset: 0,
+        width: '100vw',
+        height: '100vh',
         minHeight: '100svh',
         backgroundColor: '#000000',
         overflowX: 'hidden',
         overflowY: 'auto',
         userSelect: 'none',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        zIndex: 50
       }}
     >
       {/* 1. BACKGROUND VIDEO (First child, semantic video, opacity 1, no overlay) */}
