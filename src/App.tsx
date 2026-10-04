@@ -3,25 +3,37 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { PortalDataProvider } from './context/PortalDataContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar, NavTab } from './components/Sidebar';
+
+// Views
 import { DashboardView } from './views/DashboardView';
-import { MembersView } from './views/MembersView';
-import { AdminRolesView } from './views/AdminRolesView';
-import { DepartmentHubView } from './views/DepartmentHubView';
-import { AnnouncementsView } from './views/AnnouncementsView';
 import { TaskBoardView } from './views/TaskBoardView';
-import { RequestsView } from './views/RequestsView';
+import { ProjectsView } from './views/ProjectsView';
+import { CalendarView } from './views/CalendarView';
+import { MembersView } from './views/MembersView';
+import { ChatView } from './views/ChatView';
+import { AnnouncementsView } from './views/AnnouncementsView';
+import { FilesView } from './views/FilesView';
+import { ExecutiveRoomView } from './views/ExecutiveRoomView';
+import { DepartmentHubView } from './views/DepartmentHubView';
+import { CFODashboardView } from './views/dashboards/CFODashboardView';
+import { CoreMemberDashboardView } from './views/dashboards/CoreMemberDashboardView';
 import { ActivityLogsView } from './views/ActivityLogsView';
+import { AdminRolesView } from './views/AdminRolesView';
+import { RequestsView } from './views/RequestsView';
 import { ProfileView } from './views/ProfileView';
 
+// Modals
 import { AuthModal } from './components/AuthModal';
 import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { InviteMemberModal } from './components/InviteMemberModal';
 import { CreateAnnouncementModal } from './components/CreateAnnouncementModal';
 import { CreateTaskModal } from './components/CreateTaskModal';
 import { SubmitRequestModal } from './components/SubmitRequestModal';
+import { NotificationCenterModal } from './components/NotificationCenterModal';
+import { WaitlistModal } from './components/WaitlistModal';
 
 const PortalMain: React.FC = () => {
-  const { user, role, isLoading } = useAuth();
+  const { user, role, isCSuite } = useAuth();
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
 
   // Modal states
@@ -30,19 +42,18 @@ const PortalMain: React.FC = () => {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
   const [isTaskOpen, setIsTaskOpen] = useState(false);
+  const [taskInitialData, setTaskInitialData] = useState<any>(null);
   const [isRequestOpen, setIsRequestOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
 
-  // If a role changes and the user was on an admin-only tab, safely switch to dashboard
   const handleSelectTab = (tab: NavTab) => {
-    if (tab === 'roles' && role !== 'admin') {
-      setCurrentTab('dashboard');
-      return;
-    }
-    if (tab === 'department' && role !== 'admin' && role !== 'head') {
-      setCurrentTab('dashboard');
-      return;
-    }
     setCurrentTab(tab);
+  };
+
+  const handleOpenTaskWithPrefill = (prefilled?: any) => {
+    setTaskInitialData(prefilled || null);
+    setIsTaskOpen(true);
   };
 
   const renderActiveView = () => {
@@ -53,74 +64,117 @@ const PortalMain: React.FC = () => {
             onNavigate={handleSelectTab}
             onOpenInvite={() => setIsInviteOpen(true)}
             onOpenAnnouncement={() => setIsAnnouncementOpen(true)}
-            onOpenTask={() => setIsTaskOpen(true)}
+            onOpenTask={() => handleOpenTaskWithPrefill()}
             onOpenRequest={() => setIsRequestOpen(true)}
           />
         );
-      case 'members':
+
+      case 'tasks':
         return (
-          <MembersView onOpenInvite={() => setIsInviteOpen(true)} />
+          <TaskBoardView 
+            onOpenCreateTask={() => handleOpenTaskWithPrefill()} 
+          />
         );
+
+      case 'projects':
+        return (
+          <ProjectsView 
+            onNavigateToChat={() => setCurrentTab('chat')}
+            onOpenCreateProject={() => handleOpenTaskWithPrefill()}
+          />
+        );
+
+      case 'calendar':
+        return <CalendarView />;
+
+      case 'team':
+        return (
+          <MembersView 
+            onOpenInvite={() => setIsInviteOpen(true)} 
+            onNavigateToChat={() => setCurrentTab('chat')}
+          />
+        );
+
+      case 'chat':
+        return (
+          <ChatView 
+            onOpenCreateTaskModal={(prefill) => handleOpenTaskWithPrefill(prefill)}
+          />
+        );
+
+      case 'announcements':
+        return (
+          <AnnouncementsView 
+            onOpenCreate={() => setIsAnnouncementOpen(true)} 
+          />
+        );
+
+      case 'files':
+        return <FilesView />;
+
+      case 'executive_room':
+        return (
+          <ExecutiveRoomView 
+            onNavigate={handleSelectTab} 
+          />
+        );
+
+      case 'department':
+        return (
+          <DepartmentHubView
+            onOpenTask={() => handleOpenTaskWithPrefill()}
+            onOpenAnnouncement={() => setIsAnnouncementOpen(true)}
+          />
+        );
+
+      case 'reports':
+        return (
+          <CFODashboardView 
+            onNavigate={handleSelectTab} 
+          />
+        );
+
+      case 'performance':
+        return (
+          <CoreMemberDashboardView 
+            onNavigate={handleSelectTab}
+            onOpenTaskModal={() => handleOpenTaskWithPrefill()}
+          />
+        );
+
       case 'roles':
-        return role === 'admin' ? (
+        return isCSuite ? (
           <AdminRolesView onOpenInvite={() => setIsInviteOpen(true)} />
         ) : (
           <DashboardView
             onNavigate={handleSelectTab}
             onOpenInvite={() => setIsInviteOpen(true)}
             onOpenAnnouncement={() => setIsAnnouncementOpen(true)}
-            onOpenTask={() => setIsTaskOpen(true)}
+            onOpenTask={() => handleOpenTaskWithPrefill()}
             onOpenRequest={() => setIsRequestOpen(true)}
           />
         );
-      case 'department':
-        return (role === 'admin' || role === 'head') ? (
-          <DepartmentHubView
-            onOpenTask={() => setIsTaskOpen(true)}
-            onOpenAnnouncement={() => setIsAnnouncementOpen(true)}
-          />
-        ) : (
-          <DashboardView
-            onNavigate={handleSelectTab}
-            onOpenInvite={() => setIsInviteOpen(true)}
-            onOpenAnnouncement={() => setIsAnnouncementOpen(true)}
-            onOpenTask={() => setIsTaskOpen(true)}
-            onOpenRequest={() => setIsRequestOpen(true)}
-          />
-        );
-      case 'announcements':
-        return (
-          <AnnouncementsView onOpenCreate={() => setIsAnnouncementOpen(true)} />
-        );
-      case 'tasks':
-        return (
-          <TaskBoardView onOpenCreateTask={() => setIsTaskOpen(true)} />
-        );
+
       case 'requests':
         return (
-          <RequestsView onOpenSubmit={() => setIsRequestOpen(true)} />
-        );
-      case 'logs':
-        return (role === 'admin' || role === 'head') ? (
-          <ActivityLogsView />
-        ) : (
-          <DashboardView
-            onNavigate={handleSelectTab}
-            onOpenInvite={() => setIsInviteOpen(true)}
-            onOpenAnnouncement={() => setIsAnnouncementOpen(true)}
-            onOpenTask={() => setIsTaskOpen(true)}
-            onOpenRequest={() => setIsRequestOpen(true)}
+          <RequestsView 
+            onOpenSubmit={() => setIsRequestOpen(true)} 
           />
         );
+
+      case 'logs':
+        return <ActivityLogsView />;
+
       case 'profile':
         return <ProfileView />;
+
       default:
         return (
           <DashboardView
             onNavigate={handleSelectTab}
             onOpenInvite={() => setIsInviteOpen(true)}
             onOpenAnnouncement={() => setIsAnnouncementOpen(true)}
-            onOpenTask={() => setIsTaskOpen(true)}
+            onOpenTask={() => handleOpenTaskWithPrefill()}
             onOpenRequest={() => setIsRequestOpen(true)}
           />
         );
@@ -132,7 +186,9 @@ const PortalMain: React.FC = () => {
       <Navbar
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenConfig={() => setIsConfigOpen(true)}
+        onOpenNotifications={() => setIsNotificationsOpen(true)}
         onNavigateToProfile={() => setCurrentTab('profile')}
+        onOpenWaitlist={() => setIsWaitlistOpen(true)}
       />
 
       <div className="portal-body">
@@ -140,6 +196,7 @@ const PortalMain: React.FC = () => {
           currentTab={currentTab}
           onSelectTab={handleSelectTab}
           onOpenConfig={() => setIsConfigOpen(true)}
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
         />
 
         <main className="main-content">
@@ -170,12 +227,28 @@ const PortalMain: React.FC = () => {
 
       <CreateTaskModal
         isOpen={isTaskOpen}
-        onClose={() => setIsTaskOpen(false)}
+        onClose={() => {
+          setIsTaskOpen(false);
+          setTaskInitialData(null);
+        }}
+        initialData={taskInitialData}
       />
 
       <SubmitRequestModal
         isOpen={isRequestOpen}
         onClose={() => setIsRequestOpen(false)}
+      />
+
+      <NotificationCenterModal
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        onNavigateToTab={handleSelectTab}
+      />
+
+      <WaitlistModal
+        isOpen={isWaitlistOpen}
+        onClose={() => setIsWaitlistOpen(false)}
+        onSwitchToCEO={() => setCurrentTab('dashboard')}
       />
     </div>
   );

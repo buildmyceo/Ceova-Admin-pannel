@@ -9,23 +9,39 @@ import {
   LogIn, 
   Sparkles, 
   Settings,
-  ChevronDown
+  ChevronDown,
+  Bell,
+  Cpu,
+  Palette,
+  DollarSign,
+  Briefcase,
+  GraduationCap,
+  UserCheck
 } from 'lucide-react';
 import { UserRole } from '../types';
+import { usePortalData } from '../context/PortalDataContext';
 
 interface NavbarProps {
   onOpenAuth: () => void;
   onOpenConfig: () => void;
+  onOpenNotifications: () => void;
   onNavigateToProfile: () => void;
+  onOpenWaitlist: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onOpenConfig,
+  onOpenNotifications,
   onNavigateToProfile,
+  onOpenWaitlist,
 }) => {
   const { user, role, logout, quickLoginAs, isSupabaseConfigured, updateCurrentProfile } = useAuth();
+  const { waitlistRequests } = usePortalData();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showRoleMenu, setShowRoleMenu] = useState(false);
+
+  const pendingWaitlist = waitlistRequests.filter(w => w.status === 'pending');
 
   const statusOptions: Array<{ label: string; value: 'active' | 'away' | 'in_meeting' | 'offline' }> = [
     { label: 'Available', value: 'active' },
@@ -34,50 +50,136 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: 'Offline', value: 'offline' },
   ];
 
+  const roleProfiles: Array<{ role: UserRole; title: string; name: string; icon: any }> = [
+    { role: 'ceo', title: 'CEO', name: 'Harshit (CEO)', icon: Crown },
+    { role: 'cto', title: 'CTO', name: 'Elena Rostova (CTO)', icon: Cpu },
+    { role: 'cmo', title: 'CMO', name: 'Sophia Chen (CMO)', icon: Palette },
+    { role: 'cfo', title: 'CFO', name: 'David Sterling (CFO)', icon: DollarSign },
+    { role: 'coo', title: 'COO', name: 'Aarav Singhania (COO)', icon: Briefcase },
+    { role: 'member', title: 'Core Dev', name: 'Rahul Sharma', icon: User },
+    { role: 'intern', title: 'Intern', name: 'Aanya Patel', icon: GraduationCap }
+  ];
+
   return (
     <header className="top-navbar">
       <div className="nav-left">
-        <div className="brand-badge">
-          <div className="brand-icon">C</div>
+        <div className="brand-badge" onClick={onNavigateToProfile} style={{ cursor: 'pointer' }}>
+          <div style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: 'rgba(0, 0, 0, 0.4)',
+            border: '1px solid rgba(212, 175, 55, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            padding: 2,
+            boxShadow: '0 0 12px rgba(212, 175, 55, 0.2)'
+          }}>
+            <img src="/ceovaimage.png" alt="Ceova Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
           <div className="brand-text">
             <h1>
               CEOVA
-              <span className="brand-pill">Unified Portal</span>
+              <span className="brand-pill">Team OS</span>
             </h1>
           </div>
         </div>
 
-        {/* Quick Role Switcher for seamless testing and demonstration */}
-        <div className="role-quick-switch" title="Switch view between roles">
-          <button
-            type="button"
-            className={`switch-btn admin ${role === 'admin' ? 'active' : ''}`}
-            onClick={() => quickLoginAs('admin')}
+        {/* Quick Role Switcher for instant role preview & testing */}
+        <div className="role-switch-dropdown-wrap">
+          <button 
+            type="button" 
+            className="role-switcher-btn"
+            onClick={() => setShowRoleMenu(!showRoleMenu)}
+            title="Switch user perspective to preview role-based dashboard & permissions"
           >
-            <Shield size={12} style={{ display: 'inline', marginRight: 4 }} />
-            Admin
+            <span className="role-switcher-label">View As:</span>
+            <span className={`role-badge role-${role}`}>
+              {role?.toUpperCase()}
+            </span>
+            <ChevronDown size={13} />
           </button>
-          <button
-            type="button"
-            className={`switch-btn head ${role === 'head' ? 'active' : ''}`}
-            onClick={() => quickLoginAs('head')}
-          >
-            <Crown size={12} style={{ display: 'inline', marginRight: 4 }} />
-            Head
-          </button>
-          <button
-            type="button"
-            className={`switch-btn member ${role === 'member' ? 'active' : ''}`}
-            onClick={() => quickLoginAs('member')}
-          >
-            <User size={12} style={{ display: 'inline', marginRight: 4 }} />
-            Member
-          </button>
+
+          {showRoleMenu && (
+            <div className="role-menu-dropdown">
+              <div className="role-menu-header">Select Role Perspective</div>
+              {roleProfiles.map((p) => {
+                const IconComponent = p.icon;
+                const isSelected = role === p.role;
+
+                return (
+                  <button
+                    key={p.role}
+                    type="button"
+                    className={`role-option-btn ${isSelected ? 'active' : ''}`}
+                    onClick={() => {
+                      quickLoginAs(p.role);
+                      setShowRoleMenu(false);
+                    }}
+                  >
+                    <IconComponent size={14} className="role-option-icon" />
+                    <div className="role-option-text">
+                      <span className="role-option-title">{p.title}</span>
+                      <span className="role-option-name">{p.name}</span>
+                    </div>
+                    {isSelected && <span className="active-dot" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="nav-right">
-        {/* Supabase connection indicator button */}
+        {/* CEO Waitlist Pending Alert Badge */}
+        {role === 'ceo' && pendingWaitlist.length > 0 && (
+          <button
+            type="button"
+            className="neu-pill-btn"
+            style={{ 
+              background: 'rgba(212, 175, 55, 0.15)', 
+              border: '1px solid rgba(212, 175, 55, 0.4)',
+              padding: '4px 10px',
+              fontSize: 11.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+            onClick={onOpenWaitlist}
+            title={`${pendingWaitlist.length} new access clearance requests waiting for CEO approval`}
+          >
+            <Crown size={13} style={{ color: 'var(--neo-gold)' }} />
+            <span style={{ color: '#fff', fontWeight: 600 }}>{pendingWaitlist.length} Clearances</span>
+          </button>
+        )}
+
+        {/* Access Clearance / Waitlist Button */}
+        <button
+          type="button"
+          className="neu-pill-btn"
+          style={{ fontSize: 11.5, padding: '5px 12px' }}
+          onClick={onOpenWaitlist}
+          title="Apply for access clearance or view waiting list queue"
+        >
+          <UserCheck size={13} style={{ color: 'var(--neo-gold)' }} />
+          <span>Access Clearance</span>
+        </button>
+
+        {/* Notification Bell with Badge */}
+        <button
+          type="button"
+          className="notification-nav-btn"
+          onClick={onOpenNotifications}
+          title="Notification Center"
+        >
+          <Bell size={16} />
+          <span className="nav-badge-dot">3</span>
+        </button>
+
+        {/* Supabase status indicator */}
         <button
           type="button"
           className="supabase-status-pill"
@@ -86,22 +188,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <span className={`status-dot ${isSupabaseConfigured ? 'connected' : 'demo'}`} />
           <Database size={13} />
-          <span>{isSupabaseConfigured ? 'Supabase Connected' : 'Demo Mode (Click to setup Supabase)'}</span>
+          <span>{isSupabaseConfigured ? 'Supabase Sync' : 'Local OS Mode'}</span>
         </button>
 
         {user ? (
           <div style={{ position: 'relative' }}>
             <div 
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                cursor: 'pointer',
-                padding: '4px 8px',
-                borderRadius: 'var(--radius-md)',
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid var(--border-color)',
-              }}
+              className="navbar-user-chip"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
               <div className="user-avatar-wrap" style={{ width: 32, height: 32 }}>
@@ -124,7 +217,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     fontSize: 10, 
                     fontWeight: 700, 
                     textTransform: 'uppercase',
-                    color: role === 'admin' ? 'var(--role-admin)' : role === 'head' ? 'var(--role-head)' : 'var(--role-member)' 
+                    color: 'var(--accent-primary)'
                   }}
                 >
                   {role} • {user.department}
@@ -136,20 +229,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Profile Dropdown Menu */}
             {showProfileMenu && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '120%',
-                  right: 0,
-                  width: 230,
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-lg)',
-                  boxShadow: 'var(--shadow-lg)',
-                  padding: 8,
-                  zIndex: 50,
-                }}
-              >
+              <div className="profile-menu-dropdown">
                 <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-color)' }}>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 6 }}>
@@ -200,7 +280,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }}
                 >
                   <Settings size={15} />
-                  Supabase Setup
+                  Database & Auth
                 </button>
 
                 <button
@@ -221,7 +301,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         ) : (
           <button type="button" className="btn btn-primary btn-sm" onClick={onOpenAuth}>
             <LogIn size={14} />
-            Email Login / Register
+            Email Login
           </button>
         )}
       </div>

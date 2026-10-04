@@ -14,27 +14,33 @@ import {
   User, 
   MoreVertical, 
   ExternalLink,
-  X
+  X,
+  Network,
+  ChevronDown,
+  ChevronRight,
+  MessageSquare,
+  Sparkles,
+  Layers,
+  GraduationCap
 } from 'lucide-react';
 import { Profile, UserRole } from '../types';
 
 interface MembersViewProps {
   onOpenInvite: () => void;
+  onNavigateToChat?: () => void;
 }
 
-export const MembersView: React.FC<MembersViewProps> = ({ onOpenInvite }) => {
-  const { role: currentRole } = useAuth();
-  const { members, departments, updateMemberRole } = usePortalData();
+export const MembersView: React.FC<MembersViewProps> = ({ onOpenInvite, onNavigateToChat }) => {
+  const { user: currentUser, role: currentRole, switchUserById } = useAuth();
+  const { members, departments } = usePortalData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [deptFilter, setDeptFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
-  
+  const [viewMode, setViewMode] = useState<'grid' | 'table' | 'hierarchy'>('grid');
   const [selectedMember, setSelectedMember] = useState<Profile | null>(null);
 
-  const isAdmin = currentRole === 'admin';
+  const isCSuite = currentRole === 'ceo' || currentRole === 'admin' || currentRole === 'cto' || currentRole === 'coo';
 
   // Filter logic
   const filteredMembers = members.filter((member) => {
@@ -46,251 +52,285 @@ export const MembersView: React.FC<MembersViewProps> = ({ onOpenInvite }) => {
 
     const matchesRole = roleFilter === 'all' || member.role === roleFilter;
     const matchesDept = deptFilter === 'all' || member.department === deptFilter;
-    const matchesStatus = statusFilter === 'all' || member.status === statusFilter;
 
-    return matchesSearch && matchesRole && matchesDept && matchesStatus;
+    return matchesSearch && matchesRole && matchesDept;
   });
 
+  // Hierarchy levels
+  const ceoMember = members.find(m => m.role === 'ceo' || m.role === 'admin') || members[0];
+  const cSuiteMembers = members.filter(m => ['cto', 'cmo', 'cfo', 'coo'].includes(m.role));
+  const coreMembers = members.filter(m => m.role === 'member' || m.role === 'lead');
+  const internMembers = members.filter(m => m.role === 'intern');
+
   return (
-    <div>
-      <div className="page-header">
-        <div className="page-title-wrap">
-          <h2>Organization Directory</h2>
-          <p>Browse all active team members, department heads, and system administrators.</p>
+    <div className="view-container">
+      {/* Header */}
+      <div className="view-header-row">
+        <div>
+          <h2>Team Directory & Organizational Structure</h2>
+          <p className="view-subtitle">
+            Ceova team hierarchy, role-based visibility, reporting managers, and active project assignments.
+          </p>
         </div>
 
-        <div className="page-actions">
-          {isAdmin && (
-            <button type="button" className="btn btn-primary" onClick={onOpenInvite}>
-              <UserPlus size={15} />
-              Add / Invite Member
-            </button>
-          )}
-
-          <div style={{ display: 'flex', background: 'var(--bg-surface)', padding: 2, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+        <div className="view-actions-row">
+          <div className="view-toggle-group">
             <button
-              type="button"
-              className="btn btn-sm"
-              style={{
-                background: viewMode === 'grid' ? 'var(--bg-surface-hover)' : 'transparent',
-                color: viewMode === 'grid' ? '#fff' : 'var(--text-subtle)',
-                border: 'none'
-              }}
+              className={`toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
               onClick={() => setViewMode('grid')}
-              title="Grid View"
             >
-              <Grid size={15} />
+              <Grid size={14} /> Directory Grid
             </button>
             <button
-              type="button"
-              className="btn btn-sm"
-              style={{
-                background: viewMode === 'table' ? 'var(--bg-surface-hover)' : 'transparent',
-                color: viewMode === 'table' ? '#fff' : 'var(--text-subtle)',
-                border: 'none'
-              }}
-              onClick={() => setViewMode('table')}
-              title="Table View"
+              className={`toggle-btn ${viewMode === 'hierarchy' ? 'active' : ''}`}
+              onClick={() => setViewMode('hierarchy')}
             >
-              <List size={15} />
+              <Network size={14} /> Org Hierarchy Tree
+            </button>
+            <button
+              className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
+            >
+              <List size={14} /> Table
             </button>
           </div>
+
+          {isCSuite && (
+            <button type="button" className="btn btn-primary" onClick={onOpenInvite}>
+              <UserPlus size={15} /> Add Team Member
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="filter-bar">
-        <div className="search-input-wrap">
-          <Search size={16} />
-          <input
-            type="text"
-            className="input-field"
-            placeholder="Search by name, email, role, or skills..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      {/* Filter Bar (for grid and table) */}
+      {viewMode !== 'hierarchy' && (
+        <div className="filter-bar">
+          <div className="search-field-wrap">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="Search by name, email, skills..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <select
+            className="select-field"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+          >
+            <option value="all">All Roles</option>
+            <option value="ceo">CEO</option>
+            <option value="cto">CTO</option>
+            <option value="cmo">CMO</option>
+            <option value="cfo">CFO</option>
+            <option value="coo">COO</option>
+            <option value="member">Core Member</option>
+            <option value="intern">Intern</option>
+          </select>
+
+          <select
+            className="select-field"
+            value={deptFilter}
+            onChange={(e) => setDeptFilter(e.target.value)}
+          >
+            <option value="all">All Departments</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.name}>{d.name}</option>
+            ))}
+          </select>
         </div>
+      )}
 
-        <select
-          className="select-field"
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-        >
-          <option value="all">All Roles</option>
-          <option value="admin">Administrators</option>
-          <option value="head">Department Heads</option>
-          <option value="member">Members</option>
-        </select>
+      {/* Hierarchy Tree View */}
+      {viewMode === 'hierarchy' ? (
+        <div className="org-tree-canvas">
+          {/* Level 1: CEO */}
+          <div className="org-tree-level">
+            <div className="org-tree-node ceo-node" onClick={() => setSelectedMember(ceoMember)}>
+              <div className="node-avatar-wrap">
+                {ceoMember.avatar_url ? (
+                  <img src={ceoMember.avatar_url} alt={ceoMember.full_name} className="avatar-img" />
+                ) : (
+                  <div className="avatar-fallback">{ceoMember.full_name.charAt(0)}</div>
+                )}
+                <span className={`user-status-dot status-${ceoMember.status}`} />
+              </div>
+              <div className="node-info">
+                <span className="node-badge ceo">CEO</span>
+                <h4>{ceoMember.full_name}</h4>
+                <span className="node-desig">{ceoMember.designation}</span>
+                <span className="node-dept">{ceoMember.department}</span>
+              </div>
+            </div>
+          </div>
 
-        <select
-          className="select-field"
-          value={deptFilter}
-          onChange={(e) => setDeptFilter(e.target.value)}
-        >
-          <option value="all">All Departments</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.name}>{d.name}</option>
-          ))}
-        </select>
+          <div className="org-tree-connector-down" />
 
-        <select
-          className="select-field"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="all">All Statuses</option>
-          <option value="active">Available</option>
-          <option value="away">Away</option>
-          <option value="in_meeting">In Meeting</option>
-          <option value="offline">Offline</option>
-        </select>
-      </div>
+          {/* Level 2: C-Suite (CTO, CMO, CFO, COO) */}
+          <div className="org-tree-level c-suite-level">
+            {cSuiteMembers.map((member) => (
+              <div 
+                key={member.id} 
+                className={`org-tree-node csuite-node role-${member.role}`}
+                onClick={() => setSelectedMember(member)}
+              >
+                <div className="node-avatar-wrap">
+                  {member.avatar_url ? (
+                    <img src={member.avatar_url} alt={member.full_name} className="avatar-img" />
+                  ) : (
+                    <div className="avatar-fallback">{member.full_name.charAt(0)}</div>
+                  )}
+                  <span className={`user-status-dot status-${member.status}`} />
+                </div>
+                <div className="node-info">
+                  <span className={`node-badge ${member.role}`}>{member.role.toUpperCase()}</span>
+                  <h4>{member.full_name}</h4>
+                  <span className="node-desig">{member.designation}</span>
+                  <span className="node-dept">{member.department}</span>
+                </div>
+              </div>
+            ))}
+          </div>
 
-      {/* Grid View */}
-      {viewMode === 'grid' && (
+          <div className="org-tree-connector-down" />
+
+          {/* Level 3: Core Team Members */}
+          <div className="org-level-title">Core Team Members</div>
+          <div className="org-tree-level core-level">
+            {coreMembers.map((member) => (
+              <div 
+                key={member.id} 
+                className="org-tree-node member-node"
+                onClick={() => setSelectedMember(member)}
+              >
+                <div className="node-avatar-wrap">
+                  {member.avatar_url ? (
+                    <img src={member.avatar_url} alt={member.full_name} className="avatar-img" />
+                  ) : (
+                    <div className="avatar-fallback">{member.full_name.charAt(0)}</div>
+                  )}
+                </div>
+                <div className="node-info">
+                  <h4>{member.full_name}</h4>
+                  <span className="node-desig">{member.designation}</span>
+                  <span className="node-reporting">Reports to: {member.reporting_to}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="org-tree-connector-down" />
+
+          {/* Level 4: Interns */}
+          <div className="org-level-title">Fellowship & Interns</div>
+          <div className="org-tree-level intern-level">
+            {internMembers.map((intern) => (
+              <div 
+                key={intern.id} 
+                className="org-tree-node intern-node"
+                onClick={() => setSelectedMember(intern)}
+              >
+                <div className="node-avatar-wrap">
+                  {intern.avatar_url ? (
+                    <img src={intern.avatar_url} alt={intern.full_name} className="avatar-img" />
+                  ) : (
+                    <div className="avatar-fallback">{intern.full_name.charAt(0)}</div>
+                  )}
+                </div>
+                <div className="node-info">
+                  <span className="node-badge intern">INTERN</span>
+                  <h4>{intern.full_name}</h4>
+                  <span className="node-desig">{intern.designation}</span>
+                  <span className="node-reporting">Supervisor: {intern.supervisor}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : viewMode === 'grid' ? (
+        /* Grid View */
         <div className="members-grid">
           {filteredMembers.map((member) => (
             <div 
               key={member.id} 
               className="member-card"
               onClick={() => setSelectedMember(member)}
-              style={{ cursor: 'pointer' }}
             >
               <div className="member-card-header">
                 <div className="user-avatar-wrap" style={{ width: 48, height: 48 }}>
                   {member.avatar_url ? (
                     <img src={member.avatar_url} alt={member.full_name} className="avatar-img" />
                   ) : (
-                    <div className="avatar-fallback" style={{ fontSize: 16 }}>{member.full_name.charAt(0)}</div>
+                    <div className="avatar-fallback">{member.full_name.charAt(0)}</div>
                   )}
-                  <span className={`user-status-dot status-${member.status}`} style={{ width: 11, height: 11 }} />
+                  <span className={`user-status-dot status-${member.status}`} />
                 </div>
 
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <h4 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {member.full_name}
-                  </h4>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
-                    {member.designation}
-                  </div>
-                </div>
-
-                <span 
-                  className={`tag-badge tag-priority-${member.role === 'admin' ? 'urgent' : member.role === 'head' ? 'high' : 'normal'}`}
-                  style={{ textTransform: 'uppercase', fontSize: 10 }}
-                >
-                  {member.role}
+                <span className={`role-badge role-${member.role}`}>
+                  {member.role.toUpperCase()}
                 </span>
               </div>
 
-              <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 12 }}>
-                <strong>Dept:</strong> {member.department}
+              <div className="member-card-body">
+                <h4>{member.full_name}</h4>
+                <div className="member-desig-text">{member.designation}</div>
+                <div className="member-dept-text">{member.department}</div>
+
+                {member.current_project && (
+                  <div className="member-proj-tag">
+                    <Layers size={11} /> {member.current_project}
+                  </div>
+                )}
               </div>
 
-              {member.bio && (
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4, marginBottom: 12, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                  {member.bio}
-                </p>
-              )}
-
-              {member.skills && member.skills.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 'auto', paddingTop: 10, borderTop: '1px solid var(--border-color)' }}>
-                  {member.skills.slice(0, 3).map((skill, idx) => (
-                    <span 
-                      key={idx} 
-                      className="brand-pill" 
-                      style={{ fontSize: 10, background: 'rgba(255, 255, 255, 0.04)' }}
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                  {member.skills.length > 3 && (
-                    <span className="brand-pill" style={{ fontSize: 10 }}>
-                      +{member.skills.length - 3}
-                    </span>
-                  )}
-                </div>
-              )}
+              <div className="member-card-footer">
+                <span className="member-reporting-sub">
+                  {member.supervisor ? `Supervisor: ${member.supervisor.split(' ')[0]}` : `Reports to: ${member.reporting_to?.split(' ')[0] || 'Executive'}`}
+                </span>
+                <ChevronRight size={14} style={{ color: 'var(--text-subtle)' }} />
+              </div>
             </div>
           ))}
         </div>
-      )}
-
-      {/* Table View */}
-      {viewMode === 'table' && (
-        <div className="table-container">
-          <table className="portal-table">
+      ) : (
+        /* Table View */
+        <div className="task-list-table-wrap">
+          <table className="task-table">
             <thead>
               <tr>
                 <th>Member</th>
                 <th>Role</th>
                 <th>Department</th>
                 <th>Designation</th>
+                <th>Reporting To / Supervisor</th>
+                <th>Current Project</th>
                 <th>Status</th>
-                <th>Email Contact</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMembers.map((member) => (
-                <tr key={member.id}>
+              {filteredMembers.map((m) => (
+                <tr key={m.id} onClick={() => setSelectedMember(m)} style={{ cursor: 'pointer' }}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div className="user-avatar-wrap" style={{ width: 32, height: 32 }}>
-                        {member.avatar_url ? (
-                          <img src={member.avatar_url} alt={member.full_name} className="avatar-img" />
-                        ) : (
-                          <div className="avatar-fallback" style={{ fontSize: 12 }}>{member.full_name.charAt(0)}</div>
-                        )}
-                        <span className={`user-status-dot status-${member.status}`} style={{ width: 8, height: 8 }} />
-                      </div>
+                      <span className="avatar-chip-small">{m.full_name.charAt(0)}</span>
                       <div>
-                        <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{member.full_name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{member.email}</div>
+                        <strong>{m.full_name}</strong>
+                        <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{m.email}</div>
                       </div>
                     </div>
                   </td>
                   <td>
-                    <span 
-                      className="tag-badge"
-                      style={{
-                        background: member.role === 'admin' ? 'var(--role-admin-bg)' : member.role === 'head' ? 'var(--role-head-bg)' : 'var(--role-member-bg)',
-                        color: member.role === 'admin' ? 'var(--role-admin)' : member.role === 'head' ? 'var(--role-head)' : 'var(--role-member)',
-                        border: `1px solid ${member.role === 'admin' ? 'var(--role-admin-border)' : member.role === 'head' ? 'var(--role-head-border)' : 'var(--role-member-border)'}`,
-                        textTransform: 'uppercase'
-                      }}
-                    >
-                      {member.role}
-                    </span>
+                    <span className={`role-badge role-${m.role}`}>{m.role.toUpperCase()}</span>
                   </td>
-                  <td>{member.department}</td>
-                  <td style={{ color: 'var(--text-muted)' }}>{member.designation}</td>
+                  <td>{m.department}</td>
+                  <td>{m.designation}</td>
+                  <td>{m.supervisor || m.reporting_to || 'Board'}</td>
+                  <td>{m.current_project || 'General'}</td>
                   <td>
-                    <span 
-                      className="brand-pill" 
-                      style={{
-                        background: member.status === 'active' ? 'var(--success-bg)' : 'rgba(255,255,255,0.05)',
-                        color: member.status === 'active' ? 'var(--success)' : 'var(--text-muted)',
-                        textTransform: 'capitalize'
-                      }}
-                    >
-                      {member.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td>
-                    <a href={`mailto:${member.email}`} style={{ color: 'var(--accent-primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Mail size={13} />
-                      {member.email}
-                    </a>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-secondary"
-                      onClick={() => setSelectedMember(member)}
-                    >
-                      View Details
-                    </button>
+                    <span className={`status-pill status-${m.status}`}>{m.status}</span>
                   </td>
                 </tr>
               ))}
@@ -299,104 +339,114 @@ export const MembersView: React.FC<MembersViewProps> = ({ onOpenInvite }) => {
         </div>
       )}
 
-      {filteredMembers.length === 0 && (
-        <div className="glass-panel" style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)', marginTop: 20 }}>
-          No members found matching your search and filter criteria.
-        </div>
-      )}
-
-      {/* Member Details Modal */}
+      {/* Member Profile Drawer */}
       {selectedMember && (
-        <div className="modal-overlay" onClick={() => setSelectedMember(null)} role="dialog" aria-modal="true">
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Member Profile Details</h3>
-              <button type="button" className="btn btn-secondary btn-icon" onClick={() => setSelectedMember(null)}>
-                <X size={16} />
+        <div className="member-drawer-overlay" onClick={() => setSelectedMember(null)}>
+          <div className="member-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-header">
+              <h3>Member Profile</h3>
+              <button className="btn-icon" onClick={() => setSelectedMember(null)}>
+                <X size={18} />
               </button>
             </div>
 
-            <div className="modal-body">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+            <div className="drawer-body">
+              <div className="drawer-user-identity">
                 <div className="user-avatar-wrap" style={{ width: 64, height: 64 }}>
                   {selectedMember.avatar_url ? (
                     <img src={selectedMember.avatar_url} alt={selectedMember.full_name} className="avatar-img" />
                   ) : (
-                    <div className="avatar-fallback" style={{ fontSize: 22 }}>{selectedMember.full_name.charAt(0)}</div>
+                    <div className="avatar-fallback" style={{ fontSize: 24 }}>{selectedMember.full_name.charAt(0)}</div>
                   )}
-                  <span className={`user-status-dot status-${selectedMember.status}`} style={{ width: 14, height: 14 }} />
+                  <span className={`user-status-dot status-${selectedMember.status}`} />
                 </div>
-
                 <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-main)' }}>{selectedMember.full_name}</h3>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{selectedMember.designation}</div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                    <span 
-                      className="tag-badge" 
-                      style={{ 
-                        textTransform: 'uppercase',
-                        background: selectedMember.role === 'admin' ? 'var(--role-admin-bg)' : selectedMember.role === 'head' ? 'var(--role-head-bg)' : 'var(--role-member-bg)',
-                        color: selectedMember.role === 'admin' ? 'var(--role-admin)' : selectedMember.role === 'head' ? 'var(--role-head)' : 'var(--role-member)',
-                      }}
-                    >
-                      {selectedMember.role}
-                    </span>
-                    <span className="brand-pill">{selectedMember.department}</span>
-                  </div>
+                  <h4>{selectedMember.full_name}</h4>
+                  <div className="drawer-sub">{selectedMember.designation}</div>
+                  <span className={`role-badge role-${selectedMember.role}`} style={{ marginTop: 4 }}>
+                    {selectedMember.role.toUpperCase()}
+                  </span>
                 </div>
               </div>
 
-              <div style={{ background: 'var(--bg-primary)', padding: 14, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: 16 }}>
-                <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 8, textTransform: 'uppercase', fontWeight: 700 }}>
-                  Contact Information
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Mail size={14} style={{ color: 'var(--text-subtle)' }} />
-                    <a href={`mailto:${selectedMember.email}`} style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>
-                      {selectedMember.email}
-                    </a>
+              {/* Quick Actions */}
+              <div className="drawer-quick-actions">
+                <button 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    switchUserById(selectedMember.id);
+                    setSelectedMember(null);
+                  }}
+                  title="Switch session to this user to view their dashboard"
+                >
+                  <User size={13} /> Switch Active View
+                </button>
+                <button 
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setSelectedMember(null);
+                    onNavigateToChat?.();
+                  }}
+                >
+                  <MessageSquare size={13} /> Send Message
+                </button>
+              </div>
+
+              {/* Department & Reporting Info */}
+              <div className="drawer-section">
+                <h5>Organizational Details</h5>
+                <div className="drawer-info-grid">
+                  <div className="drawer-info-item">
+                    <span className="info-label">Department</span>
+                    <span className="info-val">{selectedMember.department}</span>
                   </div>
-                  {selectedMember.phone && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Phone size={14} style={{ color: 'var(--text-subtle)' }} />
-                      <span style={{ color: 'var(--text-main)' }}>{selectedMember.phone}</span>
+                  <div className="drawer-info-item">
+                    <span className="info-label">Reporting Manager</span>
+                    <span className="info-val">{selectedMember.reporting_to || 'Board of Directors'}</span>
+                  </div>
+                  {selectedMember.supervisor && (
+                    <div className="drawer-info-item">
+                      <span className="info-label">Designated Supervisor</span>
+                      <span className="info-val text-cyan">{selectedMember.supervisor}</span>
                     </div>
                   )}
+                  <div className="drawer-info-item">
+                    <span className="info-label">Current Project</span>
+                    <span className="info-val text-purple">{selectedMember.current_project || 'Ceova Core'}</span>
+                  </div>
                 </div>
               </div>
 
+              {/* Bio & Skills */}
               {selectedMember.bio && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 4, textTransform: 'uppercase', fontWeight: 700 }}>
-                    About
-                  </div>
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    {selectedMember.bio}
-                  </p>
+                <div className="drawer-section">
+                  <h5>Bio</h5>
+                  <p className="drawer-bio">{selectedMember.bio}</p>
                 </div>
               )}
 
-              {selectedMember.skills && (
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 700 }}>
-                    Expertise & Skills
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {selectedMember.skills.map((s, i) => (
-                      <span key={i} className="brand-pill" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                        {s}
-                      </span>
+              {selectedMember.skills && selectedMember.skills.length > 0 && (
+                <div className="drawer-section">
+                  <h5>Skills & Core Competencies</h5>
+                  <div className="skills-chips-row">
+                    {selectedMember.skills.map((s, idx) => (
+                      <span key={idx} className="skill-chip">{s}</span>
                     ))}
                   </div>
                 </div>
               )}
-            </div>
 
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setSelectedMember(null)}>
-                Close
-              </button>
+              {/* Permissions & Access Control */}
+              <div className="drawer-section">
+                <h5>System Permissions (RBAC)</h5>
+                <div className="permissions-chips-row">
+                  {selectedMember.permissions?.map((p, idx) => (
+                    <span key={idx} className="perm-chip">
+                      ✓ {p.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

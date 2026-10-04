@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { X, Mail, Lock, User, Briefcase, Shield, Crown, Eye, EyeOff, Sparkles, CheckCircle } from 'lucide-react';
+import { usePortalData } from '../context/PortalDataContext';
+import { X, Mail, Lock, User, Briefcase, Shield, Crown, Eye, EyeOff, Sparkles, CheckCircle, Clock } from 'lucide-react';
 import { UserRole } from '../types';
 
 interface AuthModalProps {
@@ -10,6 +11,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const { loginWithEmail, signUpWithEmail, quickLoginAs, isSupabaseConfigured } = useAuth();
+  const { submitWaitlistRequest } = usePortalData();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   
   const [email, setEmail] = useState('');
@@ -19,7 +21,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   // Registration fields
   const [fullName, setFullName] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('member');
-  const [department, setDepartment] = useState('Engineering');
+  const [department, setDepartment] = useState('Development');
   
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -59,22 +61,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         return;
       }
 
-      const res = await signUpWithEmail(email, password, {
-        fullName: fullName.trim(),
-        role: selectedRole,
+      // Automatically queue on CEO Waiting List
+      await submitWaitlistRequest({
+        full_name: fullName.trim(),
+        email: email.trim(),
+        requested_role: selectedRole,
         department,
+        reason: 'New team member registration through portal gate'
       });
 
       setLoading(false);
-      if (res.success) {
-        if (res.message) {
-          setSuccessMessage(res.message);
-        } else {
-          onClose();
-        }
-      } else {
-        setErrorMessage(res.error || 'Failed to sign up.');
-      }
+      setSuccessMessage('Your registration is queued on the Waiting List! CEO Harshit has received your clearance dossier on his Executive Command deck.');
     }
   };
 
@@ -88,8 +85,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="brand-icon" style={{ width: 28, height: 28, fontSize: 13 }}>C</div>
-            <h3>{mode === 'signin' ? 'Sign In to Ceova Portal' : 'Create Ceova Account'}</h3>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: '1px solid rgba(212, 175, 55, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 2
+            }}>
+              <img src="/ceovaimage.png" alt="Ceova" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16 }}>
+                {mode === 'signin' ? 'Sign In to Ceova Team OS' : 'Apply for Access Clearance'}
+              </h3>
+              <div style={{ fontSize: 11, color: 'var(--neo-gold)' }}>
+                {mode === 'signin' ? 'Secured Internal Environment' : 'CEO Executive Clearance Required'}
+              </div>
+            </div>
           </div>
           <button 
             type="button" 

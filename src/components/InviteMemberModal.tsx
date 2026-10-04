@@ -46,6 +46,7 @@ export const InviteMemberModal: React.FC<InviteMemberModalProps> = ({ isOpen, on
       bio: bio.trim() || undefined,
       status: 'active',
       skills: ['Teamwork', 'Communication'],
+      permissions: ['manage_tasks'],
       avatar_url: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 9000000)}?w=150&auto=format&fit=crop&q=80`
     });
 
