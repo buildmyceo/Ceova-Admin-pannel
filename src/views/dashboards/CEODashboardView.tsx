@@ -72,7 +72,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
 
         <div className="view-actions-row">
           <button className="neu-pill-btn" onClick={onOpenAnnouncementModal}>
-            <Sparkles size={14} style={{ color: 'var(--neo-gold)' }} />
+            <Sparkles size={14} style={{ color: 'var(--accent-primary)' }} />
             <span>Broadcast Notice</span>
           </button>
           <button className="neu-pill-btn primary" onClick={() => onNavigate('executive_room')}>
@@ -379,9 +379,9 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   borderLeft: req.status === 'pending' 
-                    ? '3px solid var(--neo-gold)' 
+                    ? '3px solid var(--accent-primary)' 
                     : req.status === 'approved' 
-                      ? '3px solid #10b981' 
+                      ? '3px solid #3b82f6' 
                       : '3px solid #ef4444'
                 }}
               >
@@ -389,7 +389,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <div>
                       <h4 style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: 0 }}>{req.full_name}</h4>
-                      <div style={{ fontSize: 11.5, color: 'var(--neo-gold)', marginTop: 2 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--accent-primary)', marginTop: 2, fontWeight: 600 }}>
                         {req.department} • <span style={{ textTransform: 'capitalize' }}>{req.requested_role}</span>
                       </div>
                     </div>
@@ -403,12 +403,12 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '8px 0 10px', fontSize: 11.5, color: 'var(--text-muted)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Mail size={12} style={{ color: 'var(--neo-gold)' }} />
+                      <Mail size={12} style={{ color: 'var(--accent-primary)' }} />
                       <span>{req.email}</span>
                     </div>
                     {req.phone && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Phone size={12} style={{ color: 'var(--neo-gold)' }} />
+                        <Phone size={12} style={{ color: 'var(--accent-primary)' }} />
                         <span>{req.phone}</span>
                       </div>
                     )}

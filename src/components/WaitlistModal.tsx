@@ -73,14 +73,14 @@ export const WaitlistModal: React.FC<WaitlistModalProps> = ({
           maxWidth: 560, 
           padding: 0, 
           overflow: 'hidden',
-          border: '1px solid rgba(212, 175, 55, 0.25)',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(212, 175, 55, 0.1)'
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(59, 130, 246, 0.15)'
         }}
       >
         {/* Top Classical Banner with Ceova Logo */}
         <div style={{ 
           padding: '24px 28px 20px', 
-          background: 'linear-gradient(180deg, rgba(212, 175, 55, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
+          background: 'linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
           position: 'relative'
         }}>
@@ -110,12 +110,12 @@ export const WaitlistModal: React.FC<WaitlistModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
             <div style={{ 
               padding: '6px 10px', 
-              background: 'rgba(0, 0, 0, 0.4)', 
+              background: '#000000', 
               borderRadius: 12, 
-              border: '1px solid rgba(212, 175, 55, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.18)',
               display: 'flex',
               alignItems: 'center',
-              boxShadow: '0 0 16px rgba(212, 175, 55, 0.2)'
+              boxShadow: '0 0 16px rgba(59, 130, 246, 0.2)'
             }}>
               <img 
                 src="/ceovaimage.png" 

@@ -69,13 +69,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             width: 34,
             height: 34,
             borderRadius: 8,
-            background: 'rgba(0, 0, 0, 0.4)',
-            border: '1px solid rgba(212, 175, 55, 0.3)',
+            background: '#000000',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
-            padding: 2
+            padding: 2,
+            boxShadow: '0 0 10px rgba(59, 130, 246, 0.2)'
           }}>
             <img src="/ceovaimage.png" alt="Ceova" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
@@ -83,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div style={{ fontFamily: 'var(--font-serif)', fontSize: 13, fontWeight: 700, letterSpacing: '0.04em', color: '#fff' }}>
               CEOVA TECH
             </div>
-            <div style={{ fontSize: 9.5, color: 'var(--neo-gold)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 9.5, color: 'var(--accent-primary)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
               Team Operating System
             </div>
           </div>

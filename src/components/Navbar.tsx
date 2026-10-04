@@ -68,14 +68,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             width: 36,
             height: 36,
             borderRadius: 10,
-            background: 'rgba(0, 0, 0, 0.4)',
-            border: '1px solid rgba(212, 175, 55, 0.35)',
+            background: '#000000',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
             padding: 2,
-            boxShadow: '0 0 12px rgba(212, 175, 55, 0.2)'
+            boxShadow: '0 0 14px rgba(59, 130, 246, 0.25)'
           }}>
             <img src="/ceovaimage.png" alt="Ceova Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>

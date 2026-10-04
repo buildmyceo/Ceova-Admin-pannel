@@ -89,12 +89,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               width: 32,
               height: 32,
               borderRadius: 8,
-              background: 'rgba(0, 0, 0, 0.4)',
-              border: '1px solid rgba(212, 175, 55, 0.3)',
+              background: '#000000',
+              border: '1px solid rgba(255, 255, 255, 0.18)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 2
+              padding: 2,
+              boxShadow: '0 0 10px rgba(59, 130, 246, 0.2)'
             }}>
               <img src="/ceovaimage.png" alt="Ceova" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
@@ -102,7 +103,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <h3 style={{ margin: 0, fontSize: 16 }}>
                 {mode === 'signin' ? 'Sign In to Ceova Team OS' : 'Apply for Access Clearance'}
               </h3>
-              <div style={{ fontSize: 11, color: 'var(--neo-gold)' }}>
+              <div style={{ fontSize: 11, color: 'var(--accent-primary)', fontWeight: 600 }}>
                 {mode === 'signin' ? 'Secured Internal Environment' : 'CEO Executive Clearance Required'}
               </div>
             </div>
