@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import nodemailer from "npm:nodemailer@6.9.10";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +24,8 @@ serve(async (req) => {
       smtpPass: clientSmtpPass,
       smtpUser: clientSmtpUser,
       apiKey: clientApiKey,
+      action,
+      password: setDirectPassword,
     } = await req.json();
 
     const recipients = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
@@ -30,13 +33,192 @@ serve(async (req) => {
       throw new Error("Missing recipient email address");
     }
 
-    const emailSubject = subject || (title ? `[CEOVA] ${title}` : "CEOVA Workspace Notification");
-    const notificationContent = message || title || "New update in CEOVA Portal";
+    const cleanEmail = recipients[0].trim().toLowerCase();
     const portalUrl = "https://portal.ceovaai.com";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "https://yuvkddpfcokqctomsbun.supabase.co";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-    const textContent = customText || `CEOVA Workspace Notification\n\n${title ? `${title}\n------------------------\n` : ''}${notificationContent}\n\nView details in your dashboard: ${portalUrl}\n\nCEOVA Enterprise Team OS`;
+    let finalHtml = customHtml;
+    let finalSubject = subject;
+    let finalText = customText;
+    let generatedActionLink: string | null = null;
 
-    const htmlContent = customHtml || `
+    // Handle automated activation / recovery link generation via Supabase Admin
+    if (action === 'activate-user' || action === 'send-activation-email') {
+      if (!serviceRoleKey) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for admin user activation.");
+      }
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+
+      // 1. Find user in auth.users or create if missing
+      const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+      let targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+
+      if (!targetUser) {
+        const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          email_confirm: true,
+          ...(setDirectPassword ? { password: setDirectPassword } : {}),
+        });
+        if (createErr) throw new Error(`Failed to create user in auth: ${createErr.message}`);
+        targetUser = created.user;
+      } else {
+        const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
+          email_confirm: true,
+          ...(setDirectPassword ? { password: setDirectPassword } : {}),
+        });
+        if (updateErr) throw new Error(`Failed to update user in auth: ${updateErr.message}`);
+      }
+
+      // 2. Synchronize profile in public.profiles table
+      if (targetUser) {
+        try {
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              id: targetUser.id,
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .ilike('email', cleanEmail);
+        } catch (profErr) {
+          console.warn("[Profile Sync Notice]", profErr);
+        }
+      }
+
+      // 3. If direct password was supplied, we are done
+      if (setDirectPassword) {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: `User ${cleanEmail} password updated and account activated successfully!` 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // 4. Generate authentic recovery/activation link
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: cleanEmail,
+        options: {
+          redirectTo: portalUrl,
+        }
+      });
+
+      if (linkErr) {
+        throw new Error(`Failed to generate activation link: ${linkErr.message}`);
+      }
+
+      generatedActionLink = linkData?.properties?.action_link || portalUrl;
+      finalSubject = subject || "[CEOVA] Account Activation: Set Your Workspace Password";
+
+      finalText = `CEOVA Workspace Account Activation\n\nHello,\nYour CEOVA account (${cleanEmail}) is ready for activation.\n\nPlease click the link below to set your personal password and enter your workspace:\n${generatedActionLink}\n\nCEOVA Enterprise Team OS`;
+
+      finalHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activate Your CEOVA Account</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #080b11; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #080b11; padding: 36px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #0f1422; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);">
+          
+          <!-- Top Blue Bar -->
+          <tr>
+            <td style="height: 4px; background-color: #2563eb; font-size: 0; line-height: 0;">&nbsp;</td>
+          </tr>
+
+          <!-- Header -->
+          <tr>
+            <td style="padding: 30px 34px 20px; text-align: center; background-color: #111827; border-bottom: 1px solid #1e293b;">
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 14px auto;">
+                <tr>
+                  <td style="vertical-align: middle; padding-right: 12px;">
+                    <img src="https://portal.ceovaai.com/ceovaimage.png" width="40" height="40" alt="CEOVA Logo" style="display: block; width: 40px; height: 40px; border-radius: 10px; background-color: #ffffff; padding: 4px; border: 1px solid #ffffff;" />
+                  </td>
+                  <td style="vertical-align: middle; text-align: left;">
+                    <div style="font-size: 18px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; line-height: 1.1;">CEOVA</div>
+                    <div style="font-size: 9.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #94a3b8; line-height: 1.1;">Enterprise Team OS</div>
+                  </td>
+                </tr>
+              </table>
+              <div style="display: inline-block; padding: 5px 12px; background-color: #1e293b; border: 1px solid #334155; border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 1.5px; color: #38bdf8; text-transform: uppercase;">
+                ACCOUNT ACTIVATION
+              </div>
+              <h1 style="margin: 12px 0 0 0; font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.01em;">
+                Activate Your Workspace Account
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 28px 34px 32px;">
+              <p style="margin: 0 0 16px 0; font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
+                Hello,
+              </p>
+              <p style="margin: 0 0 22px 0; font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
+                Your private workspace account (<strong>${cleanEmail}</strong>) is ready. Click the button below to set your personal password and enter the <strong>CEOVA Portal</strong>:
+              </p>
+
+              <!-- Action Button -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td align="center">
+                    <a href="${generatedActionLink}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 14px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14.5px; font-weight: 700; border-radius: 8px; letter-spacing: 0.01em;">
+                      Activate Account &amp; Set Password &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Notice Box -->
+              <div style="background-color: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 12.5px; color: #94a3b8; line-height: 1.5;">
+                <strong style="color: #cbd5e1;">Next Steps:</strong> Clicking the link above will open the secure CEOVA portal and prompt you to establish your account password. Once saved, your account will be fully activated.
+              </div>
+
+              <!-- Fallback Link -->
+              <p style="margin: 0; font-size: 11.5px; line-height: 1.5; color: #64748b; text-align: center; word-break: break-all;">
+                Direct URL: <a href="${generatedActionLink}" style="color: #38bdf8; text-decoration: underline;">${generatedActionLink}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 18px 34px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
+              <p style="margin: 0 0 4px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+                This activation link was generated securely for <strong>${cleanEmail}</strong>.
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #475569; line-height: 1.4;">
+                CEOVA Enterprise Team OS &bull; <a href="https://portal.ceovaai.com" style="color: #64748b; text-decoration: none;">portal.ceovaai.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `;
+    }
+
+    const emailSubject = finalSubject || (title ? `[CEOVA] ${title}` : "CEOVA Workspace Notification");
+    const notificationContent = message || title || "New update in CEOVA Portal";
+
+    const textContent = finalText || `CEOVA Workspace Notification\n\n${title ? `${title}\n------------------------\n` : ''}${notificationContent}\n\nView details in your dashboard: ${portalUrl}\n\nCEOVA Enterprise Team OS`;
+
+    const htmlContent = finalHtml || `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -98,15 +280,15 @@ serve(async (req) => {
               <!-- Message Callout Box -->
               <div style="background-color: #090d16; border: 1px solid #1e293b; border-left: 4px solid #2563eb; border-radius: 10px; padding: 18px 20px; margin-bottom: 26px;">
                 ${title && title !== emailSubject ? `<div style="font-size: 14px; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">${title}</div>` : ''}
-                <div style="font-size: 14px; color: #f1f5f9; line-height: 1.65; white-space: pre-wrap;">${notificationContent}</div>
+                <div style="font-size: 14.5px; line-height: 1.6; color: #e2e8f0; white-space: pre-wrap;">${notificationContent}</div>
               </div>
 
               <!-- Action Button -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
                 <tr>
                   <td align="center">
-                    <a href="${portalUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 14px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14.5px; font-weight: 700; border-radius: 8px; letter-spacing: 0.01em;">
-                      Open Ceova Dashboard &rarr;
+                    <a href="${portalUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 13px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 8px; letter-spacing: 0.01em;">
+                      Open Workspace Dashboard &rarr;
                     </a>
                   </td>
                 </tr>
@@ -114,68 +296,69 @@ serve(async (req) => {
 
               <!-- Link Fallback -->
               <p style="margin: 0; font-size: 11.5px; line-height: 1.5; color: #64748b; text-align: center;">
-                Direct portal link: <a href="${portalUrl}" style="color: #38bdf8; text-decoration: underline;">${portalUrl}</a>
+                Direct link: <a href="${portalUrl}" style="color: #38bdf8; text-decoration: underline;">${portalUrl}</a>
               </p>
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 18px 32px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
-              <p style="margin: 0 0 5px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
-                This notification was sent to your active account on CEOVA Enterprise OS.
+            <td style="padding: 20px 32px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
+              <p style="margin: 0 0 6px 0; font-size: 11.5px; color: #64748b; line-height: 1.5;">
+                This notification was sent by <strong>CEOVA Enterprise Team OS</strong> to <strong>${cleanEmail}</strong>.
               </p>
-              <p style="margin: 0; font-size: 10.5px; color: #475569;">
-                CEOVA Enterprise Intelligence &bull; Secure Team OS
+              <p style="margin: 0; font-size: 11px; color: #475569; line-height: 1.4;">
+                &copy; ${new Date().getFullYear()} CEOVA AI. All rights reserved. &bull; <a href="${portalUrl}" style="color: #64748b; text-decoration: none;">portal.ceovaai.com</a>
               </p>
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
   </table>
 </body>
-</html>`;
+</html>
+    `;
 
-    // 1. Prioritize Gmail SMTP dispatch
-    const smtpHost = Deno.env.get("SMTP_HOST") || "smtp.gmail.com";
-    const smtpPort = Number(Deno.env.get("SMTP_PORT")) || 465;
-    const smtpUser = Deno.env.get("SMTP_USER") || Deno.env.get("SMTP_USERNAME") || clientSmtpUser || "ceova.ai@gmail.com";
-    const smtpPass = Deno.env.get("SMTP_PASS") || Deno.env.get("SMTP_PASSWORD") || clientSmtpPass;
-    const senderName = Deno.env.get("SMTP_SENDER_NAME") || "Ceova Orbit";
+    // 1. Primary Email Channel: Custom SMTP (Nodemailer)
+    const smtpPassword = (Deno.env.get("SMTP_PASS") || Deno.env.get("SMTP_PASSWORD") || clientSmtpPass || "").replace(/\s+/g, '');
+    const smtpUser = Deno.env.get("SMTP_USER") || clientSmtpUser || "ceova.ai@gmail.com";
 
-    if (smtpPass) {
-      console.log(`[SMTP Email] Delivering via ${smtpHost}:${smtpPort} as ${smtpUser} to:`, recipients);
+    if (smtpPassword) {
       const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
+        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
         auth: {
           user: smtpUser,
-          pass: smtpPass,
+          pass: smtpPassword,
         },
       });
 
       const info = await transporter.sendMail({
-        from: `"${senderName}" <${smtpUser}>`,
+        from: `"CEOVA Team OS" <${smtpUser}>`,
         to: recipients.join(", "),
         subject: emailSubject,
         text: textContent,
         html: htmlContent,
       });
 
-      console.log("[SMTP Email] Successfully dispatched messageId:", info.messageId);
-      return new Response(JSON.stringify({ success: true, method: "smtp", messageId: info.messageId }), {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        method: "smtp", 
+        messageId: info.messageId, 
+        actionLink: generatedActionLink 
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
     }
 
-    // 2. Fallback to Resend if SMTP password is not set
+    // 2. Secondary Fallback: Resend API
     const resendKey = Deno.env.get("RESEND_API") || Deno.env.get("RESEND_API_KEY") || clientApiKey;
     if (resendKey) {
-      const fromAddress = Deno.env.get("RESEND_FROM") || "Ceova Portal <onboarding@resend.dev>";
+      const fromAddress = "CEOVA Portal <onboarding@resend.dev>";
       const resendRes = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -196,7 +379,7 @@ serve(async (req) => {
         throw new Error(`Resend API error (${resendRes.status}): ${JSON.stringify(resendData)}`);
       }
 
-      return new Response(JSON.stringify({ success: true, method: "resend", data: resendData }), {
+      return new Response(JSON.stringify({ success: true, method: "resend", data: resendData, actionLink: generatedActionLink }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });

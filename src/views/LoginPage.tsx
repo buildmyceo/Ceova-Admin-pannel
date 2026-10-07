@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getSupabaseClient, getAnonSupabaseClient } from '../lib/supabase';
+import { sendAccountActivationEmail } from '../lib/emailService';
 import { Eye, EyeOff, Lock, Mail, User, AlertCircle, CheckCircle2, ArrowRight, X } from 'lucide-react';
 
 interface LoginPageProps {
@@ -125,9 +126,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrorMessage('');
     setSuccessMessage('');
     try {
-      const res = await resetPasswordForEmail(cleanEmail);
+      const res = await sendAccountActivationEmail(cleanEmail);
       if (res.success) {
-        setSuccessMessage('Activation link sent! Check your inbox and click the link to set your password and activate your workspace.');
+        setSuccessMessage(res.message || 'Activation link sent! Check your inbox and click the link to set your password and activate your workspace.');
       } else {
         setErrorMessage(res.error || 'Failed to send activation email.');
       }

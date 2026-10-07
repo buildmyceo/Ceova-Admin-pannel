@@ -283,6 +283,39 @@ export const sendInvitationEmail = async (
 };
 
 /**
+ * Dispatches an account activation email with authentic token via Google SMTP Edge Function
+ */
+export const sendAccountActivationEmail = async (
+  email: string
+): Promise<{ success: boolean; error?: string; message?: string }> => {
+  const cleanEmail = email.trim().toLowerCase();
+  const supabase = getSupabaseClient();
+  if (!supabase) return { success: false, error: 'Database not connected.' };
+
+  try {
+    const res = await supabase.functions.invoke('send-notification-email', {
+      body: {
+        action: 'send-activation-email',
+        to: [cleanEmail],
+        subject: '[CEOVA] Account Activation: Set Your Workspace Password',
+      }
+    });
+
+    if (res.error) {
+      throw new Error(res.error.message || 'Failed to dispatch activation email');
+    }
+
+    return { 
+      success: true, 
+      message: `Activation link sent to ${cleanEmail}! Please check your email inbox and click the link to set your password.` 
+    };
+  } catch (err: any) {
+    console.error('sendAccountActivationEmail error:', err);
+    return { success: false, error: err.message || 'Failed to send activation email.' };
+  }
+};
+
+/**
  * Generates an executive-grade, responsive HTML notification email
  */
 export function generateNotificationHtml(params: {

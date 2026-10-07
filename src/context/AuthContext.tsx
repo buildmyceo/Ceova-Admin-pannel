@@ -7,6 +7,7 @@ import {
   saveSupabaseCredentials, 
   clearSupabaseCredentials 
 } from '../lib/supabase';
+import { sendAccountActivationEmail } from '../lib/emailService';
 
 interface AuthContextType {
   user: Profile | null;
@@ -599,12 +600,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // In Supabase Auth, when an existing user is signed up again, Supabase returns a user with identities: [] (empty array)!
           const identities = signUpAttempt.data?.user?.identities;
           if (Array.isArray(identities) && identities.length === 0) {
-            // If this invited member is still pending activation, automatically send an activation link to set password!
+            // If this invited member is still pending activation, automatically send an activation link via SMTP!
             if (existingProfile.status === 'pending') {
               try {
-                await client.auth.resetPasswordForEmail(cleanEmail, {
-                  redirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://portal.ceovaai.com'
-                });
+                await sendAccountActivationEmail(cleanEmail);
               } catch (_) {}
               return {
                 success: false,
