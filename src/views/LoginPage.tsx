@@ -115,6 +115,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   };
 
+  const handleActivateAccount = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your email address above to receive your account activation link.');
+      return;
+    }
+    setResetSending(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      const res = await resetPasswordForEmail(cleanEmail);
+      if (res.success) {
+        setSuccessMessage('Activation link sent! Check your inbox and click the link to set your password and activate your workspace.');
+      } else {
+        setErrorMessage(res.error || 'Failed to send activation email.');
+      }
+    } catch (e: any) {
+      setErrorMessage(e?.message || 'Error requesting account activation.');
+    } finally {
+      setResetSending(false);
+    }
+  };
+
 
   return (
     <div
@@ -477,32 +500,48 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </button>
         </form>
 
-        <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
-          <button
-            type="button"
-            onClick={handleForgotPassword}
-            disabled={resetSending}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#38bdf8',
-              cursor: resetSending ? 'wait' : 'pointer',
-              padding: 0,
-              fontSize: '12.5px',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            {resetSending ? 'Sending reset link...' : 'Forgot password?'}
-          </button>
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              onClick={handleActivateAccount}
+              disabled={resetSending}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#38bdf8',
+                cursor: resetSending ? 'wait' : 'pointer',
+                padding: 0,
+                fontSize: '12px',
+                fontWeight: 600,
+              }}
+            >
+              Activate Account
+            </button>
+            <span style={{ color: 'rgba(255, 255, 255, 0.2)' }}>•</span>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={resetSending}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: resetSending ? 'wait' : 'pointer',
+                padding: 0,
+                fontSize: '12px',
+                fontWeight: 500,
+              }}
+            >
+              Forgot password?
+            </button>
+          </div>
           <a
             href="mailto:buildmyceo@gmail.com?subject=CEOVA%20Portal%20Support"
             style={{
-              color: '#94a3b8',
+              color: '#64748b',
               textDecoration: 'none',
-              fontSize: '12px',
+              fontSize: '11.5px',
             }}
           >
             Need assistance?

@@ -16,11 +16,11 @@ import { SavedItemsView } from './views/SavedItemsView';
 import { CalendarView } from './views/CalendarView';
 import { NotificationsView } from './views/NotificationsView';
 
-// Modals
 import { AuthModal } from './components/AuthModal';
 import { LoginPage } from './views/LoginPage';
 import { PortalBackground } from './components/PortalBackground';
 import { CompulsoryProfileSetupModal } from './components/CompulsoryProfileSetupModal';
+import { SetPasswordModal } from './components/SetPasswordModal';
 
 const PortalMain: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -67,7 +67,7 @@ const PortalMain: React.FC = () => {
     // Legacy support or extra effects on enter if needed
   };
 
-  const { logout, user, isLoading } = useAuth();
+  const { logout, user, isLoading, isPasswordRecovery, setIsPasswordRecovery } = useAuth();
 
   // Compulsory onboarding setup gate: only gate users who are explicitly 'pending'
   const isProfileIncomplete = Boolean(
@@ -169,6 +169,12 @@ const PortalMain: React.FC = () => {
         <LoginPage
           onLoginSuccess={handleEnterPortal}
         />
+        {isPasswordRecovery && (
+          <SetPasswordModal
+            isOpen={isPasswordRecovery}
+            onClose={() => setIsPasswordRecovery(false)}
+          />
+        )}
       </div>
     );
   }
@@ -221,6 +227,14 @@ const PortalMain: React.FC = () => {
       {/* Compulsory Onboarding Setup Gate for New Users */}
       {isProfileIncomplete && (
         <CompulsoryProfileSetupModal />
+      )}
+
+      {/* Set Password / Account Activation Gate */}
+      {isPasswordRecovery && (
+        <SetPasswordModal
+          isOpen={isPasswordRecovery}
+          onClose={() => setIsPasswordRecovery(false)}
+        />
       )}
     </div>
   );

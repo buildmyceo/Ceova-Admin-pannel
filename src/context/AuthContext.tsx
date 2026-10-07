@@ -31,6 +31,9 @@ interface AuthContextType {
   disconnectSupabase: () => void;
   resetPasswordForEmail: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   resendConfirmationEmail: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  isPasswordRecovery: boolean;
+  setIsPasswordRecovery: (val: boolean) => void;
+  updateUserPassword: (password: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -68,6 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => getStoredAccounts());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSupabaseConfigured, setIsSupabaseConfigured] = useState<boolean>(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false);
 
   const sanitizeRole = (r: any): UserRole => {
     const val = (r || '').toString().trim().toLowerCase();
@@ -134,6 +138,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           // 0. Handle PKCE auth code exchange or hash tokens from email confirmation redirect
           if (typeof window !== 'undefined') {
+            if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
+              setIsPasswordRecovery(true);
+            }
+
             if (window.location.search && window.location.search.includes('code=')) {
               const urlParams = new URLSearchParams(window.location.search);
               const authCode = urlParams.get('code');
@@ -141,6 +149,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 try {
                   const { data: exchangeData, error: exchangeErr } = await client.auth.exchangeCodeForSession(authCode);
                   if (exchangeData?.session) {
+                    if (window.location.search.includes('type=recovery')) {
+                      setIsPasswordRecovery(true);
+                    }
                     const cleanUrl = window.location.pathname + (window.location.hash || '');
                     window.history.replaceState({}, document.title, cleanUrl);
                   } else if (exchangeErr) {
@@ -224,6 +235,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (profileData) {
+              if (profileData.id !== session.user.id && userEmail) {
+                try {
+                  await (anonClient || client)
+                    .from('profiles')
+                    .update({ id: session.user.id, updated_at: new Date().toISOString() })
+                    .ilike('email', userEmail);
+                  profileData.id = session.user.id;
+                } catch (_) {}
+              }
+
               // Strictly use profile and role fetched from Supabase
               const sanitized = sanitizeProfile(profileData);
               if (sanitized) {
@@ -290,7 +311,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem(LOCAL_USER_KEY);
         }
 
-        const { data: authListener } = client.auth.onAuthStateChange(async (_event, session) => {
+        const { data: authListener } = client.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'PASSWORD_RECOVERY') {
+            setIsPasswordRecovery(true);
+          }
+
           if (session?.user) {
             const userEmail = session.user.email?.trim().toLowerCase();
             let profileData = null;
@@ -311,6 +336,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .eq('id', session.user.id)
                 .maybeSingle();
               if (byId) profileData = byId;
+            }
+
+            if (profileData && profileData.id !== session.user.id && userEmail) {
+              try {
+                await (anonClient || client)
+                  .from('profiles')
+                  .update({ id: session.user.id, updated_at: new Date().toISOString() })
+                  .ilike('email', userEmail);
+                profileData.id = session.user.id;
+              } catch (_) {}
             }
 
             if (!profileData && userEmail) {
@@ -564,6 +599,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // In Supabase Auth, when an existing user is signed up again, Supabase returns a user with identities: [] (empty array)!
           const identities = signUpAttempt.data?.user?.identities;
           if (Array.isArray(identities) && identities.length === 0) {
+            // If this invited member is still pending activation, automatically send an activation link to set password!
+            if (existingProfile.status === 'pending') {
+              try {
+                await client.auth.resetPasswordForEmail(cleanEmail, {
+                  redirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://portal.ceovaai.com'
+                });
+              } catch (_) {}
+              return {
+                success: false,
+                error: `Your account is pending activation. An activation link has been sent to ${cleanEmail}. Please check your email inbox to choose your password and activate your workspace.`
+              };
+            }
+
             return {
               success: false,
               error: 'Incorrect email or password. If you recently confirmed your account, please verify your password or click "Forgot password?" to set a new one.'
@@ -794,6 +842,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true, message: 'Verification link resent to your email!' };
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to resend confirmation email.' };
+    }
+  };
+
+  const updateUserPassword = async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured) {
+      return { success: false, error: 'Database not connected.' };
+    }
+    try {
+      const { data, error } = await client.auth.updateUser({ password: newPassword });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // If user profile was pending, update it to active
+      if (user?.id) {
+        try {
+          const anonClient = getAnonSupabaseClient() || client;
+          await anonClient
+            .from('profiles')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('id', user.id);
+
+          setUser(prev => prev ? { ...prev, status: 'active' } : null);
+        } catch (_) {}
+      }
+
+      setIsPasswordRecovery(false);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to update password.' };
     }
   };
 
@@ -1037,6 +1116,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         disconnectSupabase,
         resetPasswordForEmail,
         resendConfirmationEmail,
+        isPasswordRecovery,
+        setIsPasswordRecovery,
+        updateUserPassword,
       }}
     >
       {children}
