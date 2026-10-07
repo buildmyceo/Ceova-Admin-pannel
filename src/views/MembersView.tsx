@@ -25,7 +25,8 @@ import {
   ExternalLink,
   FileText,
   Sparkles,
-  Bell
+  Bell,
+  User
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
 
@@ -514,7 +515,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         }}>
           {filteredMembers.map((member) => {
             const isOnline = isUserOnline(member.id);
-            const isCurrent = currentUser?.id && member.id === currentUser.id;
+            const isCurrent = Boolean(
+              (currentUser?.id && member.id === currentUser.id) ||
+              (currentUser?.email && member.email && currentUser.email.toLowerCase() === member.email.toLowerCase())
+            );
             const isAdminRole = member.role === 'admin' || member.role === 'ceo';
             const isInternRole = member.role === 'intern';
             const presenceInfo = formatLastSeen(member.last_active_at || member.updated_at || member.created_at);
@@ -934,31 +938,61 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                     </div>
                   )}
 
-                  {/* Send Notification to this Member */}
+                  {/* Action Button: Current user sees 'Edit My Profile', teammates see 'Send Notification' */}
                   <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleNotifyMember(member.id)}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 6,
-                        padding: '7px 12px',
-                        borderRadius: 8,
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        border: '1px solid rgba(59, 130, 246, 0.25)',
-                        color: '#60a5fa',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <Bell size={13} />
-                      <span>Send Notification</span>
-                    </button>
+                    {isCurrent ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate && onNavigate('profile')}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          padding: '7px 12px',
+                          borderRadius: 8,
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          color: '#ffffff',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'}
+                      >
+                        <User size={13} />
+                        <span>Edit My Profile</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleNotifyMember(member.id)}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          padding: '7px 12px',
+                          borderRadius: 8,
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          border: '1px solid rgba(59, 130, 246, 0.25)',
+                          color: '#60a5fa',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
+                      >
+                        <Bell size={13} />
+                        <span>Send Notification</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -983,6 +1017,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
               <tbody>
                 {filteredMembers.map((member) => {
                   const isOnline = isUserOnline(member.id);
+                  const isCurrent = Boolean(
+                    (currentUser?.id && member.id === currentUser.id) ||
+                    (currentUser?.email && member.email && currentUser.email.toLowerCase() === member.email.toLowerCase())
+                  );
                   const isAdminRole = member.role === 'admin' || member.role === 'ceo';
                   const isInternRole = member.role === 'intern';
                   const presenceInfo = formatLastSeen(member.last_active_at || member.updated_at || member.created_at);
@@ -1130,26 +1168,49 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                       </td>
 
                       <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleNotifyMember(member.id)}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            background: 'rgba(59, 130, 246, 0.12)',
-                            border: '1px solid rgba(59, 130, 246, 0.3)',
-                            color: '#60a5fa',
-                            padding: '6px 12px',
-                            borderRadius: 6,
-                            fontSize: 11.5,
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Bell size={12} />
-                          <span>Notify</span>
-                        </button>
+                        {isCurrent ? (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate && onNavigate('profile')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              border: '1px solid rgba(255, 255, 255, 0.15)',
+                              color: '#ffffff',
+                              padding: '6px 12px',
+                              borderRadius: 6,
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <User size={12} />
+                            <span>Edit Profile</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleNotifyMember(member.id)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              background: 'rgba(59, 130, 246, 0.12)',
+                              border: '1px solid rgba(59, 130, 246, 0.3)',
+                              color: '#60a5fa',
+                              padding: '6px 12px',
+                              borderRadius: 6,
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Bell size={12} />
+                            <span>Notify</span>
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
