@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { to, subject, message, title, apiKey: clientApiKey } = await req.json();
+    const { to, subject, message, title, apiKey: clientApiKey, html: customHtml, text: customText } = await req.json();
 
     const apiKey = Deno.env.get("RESEND_API") || Deno.env.get("RESEND_API_KEY") || clientApiKey;
     if (!apiKey) {
@@ -27,12 +27,9 @@ serve(async (req) => {
     const emailSubject = subject || "you have notification from ceova portal";
     const notificationContent = message || title || "New update in Ceova Portal";
 
-    // Format requested by user:
-    // "this notification is given to u because you have a notification in your dashboad check it there to and hers the message 
-    // {notificatio}"
-    const textContent = `this notification is given to u because you have a notification in your dashboad check it there to and hers the message \n\n${notificationContent}`;
+    const textContent = customText || `this notification is given to u because you have a notification in your dashboad check it there to and hers the message \n\n${notificationContent}`;
 
-    const htmlContent = `
+    const htmlContent = customHtml || `
 <!DOCTYPE html>
 <html>
 <head>

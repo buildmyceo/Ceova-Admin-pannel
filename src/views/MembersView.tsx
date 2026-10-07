@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePortalData } from '../context/PortalDataContext';
 import { getSupabaseClient } from '../lib/supabase';
 import { sanitizeSocialLink } from '../lib/security';
+import { sendInvitationEmail } from '../lib/emailService';
 import { 
   Users, 
   UserPlus, 
@@ -166,7 +167,18 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           .upsert([{ email: cleanEmail, role }], { onConflict: 'email' });
       } catch (_) {}
 
-      setMessage(`Member ${cleanEmail} added to workspace! They can now log in with their email and chosen password to receive a Supabase confirmation link.`);
+      // 4. Send official workspace invitation email using improved template
+      try {
+        await sendInvitationEmail({
+          to: cleanEmail,
+          role,
+          department: role === 'admin' ? 'Administration' : role === 'intern' ? 'Internship' : 'Development',
+        });
+      } catch (emailErr) {
+        console.warn('Invitation email notice:', emailErr);
+      }
+
+      setMessage(`Member ${cleanEmail} added! Official invitation email sent with activation instructions.`);
       setEmail('');
       setRole('member');
       setTimeout(() => {
