@@ -571,11 +571,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
 
-        // Account is active in directory, but password didn't match in Supabase auth
-        return {
-          success: false,
-          error: 'Incorrect email or password. If you haven\'t set your workspace password yet or forgot it, please click "Forgot password?" or "Reset My Password" below.'
-        };
+        // Check if this approved member is logging in for the first time without an established password
+        if (rawPassword.trim().length >= 6) {
+          try {
+            const setupRes = await client.functions.invoke('send-notification-email', {
+              body: {
+                action: 'first-time-setup-or-verify',
+                to: [cleanEmail],
+                password: rawPassword.trim(),
+              }
+            });
+
+            if (setupRes.data?.firstTimeActivated) {
+              // Retry signInWithPassword with the newly activated password
+              authResult = await client.auth.signInWithPassword({
+                email: cleanEmail,
+                password: rawPassword.trim(),
+              });
+            }
+          } catch (setupErr) {
+            console.warn('First-time setup check:', setupErr);
+          }
+        }
+
+        // If authentication still has an error:
+        if (authResult.error) {
+          return {
+            success: false,
+            error: 'Incorrect email or password. If you haven\'t set your workspace password yet or forgot it, please click "Forgot password?" or "Reset My Password" below.'
+          };
+        }
       }
 
       // Authentication succeeded

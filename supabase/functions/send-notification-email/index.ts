@@ -43,6 +43,84 @@ serve(async (req) => {
     let finalText = customText;
     let generatedActionLink: string | null = null;
 
+    // Handle first-time password setup for approved directory members
+    if (action === 'first-time-setup-or-verify') {
+      if (!serviceRoleKey) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
+      }
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+
+      // 1. Verify user exists in public.profiles table
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      if (!profile) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          firstTimeActivated: false, 
+          error: "This email is not registered with CEOVA." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
+
+      // 2. Find user in auth.users
+      const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+      let targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+
+      // A user is first-time if they have never signed in
+      const isFirstTime = !targetUser || !targetUser.last_sign_in_at;
+
+      if (isFirstTime && setDirectPassword && setDirectPassword.length >= 6) {
+        if (!targetUser) {
+          const { data: created, error: cErr } = await supabaseAdmin.auth.admin.createUser({
+            email: cleanEmail,
+            email_confirm: true,
+            password: setDirectPassword,
+          });
+          if (cErr) throw cErr;
+          targetUser = created.user;
+        } else {
+          const { error: uErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
+            password: setDirectPassword,
+            email_confirm: true,
+          });
+          if (uErr) throw uErr;
+        }
+
+        // Ensure profile is marked active
+        await supabaseAdmin
+          .from('profiles')
+          .update({ id: targetUser.id, status: 'active', updated_at: new Date().toISOString() })
+          .ilike('email', cleanEmail);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          firstTimeActivated: true, 
+          message: "First-time password set successfully!" 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        success: false, 
+        firstTimeActivated: false, 
+        error: "Incorrect email or password. Please verify your credentials or click 'Forgot password?'." 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
     // Handle automated activation / recovery link generation via Supabase Admin
     if (action === 'activate-user' || action === 'send-activation-email') {
       if (!serviceRoleKey) {
