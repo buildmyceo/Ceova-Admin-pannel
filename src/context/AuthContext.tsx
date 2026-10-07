@@ -132,6 +132,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (client && isConfigured) {
         try {
+          // 0. Handle PKCE auth code exchange or hash tokens from email confirmation redirect
+          if (typeof window !== 'undefined') {
+            if (window.location.search && window.location.search.includes('code=')) {
+              const urlParams = new URLSearchParams(window.location.search);
+              const authCode = urlParams.get('code');
+              if (authCode) {
+                try {
+                  const { data: exchangeData, error: exchangeErr } = await client.auth.exchangeCodeForSession(authCode);
+                  if (exchangeData?.session) {
+                    const cleanUrl = window.location.pathname + (window.location.hash || '');
+                    window.history.replaceState({}, document.title, cleanUrl);
+                  } else if (exchangeErr) {
+                    console.warn('PKCE exchange error:', exchangeErr.message);
+                  }
+                } catch (codeErr) {
+                  console.warn('PKCE exchange exception:', codeErr);
+                }
+              }
+            } else if (window.location.hash && window.location.hash.includes('access_token=')) {
+              try {
+                const hashParams = new URLSearchParams(window.location.hash.substring(1));
+                const accessToken = hashParams.get('access_token');
+                const refreshToken = hashParams.get('refresh_token');
+                if (accessToken && refreshToken) {
+                  const { data: sessionData, error: sessionErr } = await client.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                  });
+                  if (sessionData?.session) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                  } else if (sessionErr) {
+                    console.warn('Hash session set error:', sessionErr.message);
+                  }
+                }
+              } catch (hashErr) {
+                console.warn('Hash session extraction exception:', hashErr);
+              }
+            }
+          }
+
           // 1. Strictly synchronize saved accounts with their latest accounts & roles from Supabase
           if (anonClient && storedAccounts.length > 0) {
             const emails = storedAccounts.map(a => a.profile.email?.trim().toLowerCase()).filter(Boolean);
@@ -214,8 +254,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
                 setSavedAccounts(storedAccounts);
                 persistAccounts(storedAccounts);
-                setIsLoading(false);
-                return;
               }
             } else if (userEmail) {
               // Auto-provision profile with role strictly from metadata or default to member
@@ -239,15 +277,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setUser(sanitized);
                 localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
                 upsertAccount(sanitized, { access_token: session.access_token, refresh_token: session.refresh_token });
-                setIsLoading(false);
-                return;
               }
             }
+          } else {
+            // 3. If no active Supabase Auth session, the user is signed out
+            setUser(null);
+            localStorage.removeItem(LOCAL_USER_KEY);
           }
-
-          // 3. If no active Supabase Auth session, the user is signed out
-          setUser(null);
-          localStorage.removeItem(LOCAL_USER_KEY);
         } catch (err) {
           console.error('Error fetching Supabase session/profile:', err);
           setUser(null);
@@ -500,6 +536,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             email: cleanEmail,
             password: rawPassword.trim(),
             options: {
+              emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://portal.ceovaai.com',
               data: {
                 full_name: existingProfile.full_name || cleanEmail.split('@')[0],
                 role: existingProfile.role || 'member',
@@ -514,7 +551,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (sErr.includes('already registered') || sErr.includes('already exists')) {
               return {
                 success: false,
-                error: 'Incorrect email or password. Please verify your credentials and try again.'
+                error: 'Incorrect email or password. If you recently confirmed your account, please verify your password or click "Forgot password?" to set a new one.'
               };
             }
             return {
@@ -523,7 +560,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
           }
 
-          // If confirmation email was dispatched by Supabase:
+          // Check if user is ALREADY registered:
+          // In Supabase Auth, when an existing user is signed up again, Supabase returns a user with identities: [] (empty array)!
+          const identities = signUpAttempt.data?.user?.identities;
+          if (Array.isArray(identities) && identities.length === 0) {
+            return {
+              success: false,
+              error: 'Incorrect email or password. If you recently confirmed your account, please verify your password or click "Forgot password?" to set a new one.'
+            };
+          }
+
+          // If confirmation email was dispatched by Supabase for a genuine NEW user:
           if (signUpAttempt.data?.user && !signUpAttempt.data?.session) {
             if (signUpAttempt.data.user.id && existingProfile.id !== signUpAttempt.data.user.id) {
               try {
@@ -637,6 +684,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: cleanEmail,
           password,
           options: {
+            emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://portal.ceovaai.com',
             data: {
               full_name: meta.fullName,
               role: assignedRole,
@@ -651,6 +699,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error) {
           setIsLoading(false);
           return { success: false, error: error.message };
+        }
+
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setIsLoading(false);
+          return { success: false, error: 'An account with this email already exists. Please log in or reset your password.' };
         }
 
         if (data.user) {

@@ -110,6 +110,58 @@ const PortalMain: React.FC = () => {
     }
   };
 
+  // Elegant splash screen during initial authentication/PKCE token exchange
+  if (isLoading) {
+    return (
+      <div 
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#080b11',
+          color: '#ffffff',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: '16px',
+            background: '#161618',
+            border: '1px solid #27272a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 10,
+            marginBottom: 16,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+          }}
+        >
+          <img
+            src="/ceovaimage.png"
+            alt="CEOVA Logo"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              filter: 'invert(1)',
+              mixBlendMode: 'screen',
+            }}
+          />
+        </div>
+        <div style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '0.05em', color: '#ffffff', marginBottom: 6 }}>
+          CEOVA PORTAL
+        </div>
+        <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+          Verifying workspace session...
+        </div>
+      </div>
+    );
+  }
+
   // If viewing the Login Gateway Screen first
   if (!user) {
     return (

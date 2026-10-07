@@ -26,6 +26,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [successMessage, setSuccessMessage] = useState('');
   const [resetSending, setResetSending] = useState(false);
 
+  // Check URL parameters for confirmation or auth feedback
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryErrorDesc = searchParams.get('error_description');
+    const queryError = searchParams.get('error');
+
+    let hashErrorDesc: string | null = null;
+    let hashError: string | null = null;
+    if (window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      hashErrorDesc = hashParams.get('error_description');
+      hashError = hashParams.get('error');
+    }
+
+    const errDesc = queryErrorDesc || hashErrorDesc;
+    const err = queryError || hashError;
+
+    if (errDesc || err) {
+      const displayMsg = errDesc
+        ? decodeURIComponent(errDesc.replace(/\+/g, ' '))
+        : 'The email verification link is invalid or has expired. Please sign in or reset your password.';
+      setErrorMessage(displayMsg);
+      // Clean query and hash
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -235,7 +264,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <span>{errorMessage}</span>
 
                 {/* If password error, offer fast password reset */}
-                {errorMessage.toLowerCase().includes('incorrect password') && (
+                {(errorMessage.toLowerCase().includes('incorrect') || errorMessage.toLowerCase().includes('password')) && (
                   <div style={{ marginTop: 8 }}>
                     <button
                       type="button"
