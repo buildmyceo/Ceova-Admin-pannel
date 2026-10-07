@@ -211,87 +211,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
-          // 2. Validate session against Supabase Auth server directly (checks if user still exists in auth.users)
-          const { data: { user: serverUser }, error: userError } = await client.auth.getUser();
-          if (userError || !serverUser) {
-            // User does not exist or was deleted from auth.users!
-            await client.auth.signOut().catch(() => {});
-            setUser(null);
-            localStorage.removeItem(LOCAL_USER_KEY);
-            return;
-          }
-
+          // 2. Check active Supabase Auth session
           const { data: { session } } = await client.auth.getSession();
           if (session?.user) {
-            const userEmail = session.user.email?.trim().toLowerCase();
-            let profileData = null;
-
-            if (userEmail) {
-              const { data: byEmail } = await (anonClient || client)
-                .from('profiles')
-                .select('*')
-                .ilike('email', userEmail)
-                .maybeSingle();
-              if (byEmail) profileData = byEmail;
-            }
-
-            if (!profileData) {
-              const { data: byId } = await (anonClient || client)
-                .from('profiles')
-                .select('*')
-                .eq('id', session.user.id)
-                .maybeSingle();
-              if (byId) profileData = byId;
-            }
-
-            if (profileData) {
-              if (profileData.id !== session.user.id && userEmail) {
-                try {
-                  await (anonClient || client)
-                    .from('profiles')
-                    .update({ id: session.user.id, updated_at: new Date().toISOString() })
-                    .ilike('email', userEmail);
-                  profileData.id = session.user.id;
-                } catch (_) {}
-              }
-
-              // Strictly use profile and role fetched from Supabase
-              const sanitized = sanitizeProfile(profileData);
-              if (sanitized) {
-                if (session.user.user_metadata?.cover_url && !sanitized.cover_url && !session.user.user_metadata.cover_url.startsWith('data:')) {
-                  sanitized.cover_url = session.user.user_metadata.cover_url;
-                }
-                if (session.user.user_metadata?.social_links) {
-                  sanitized.social_links = {
-                    ...session.user.user_metadata.social_links,
-                    ...(sanitized.social_links || {})
-                  };
-                }
-                setUser(sanitized);
-                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
-
-                const tokens = {
-                  access_token: session.access_token,
-                  refresh_token: session.refresh_token,
-                };
-                const idx = storedAccounts.findIndex(a => 
-                  a.profile.id === sanitized.id || 
-                  a.profile.email?.toLowerCase() === sanitized.email?.toLowerCase()
-                );
-                if (idx >= 0) {
-                  storedAccounts[idx] = { profile: sanitized, session: tokens, lastActive: new Date().toISOString() };
-                } else {
-                  storedAccounts = [{ profile: sanitized, session: tokens, lastActive: new Date().toISOString() }, ...storedAccounts];
-                }
-                setSavedAccounts(storedAccounts);
-                persistAccounts(storedAccounts);
-              }
-            } else {
-              // User profile was deleted from public.profiles table in Supabase!
-              // DO NOT auto-create it! Sign out immediately to respect admin deletion!
+            // Verify if user still exists on Supabase Auth server
+            const { data: { user: serverUser }, error: userError } = await client.auth.getUser();
+            if (userError || !serverUser) {
+              // User was deleted from Supabase Auth!
               await client.auth.signOut().catch(() => {});
               setUser(null);
               localStorage.removeItem(LOCAL_USER_KEY);
+            } else {
+              const userEmail = session.user.email?.trim().toLowerCase();
+              let profileData = null;
+
+              if (userEmail) {
+                const { data: byEmail } = await (anonClient || client)
+                  .from('profiles')
+                  .select('*')
+                  .ilike('email', userEmail)
+                  .maybeSingle();
+                if (byEmail) profileData = byEmail;
+              }
+
+              if (!profileData) {
+                const { data: byId } = await (anonClient || client)
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', session.user.id)
+                  .maybeSingle();
+                if (byId) profileData = byId;
+              }
+
+              if (profileData) {
+                if (profileData.id !== session.user.id && userEmail) {
+                  try {
+                    await (anonClient || client)
+                      .from('profiles')
+                      .update({ id: session.user.id, updated_at: new Date().toISOString() })
+                      .ilike('email', userEmail);
+                    profileData.id = session.user.id;
+                  } catch (_) {}
+                }
+
+                // Strictly use profile and role fetched from Supabase
+                const sanitized = sanitizeProfile(profileData);
+                if (sanitized) {
+                  if (session.user.user_metadata?.cover_url && !sanitized.cover_url && !session.user.user_metadata.cover_url.startsWith('data:')) {
+                    sanitized.cover_url = session.user.user_metadata.cover_url;
+                  }
+                  if (session.user.user_metadata?.social_links) {
+                    sanitized.social_links = {
+                      ...session.user.user_metadata.social_links,
+                      ...(sanitized.social_links || {})
+                    };
+                  }
+                  setUser(sanitized);
+                  localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
+
+                  const tokens = {
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token,
+                  };
+                  const idx = storedAccounts.findIndex(a => 
+                    a.profile.id === sanitized.id || 
+                    a.profile.email?.toLowerCase() === sanitized.email?.toLowerCase()
+                  );
+                  if (idx >= 0) {
+                    storedAccounts[idx] = { profile: sanitized, session: tokens, lastActive: new Date().toISOString() };
+                  } else {
+                    storedAccounts = [{ profile: sanitized, session: tokens, lastActive: new Date().toISOString() }, ...storedAccounts];
+                  }
+                  setSavedAccounts(storedAccounts);
+                  persistAccounts(storedAccounts);
+                }
+              } else {
+                // User profile was deleted from public.profiles table in Supabase!
+                // DO NOT auto-create it! Sign out immediately to respect admin deletion!
+                await client.auth.signOut().catch(() => {});
+                setUser(null);
+                localStorage.removeItem(LOCAL_USER_KEY);
+              }
             }
           } else {
             // 3. If no active Supabase Auth session, the user is signed out
@@ -302,6 +302,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.error('Error fetching Supabase session/profile:', err);
           setUser(null);
           localStorage.removeItem(LOCAL_USER_KEY);
+        } finally {
+          setIsLoading(false);
         }
 
         const { data: authListener } = client.auth.onAuthStateChange(async (event, session) => {
