@@ -116,10 +116,59 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   };
 
+  const handleDirectActivateWithPassword = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password;
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your email address.');
+      return;
+    }
+    if (!cleanPassword || cleanPassword.length < 6) {
+      setErrorMessage('Please enter a password of at least 6 characters in the password box.');
+      return;
+    }
+
+    setResetSending(true);
+    setErrorMessage('');
+    try {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Database connection failed.');
+
+      const res = await client.functions.invoke('send-notification-email', {
+        body: {
+          action: 'activate-user',
+          to: [cleanEmail],
+          password: cleanPassword,
+        }
+      });
+
+      if (res.data?.success) {
+        // Now authenticate immediately with this newly saved password!
+        const loginRes = await loginWithEmail(cleanEmail, cleanPassword);
+        if (loginRes.success) {
+          onLoginSuccess();
+          return;
+        } else {
+          setErrorMessage(loginRes.error || 'Password updated, but could not complete login.');
+        }
+      } else {
+        setErrorMessage(res.data?.error || res.error?.message || 'Failed to update password.');
+      }
+    } catch (e: any) {
+      setErrorMessage(e?.message || 'Failed to update password.');
+    } finally {
+      setResetSending(false);
+    }
+  };
+
   const handleActivateAccount = async () => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
       setErrorMessage('Please enter your email address above to receive your account activation link.');
+      return;
+    }
+    if (password && password.length >= 6) {
+      await handleDirectActivateWithPassword();
       return;
     }
     setResetSending(true);
@@ -287,31 +336,59 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 )}
                 <span>{errorMessage}</span>
 
-                {/* If password error, offer fast password reset */}
+                {/* If password error, offer instant direct setup OR email reset */}
                 {(errorMessage.toLowerCase().includes('incorrect') || errorMessage.toLowerCase().includes('password')) && (
-                  <div style={{ marginTop: 8 }}>
-                    <button
-                      type="button"
-                      onClick={handleForgotPassword}
-                      disabled={resetSending}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        background: 'rgba(239, 68, 68, 0.2)',
-                        border: '1px solid rgba(239, 68, 68, 0.4)',
-                        color: '#fca5a5',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        cursor: resetSending ? 'wait' : 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <Lock size={13} />
-                      {resetSending ? 'Sending reset link...' : 'Reset My Password via Email'}
-                    </button>
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {password && password.length >= 6 && (
+                      <button
+                        type="button"
+                        onClick={handleDirectActivateWithPassword}
+                        disabled={resetSending || loading}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          background: '#2563eb',
+                          border: '1px solid #3b82f6',
+                          color: '#ffffff',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: (resetSending || loading) ? 'wait' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          boxShadow: '0 2px 10px rgba(37, 99, 235, 0.4)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <CheckCircle2 size={14} />
+                        {resetSending ? 'Activating & Logging in...' : 'Set This Password & Enter Workspace'}
+                      </button>
+                    )}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={handleForgotPassword}
+                        disabled={resetSending}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#fca5a5',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: resetSending ? 'wait' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <Lock size={13} />
+                        {resetSending ? 'Sending reset link...' : 'Reset My Password via Email'}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
