@@ -211,7 +211,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
-          // 2. Check active Supabase Auth session
+          // 2. Validate session against Supabase Auth server directly (checks if user still exists in auth.users)
+          const { data: { user: serverUser }, error: userError } = await client.auth.getUser();
+          if (userError || !serverUser) {
+            // User does not exist or was deleted from auth.users!
+            await client.auth.signOut().catch(() => {});
+            setUser(null);
+            localStorage.removeItem(LOCAL_USER_KEY);
+            return;
+          }
+
           const { data: { session } } = await client.auth.getSession();
           if (session?.user) {
             const userEmail = session.user.email?.trim().toLowerCase();
@@ -277,29 +286,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setSavedAccounts(storedAccounts);
                 persistAccounts(storedAccounts);
               }
-            } else if (userEmail) {
-              // Auto-provision profile with role strictly from metadata or default to member
-              const role = sanitizeRole(session.user.user_metadata?.role || 'member');
-              const newProf: Profile = {
-                id: session.user.id,
-                email: userEmail,
-                full_name: session.user.user_metadata?.full_name || userEmail.split('@')[0],
-                role,
-                department: session.user.user_metadata?.department || (role === 'ceo' ? 'Executive' : role === 'admin' ? 'Administration' : 'General'),
-                designation: session.user.user_metadata?.designation || (role === 'ceo' ? 'Chief Executive Officer' : role === 'admin' ? 'Administrator' : role === 'intern' ? 'Intern' : 'Member'),
-                status: 'active',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              };
-              try {
-                await client.from('profiles').upsert([newProf], { onConflict: 'id' });
-              } catch (_) {}
-              const sanitized = sanitizeProfile(newProf);
-              if (sanitized) {
-                setUser(sanitized);
-                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
-                upsertAccount(sanitized, { access_token: session.access_token, refresh_token: session.refresh_token });
-              }
+            } else {
+              // User profile was deleted from public.profiles table in Supabase!
+              // DO NOT auto-create it! Sign out immediately to respect admin deletion!
+              await client.auth.signOut().catch(() => {});
+              setUser(null);
+              localStorage.removeItem(LOCAL_USER_KEY);
             }
           } else {
             // 3. If no active Supabase Auth session, the user is signed out
@@ -349,23 +341,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               } catch (_) {}
             }
 
-            if (!profileData && userEmail) {
-              const role = sanitizeRole(session.user.user_metadata?.role || 'member');
-              const newProf: Profile = {
-                id: session.user.id,
-                email: userEmail,
-                full_name: session.user.user_metadata?.full_name || userEmail.split('@')[0],
-                role,
-                department: session.user.user_metadata?.department || (role === 'ceo' ? 'Executive' : role === 'admin' ? 'Administration' : 'General'),
-                designation: session.user.user_metadata?.designation || (role === 'ceo' ? 'Chief Executive Officer' : role === 'admin' ? 'Administrator' : role === 'intern' ? 'Intern' : 'Member'),
-                status: 'active',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              };
-              try {
-                await client.from('profiles').upsert([newProf], { onConflict: 'id' });
-              } catch (_) {}
-              profileData = newProf;
+            if (!profileData) {
+              // Profile was deleted from profiles table! Do NOT auto-create!
+              await client.auth.signOut().catch(() => {});
+              setUser(null);
+              localStorage.removeItem(LOCAL_USER_KEY);
+              return;
             }
 
             if (profileData) {
@@ -626,24 +607,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (!dbProfile) {
-          // User authenticated with valid Supabase Auth credentials! Auto-provision their profile
-          const userMeta = authResult.data.user.user_metadata || {};
-          const assignedRole = sanitizeRole(userMeta.role || 'member');
-          const newProf: Profile = {
-            id: authResult.data.user.id,
-            email: authResult.data.user.email || cleanEmail,
-            full_name: userMeta.full_name || cleanEmail.split('@')[0],
-            role: assignedRole,
-            department: userMeta.department || (assignedRole === 'ceo' ? 'Executive' : assignedRole === 'admin' ? 'Administration' : 'Development'),
-            designation: userMeta.designation || (assignedRole === 'ceo' ? 'Chief Executive Officer' : assignedRole === 'admin' ? 'Administrator' : 'Team Member'),
-            status: 'active',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+          // User authenticated in auth, but was removed from profiles directory! Deny login!
+          await client.auth.signOut().catch(() => {});
+          return {
+            success: false,
+            error: 'This account has been deactivated or removed from the CEOVA directory.'
           };
-          try {
-            await client.from('profiles').upsert([newProf], { onConflict: 'id' });
-          } catch (_) {}
-          dbProfile = newProf;
         }
 
         if (dbProfile && dbProfile.id !== authResult.data.user.id) {
