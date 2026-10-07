@@ -44,6 +44,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
+    if (res.requiresEmailConfirmation) {
+      setSuccessMessage(res.error || 'Confirmation link sent! Please check your email inbox to verify your account.');
+      setErrorMessage('');
+      setLoading(false);
+      return;
+    }
+
     const errText = res.error || 'Authentication failed. Please verify your credentials.';
     setErrorMessage(errText);
 

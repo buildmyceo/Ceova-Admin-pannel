@@ -457,17 +457,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
 
-        if (errLower.includes('invalid login credentials') || errLower.includes('invalid credentials')) {
+        if (errLower.includes('email not confirmed')) {
           return {
             success: false,
-            error: 'Incorrect email or password. Please verify your credentials and try again.'
+            requiresEmailConfirmation: true,
+            error: `Email confirmation pending. Please check your email inbox at ${cleanEmail} and click the confirmation link to activate your account.`
           };
         }
 
-        return {
-          success: false,
-          error: authResult.error.message || 'Authentication failed. Please verify your credentials.'
-        };
+        // Check if this member is invited / registered in CEOVA directory
+        const anonClient = getAnonSupabaseClient() || client;
+        let existingProfile: any = null;
+        if (anonClient) {
+          const { data: p } = await anonClient
+            .from('profiles')
+            .select('*')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+          existingProfile = p;
+
+          if (!existingProfile) {
+            const { data: inv } = await anonClient
+              .from('invitations')
+              .select('*')
+              .ilike('email', cleanEmail)
+              .maybeSingle();
+            if (inv) existingProfile = inv;
+          }
+        }
+
+        // If not registered in CEOVA directory: strictly restrict access
+        if (!existingProfile) {
+          return {
+            success: false,
+            error: 'Wrong email. This email is not registered with CEOVA. If you think this is a mistake, please contact support.'
+          };
+        }
+
+        // Member exists in CEOVA directory! Since signInWithPassword failed, trigger account activation via signUp
+        try {
+          const signUpAttempt = await client.auth.signUp({
+            email: cleanEmail,
+            password: rawPassword.trim(),
+            options: {
+              data: {
+                full_name: existingProfile.full_name || cleanEmail.split('@')[0],
+                role: existingProfile.role || 'member',
+                department: existingProfile.department || 'Development',
+                designation: existingProfile.designation || 'Team Member',
+              }
+            }
+          });
+
+          if (signUpAttempt.error) {
+            const sErr = signUpAttempt.error.message.toLowerCase();
+            if (sErr.includes('already registered') || sErr.includes('already exists')) {
+              return {
+                success: false,
+                error: 'Incorrect email or password. Please verify your credentials and try again.'
+              };
+            }
+            return {
+              success: false,
+              error: signUpAttempt.error.message
+            };
+          }
+
+          // If confirmation email was dispatched by Supabase:
+          if (signUpAttempt.data?.user && !signUpAttempt.data?.session) {
+            if (signUpAttempt.data.user.id && existingProfile.id !== signUpAttempt.data.user.id) {
+              try {
+                await (anonClient || client)
+                  .from('profiles')
+                  .update({ id: signUpAttempt.data.user.id, updated_at: new Date().toISOString() })
+                  .ilike('email', cleanEmail);
+              } catch (_) {}
+            }
+            return {
+              success: false,
+              requiresEmailConfirmation: true,
+              error: `Confirmation link sent! We have sent a confirmation email to ${cleanEmail}. Please click the confirmation link in your email, then return here to log in and complete your profile setup.`
+            };
+          }
+
+          if (signUpAttempt.data?.session && signUpAttempt.data?.user) {
+            authResult = { data: signUpAttempt.data as any, error: null } as any;
+          }
+        } catch (e: any) {
+          return {
+            success: false,
+            error: e.message || 'Authentication failed. Please verify your credentials.'
+          };
+        }
       }
 
       // Authentication succeeded

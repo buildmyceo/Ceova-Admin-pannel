@@ -130,10 +130,20 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
       const cleanEmail = email.trim().toLowerCase();
       const generatedName = cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-      // 1. Add directly to profiles table with status 'pending' so member appears in list immediately
+      // 1. Check if profile already exists or generate a valid UUID
+      const { data: existingProf } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      const profileId = existingProf?.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'prof-' + Date.now());
+
+      // 2. Add directly to profiles table with status 'pending' so member appears in list immediately
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert([{
+          id: profileId,
           email: cleanEmail,
           full_name: generatedName,
           role: role,
@@ -145,10 +155,11 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         }], { onConflict: 'email' });
 
       if (profileError) {
-        console.warn('Profile upsert note:', profileError);
+        console.error('Profile upsert error:', profileError);
+        throw new Error(profileError.message || 'Failed to save member profile.');
       }
 
-      // 2. Also record in invitations table
+      // 3. Also record in invitations table
       try {
         await supabase
           .from('invitations')
