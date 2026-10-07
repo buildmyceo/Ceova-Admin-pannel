@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'member' | 'intern' | 'ceo';
 
-export type UserStatus = 'active' | 'away' | 'in_meeting' | 'offline' | 'pending';
+export type UserStatus = 'active' | 'away' | 'in_meeting' | 'offline' | 'pending' | 'blocked' | 'paused';
 
 export interface Profile {
   id: string;

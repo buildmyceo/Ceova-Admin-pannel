@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Profile, Department } from '../types';
+import { Profile, Department, UserStatus } from '../types';
 import { REAL_MEMBERS, REAL_DEPARTMENTS } from '../lib/realData';
 import { getSupabaseClient } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -11,6 +11,7 @@ interface PortalDataContextType {
   refreshData: () => Promise<void>;
   onlineUserIds: Set<string>;
   isUserOnline: (userId: string) => boolean;
+  updateMemberStatus: (memberId: string, status: UserStatus) => Promise<{ success: boolean; error?: string }>;
 }
 
 const PortalDataContext = createContext<PortalDataContextType | undefined>(undefined);
@@ -199,6 +200,35 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return onlineUserIds.has(userId);
   }, [user?.id, onlineUserIds]);
 
+  const updateMemberStatus = useCallback(async (memberId: string, status: UserStatus): Promise<{ success: boolean; error?: string }> => {
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured) {
+      return { success: false, error: 'Database connection is not configured.' };
+    }
+
+    try {
+      // Optimistic local update
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, status } : m));
+
+      const { error } = await client
+        .from('profiles')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', memberId);
+
+      if (error) {
+        console.error('Failed to update status in Supabase:', error);
+        await refreshData();
+        return { success: false, error: error.message };
+      }
+
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error updating member status:', err);
+      return { success: false, error: err?.message || 'Failed to update member status' };
+    }
+  }, [isSupabaseConfigured, refreshData]);
+
   return (
     <PortalDataContext.Provider
       value={{
@@ -208,6 +238,7 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         refreshData,
         onlineUserIds,
         isUserOnline,
+        updateMemberStatus,
       }}
     >
       {children}

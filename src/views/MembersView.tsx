@@ -26,9 +26,13 @@ import {
   FileText,
   Sparkles,
   Bell,
-  User
+  User,
+  ShieldAlert,
+  PauseCircle
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
+import { Profile } from '../types';
+import { MemberStatusModal } from '../components/MemberStatusModal';
 
 interface MembersViewProps {
   onNavigate?: (tab: NavTab) => void;
@@ -46,6 +50,8 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
 
   // Invite modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [statusModalMember, setStatusModalMember] = useState<Profile | null>(null);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('member');
   const [loading, setLoading] = useState(false);
@@ -967,31 +973,73 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                         <span>Edit My Profile</span>
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleNotifyMember(member.id)}
-                        style={{
-                          width: '100%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
-                          padding: '7px 12px',
-                          borderRadius: 8,
-                          background: 'rgba(59, 130, 246, 0.1)',
-                          border: '1px solid rgba(59, 130, 246, 0.25)',
-                          color: '#60a5fa',
-                          fontSize: 12,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
-                      >
-                        <Bell size={13} />
-                        <span>Send Notification</span>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleNotifyMember(member.id)}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            padding: '7px 12px',
+                            borderRadius: 8,
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                            color: '#60a5fa',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
+                        >
+                          <Bell size={13} />
+                          <span>Send Notification</span>
+                        </button>
+
+                        {isAdmin && (
+                          <div style={{ marginTop: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStatusModalMember(member);
+                                setIsStatusModalOpen(true);
+                              }}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                padding: '6px 12px',
+                                borderRadius: 8,
+                                background: (member.status === 'blocked' || member.status === 'paused') ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+                                border: (member.status === 'blocked' || member.status === 'paused') ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.25)',
+                                color: (member.status === 'blocked' || member.status === 'paused') ? '#4ade80' : '#f87171',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {(member.status === 'blocked' || member.status === 'paused') ? (
+                                <>
+                                  <CheckCircle2 size={12} />
+                                  <span>Reactivate Access</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ShieldAlert size={12} />
+                                  <span>Pause / Block Access</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -1168,49 +1216,88 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                       </td>
 
                       <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                        {isCurrent ? (
-                          <button
-                            type="button"
-                            onClick={() => onNavigate && onNavigate('profile')}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              background: 'rgba(255, 255, 255, 0.08)',
-                              border: '1px solid rgba(255, 255, 255, 0.15)',
-                              color: '#ffffff',
-                              padding: '6px 12px',
-                              borderRadius: 6,
-                              fontSize: 11.5,
-                              fontWeight: 600,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <User size={12} />
-                            <span>Edit Profile</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleNotifyMember(member.id)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              background: 'rgba(59, 130, 246, 0.12)',
-                              border: '1px solid rgba(59, 130, 246, 0.3)',
-                              color: '#60a5fa',
-                              padding: '6px 12px',
-                              borderRadius: 6,
-                              fontSize: 11.5,
-                              fontWeight: 600,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Bell size={12} />
-                            <span>Notify</span>
-                          </button>
-                        )}
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                          {isCurrent ? (
+                            <button
+                              type="button"
+                              onClick={() => onNavigate && onNavigate('profile')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                color: '#ffffff',
+                                padding: '6px 12px',
+                                borderRadius: 6,
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <User size={12} />
+                              <span>Edit Profile</span>
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleNotifyMember(member.id)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  background: 'rgba(59, 130, 246, 0.12)',
+                                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                                  color: '#60a5fa',
+                                  padding: '6px 12px',
+                                  borderRadius: 6,
+                                  fontSize: 11.5,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Bell size={12} />
+                                <span>Notify</span>
+                              </button>
+
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setStatusModalMember(member);
+                                    setIsStatusModalOpen(true);
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    background: (member.status === 'blocked' || member.status === 'paused') ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                    border: (member.status === 'blocked' || member.status === 'paused') ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                                    color: (member.status === 'blocked' || member.status === 'paused') ? '#4ade80' : '#f87171',
+                                    padding: '6px 12px',
+                                    borderRadius: 6,
+                                    fontSize: 11.5,
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {(member.status === 'blocked' || member.status === 'paused') ? (
+                                    <>
+                                      <CheckCircle2 size={12} />
+                                      <span>Reactivate</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ShieldAlert size={12} />
+                                      <span>Pause / Block</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1432,6 +1519,16 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           </div>
         </div>
       )}
+
+      {/* Admin Member Access Control Modal */}
+      <MemberStatusModal
+        isOpen={isStatusModalOpen}
+        member={statusModalMember}
+        onClose={() => {
+          setIsStatusModalOpen(false);
+          setStatusModalMember(null);
+        }}
+      />
     </div>
   );
 };

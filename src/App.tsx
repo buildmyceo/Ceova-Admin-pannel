@@ -21,6 +21,7 @@ import { LoginPage } from './views/LoginPage';
 import { PortalBackground } from './components/PortalBackground';
 import { CompulsoryProfileSetupModal } from './components/CompulsoryProfileSetupModal';
 import { SetPasswordModal } from './components/SetPasswordModal';
+import { BlockedAccountView } from './components/BlockedAccountView';
 
 const PortalMain: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -183,6 +184,11 @@ const PortalMain: React.FC = () => {
         )}
       </div>
     );
+  }
+
+  // If account has been blocked or paused by administrator, lock screen immediately
+  if (user && (user.status === 'blocked' || user.status === 'paused')) {
+    return <BlockedAccountView />;
   }
 
   return (

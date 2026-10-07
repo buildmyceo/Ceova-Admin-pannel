@@ -32,10 +32,13 @@ import {
   ExternalLink,
   ChevronRight,
   Paperclip,
-  Bell
+  Bell,
+  ShieldAlert,
+  PauseCircle
 } from 'lucide-react';
 import { NavTab } from '../../components/Sidebar';
-import { Task, TaskPriority, TaskStatus, Meeting, MeetingCategory } from '../../types';
+import { Task, TaskPriority, TaskStatus, Meeting, MeetingCategory, Profile } from '../../types';
+import { MemberStatusModal } from '../../components/MemberStatusModal';
 import { getVisibleMeetings } from '../../lib/meetingsService';
 import { sanitizeUrl } from '../../lib/security';
 
@@ -80,6 +83,8 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
   const [taskViewTab, setTaskViewTab] = useState<'assigned' | 'given'>('assigned');
 
   const isAdmin = role === 'admin' || role === 'ceo';
+  const [statusModalMember, setStatusModalMember] = useState<Profile | null>(null);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
 
 
 
@@ -933,6 +938,207 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* =========================================================================
+          ADMIN/CEO TEAM ACCESS & ACCOUNT SECURITY CONTROLS
+          ========================================================================= */}
+      {isAdmin && (
+        <div
+          className="bento-card"
+          style={{
+            marginTop: 24,
+            padding: 24,
+            background: 'rgba(12, 16, 26, 0.55)',
+            backdropFilter: 'blur(28px) saturate(170%)',
+            WebkitBackdropFilter: 'blur(28px) saturate(170%)',
+            border: '1px solid rgba(255, 255, 255, 0.11)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#f87171'
+              }}>
+                <ShieldCheck size={18} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                  Team Access & Security Control
+                </h3>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Pause or block member workspace access. Suspended users will immediately see a restriction notice with instructions to contact you.
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('members')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#e4e4e7',
+                padding: '6px 14px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <span>View Full Directory</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: 16
+          }}>
+            {members.map((m) => {
+              const isSelf = user?.id === m.id || (user?.email && m.email && user.email.toLowerCase() === m.email.toLowerCase());
+              const isPaused = m.status === 'paused';
+              const isBlocked = m.status === 'blocked';
+              const isSuspended = isPaused || isBlocked;
+
+              return (
+                <div
+                  key={m.id}
+                  style={{
+                    background: isSuspended ? 'rgba(30, 15, 15, 0.45)' : '#12141a',
+                    border: isSuspended ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid #27272a',
+                    borderRadius: 14,
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 12,
+                    transition: 'border-color 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: '50%',
+                      background: '#27272a',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      border: isSuspended ? '2px solid #ef4444' : '1px solid #3f3f46'
+                    }}>
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} alt={m.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
+                          {(m.full_name || 'U').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {m.full_name}
+                        </span>
+                        {isSelf && (
+                          <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: '#27272a', color: '#a1a1aa' }}>
+                            You
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#71717a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {m.email}
+                      </div>
+                    </div>
+
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      background: isBlocked ? '#450a0a' : isPaused ? '#451a03' : '#052e16',
+                      color: isBlocked ? '#f87171' : isPaused ? '#fbbf24' : '#4ade80',
+                      border: isBlocked ? '1px solid #7f1d1d' : isPaused ? '1px solid #78350f' : '1px solid #14532d'
+                    }}>
+                      {m.status || 'Active'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <span style={{ fontSize: 11, color: '#a1a1aa' }}>
+                      {m.designation || 'Team Member'}
+                    </span>
+
+                    {!isSelf ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusModalMember(m);
+                          setIsStatusModalOpen(true);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '5px 12px',
+                          borderRadius: 6,
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          background: isSuspended ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                          border: isSuspended ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                          color: isSuspended ? '#4ade80' : '#f87171',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {isSuspended ? (
+                          <>
+                            <CheckCircle2 size={12} />
+                            <span>Reactivate Access</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShieldAlert size={12} />
+                            <span>Pause / Block</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#71717a', fontStyle: 'italic' }}>
+                        Primary Administrator
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <MemberStatusModal
+        isOpen={isStatusModalOpen}
+        member={statusModalMember}
+        onClose={() => {
+          setIsStatusModalOpen(false);
+          setStatusModalMember(null);
+        }}
+      />
     </div>
   );
 };

@@ -391,13 +391,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, [isSupabaseConfigured]);
 
-  // Presence Heartbeat: Keeps user marked active in the portal and updates last_active_at
+  // Presence Heartbeat & Realtime Profile Status Sync
   useEffect(() => {
     if (!user?.id) return;
 
+    const client = getSupabaseClient();
+    let profileChannel: any = null;
+
+    if (client && isSupabaseConfigured) {
+      // Listen for administrative status updates (e.g. paused or blocked)
+      profileChannel = client
+        .channel(`user-profile-status-sync-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
+          (payload: any) => {
+            if (payload?.new) {
+              const updated = sanitizeProfile(payload.new);
+              if (updated) {
+                setUser(updated);
+                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(updated));
+              }
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    // Do not ping activity if user is currently blocked or paused
+    if (user.status === 'blocked' || user.status === 'paused') {
+      return () => {
+        if (profileChannel) profileChannel.unsubscribe();
+      };
+    }
+
     const pingActivity = async () => {
       const nowIso = new Date().toISOString();
-      const client = getSupabaseClient();
       if (client && isSupabaseConfigured) {
         try {
           const { error } = await client
@@ -456,6 +485,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.addEventListener('click', handleUserActivity, { passive: true });
 
     return () => {
+      if (profileChannel) profileChannel.unsubscribe();
       clearInterval(interval);
       window.removeEventListener('mousemove', handleUserActivity);
       window.removeEventListener('keydown', handleUserActivity);
