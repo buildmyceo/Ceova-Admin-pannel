@@ -322,7 +322,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             let profileData = null;
 
             if (userEmail) {
-              const { data: byEmail } = await (anonClient || client)
+              const { data: byEmail } = await client
                 .from('profiles')
                 .select('*')
                 .ilike('email', userEmail)
@@ -331,7 +331,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (!profileData) {
-              const { data: byId } = await (anonClient || client)
+              const { data: byId } = await client
                 .from('profiles')
                 .select('*')
                 .eq('id', session.user.id)
@@ -341,7 +341,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (profileData && profileData.id !== session.user.id && userEmail) {
               try {
-                await (anonClient || client)
+                await client
                   .from('profiles')
                   .update({ id: session.user.id, updated_at: new Date().toISOString() })
                   .ilike('email', userEmail);
@@ -385,8 +385,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 upsertAccount(sanitized, { access_token: session.access_token, refresh_token: session.refresh_token });
               }
             }
-          } else {
-            // Signed out event
+          } else if (event === 'SIGNED_OUT') {
+            // Only clear state when explicitly signed out
             setUser(null);
             localStorage.removeItem(LOCAL_USER_KEY);
           }
@@ -481,12 +481,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user?.id, isSupabaseConfigured, user?.status]);
 
   const loginWithEmail = async (email: string, password: string): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean; email?: string }> => {
-    setIsLoading(true);
     const client = getSupabaseClient();
-    const anonClient = getAnonSupabaseClient() || client;
 
     if (!client || !isSupabaseConfigured) {
-      setIsLoading(false);
       return { success: false, error: 'Database not connected. Please verify Supabase configuration.' };
     }
 
@@ -518,7 +515,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // If Supabase returned an error:
       if (authResult.error) {
-        setIsLoading(false);
         const errMsg = authResult.error.message || '';
         const errLower = errMsg.toLowerCase();
 
@@ -538,24 +534,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Check if this member is invited / registered in CEOVA directory
-        const anonClient = getAnonSupabaseClient() || client;
         let existingProfile: any = null;
-        if (anonClient) {
-          const { data: p } = await anonClient
-            .from('profiles')
+        const { data: p } = await client
+          .from('profiles')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        existingProfile = p;
+
+        if (!existingProfile) {
+          const { data: inv } = await client
+            .from('invitations')
             .select('*')
             .ilike('email', cleanEmail)
             .maybeSingle();
-          existingProfile = p;
-
-          if (!existingProfile) {
-            const { data: inv } = await anonClient
-              .from('invitations')
-              .select('*')
-              .ilike('email', cleanEmail)
-              .maybeSingle();
-            if (inv) existingProfile = inv;
-          }
+          if (inv) existingProfile = inv;
         }
 
         // If not registered in CEOVA directory: strictly restrict access
@@ -566,83 +559,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
 
-        // Member exists in CEOVA directory! Since signInWithPassword failed, trigger account activation via signUp
-        try {
-          const signUpAttempt = await client.auth.signUp({
-            email: cleanEmail,
-            password: rawPassword.trim(),
-            options: {
-              emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://portal.ceovaai.com',
-              data: {
-                full_name: existingProfile.full_name || cleanEmail.split('@')[0],
-                role: existingProfile.role || 'member',
-                department: existingProfile.department || 'Development',
-                designation: existingProfile.designation || 'Team Member',
-              }
-            }
-          });
-
-          if (signUpAttempt.error) {
-            const sErr = signUpAttempt.error.message.toLowerCase();
-            if (sErr.includes('already registered') || sErr.includes('already exists')) {
-              return {
-                success: false,
-                error: 'Incorrect email or password. If you recently confirmed your account, please verify your password or click "Forgot password?" to set a new one.'
-              };
-            }
-            return {
-              success: false,
-              error: signUpAttempt.error.message
-            };
-          }
-
-          // Check if user is ALREADY registered:
-          // In Supabase Auth, when an existing user is signed up again, Supabase returns a user with identities: [] (empty array)!
-          const identities = signUpAttempt.data?.user?.identities;
-          if (Array.isArray(identities) && identities.length === 0) {
-            // If this invited member is still pending activation, automatically send an activation link via SMTP!
-            if (existingProfile.status === 'pending') {
-              try {
-                await sendAccountActivationEmail(cleanEmail);
-              } catch (_) {}
-              return {
-                success: false,
-                error: `Your account is pending activation. An activation link has been sent to ${cleanEmail}. Please check your email inbox to choose your password and activate your workspace.`
-              };
-            }
-
-            return {
-              success: false,
-              error: 'Incorrect email or password. If you recently confirmed your account, please verify your password or click "Forgot password?" to set a new one.'
-            };
-          }
-
-          // If confirmation email was dispatched by Supabase for a genuine NEW user:
-          if (signUpAttempt.data?.user && !signUpAttempt.data?.session) {
-            if (signUpAttempt.data.user.id && existingProfile.id !== signUpAttempt.data.user.id) {
-              try {
-                await (anonClient || client)
-                  .from('profiles')
-                  .update({ id: signUpAttempt.data.user.id, updated_at: new Date().toISOString() })
-                  .ilike('email', cleanEmail);
-              } catch (_) {}
-            }
-            return {
-              success: false,
-              requiresEmailConfirmation: true,
-              error: `Confirmation link sent! We have sent a confirmation email to ${cleanEmail}. Please click the confirmation link in your email, then return here to log in and complete your profile setup.`
-            };
-          }
-
-          if (signUpAttempt.data?.session && signUpAttempt.data?.user) {
-            authResult = { data: signUpAttempt.data as any, error: null } as any;
-          }
-        } catch (e: any) {
+        // Member exists in CEOVA directory!
+        // If account is still pending activation, send activation link via Google SMTP
+        if (existingProfile.status === 'pending') {
+          try {
+            await sendAccountActivationEmail(cleanEmail);
+          } catch (_) {}
           return {
             success: false,
-            error: e.message || 'Authentication failed. Please verify your credentials.'
+            error: `Your account is pending activation. An activation link has been sent to ${cleanEmail}. Please check your email inbox to choose your password and activate your workspace.`
           };
         }
+
+        // Account is active in directory, but password didn't match in Supabase auth
+        return {
+          success: false,
+          error: 'Incorrect email or password. If you haven\'t set your workspace password yet or forgot it, please click "Forgot password?" or "Reset My Password" below.'
+        };
       }
 
       // Authentication succeeded
@@ -650,7 +583,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let dbProfile: any = null;
 
         if (cleanEmail) {
-          const { data: byEmail } = await (anonClient || client)
+          const { data: byEmail } = await client
             .from('profiles')
             .select('*')
             .ilike('email', cleanEmail)
@@ -659,7 +592,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (!dbProfile) {
-          const { data: byId } = await (anonClient || client)
+          const { data: byId } = await client
             .from('profiles')
             .select('*')
             .eq('id', authResult.data.user.id)
@@ -690,7 +623,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (dbProfile && dbProfile.id !== authResult.data.user.id) {
           try {
-            await (anonClient || client).from('profiles').update({ id: authResult.data.user.id }).ilike('email', cleanEmail);
+            await client.from('profiles').update({ id: authResult.data.user.id }).ilike('email', cleanEmail);
             dbProfile.id = authResult.data.user.id;
           } catch (_) {}
         }
@@ -703,14 +636,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           refresh_token: authResult.data.session.refresh_token,
         } : null;
         upsertAccount(sanitizedProfile, tokens);
-        setIsLoading(false);
         return { success: true };
       }
 
-      setIsLoading(false);
       return { success: false, error: 'User data missing from authentication response.' };
     } catch (err: any) {
-      setIsLoading(false);
       return { success: false, error: err.message || 'Login failed' };
     }
   };
@@ -720,7 +650,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string, 
     meta: { fullName: string; role?: UserRole; phone?: string; avatar_url?: string }
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
-    setIsLoading(true);
     const client = getSupabaseClient();
 
     if (client && isSupabaseConfigured) {
@@ -744,12 +673,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (error) {
-          setIsLoading(false);
           return { success: false, error: error.message };
         }
 
         if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-          setIsLoading(false);
           return { success: false, error: 'An account with this email already exists. Please log in or reset your password.' };
         }
 
@@ -793,32 +720,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        setIsLoading(false);
         return { success: true };
       } catch (err: any) {
-        setIsLoading(false);
         return { success: false, error: err.message || 'Sign up failed' };
       }
     } else {
-      setIsLoading(false);
       return { success: false, error: 'Database not connected.' };
     }
   };
 
   const resetPasswordForEmail = async (emailToReset: string): Promise<{ success: boolean; error?: string; message?: string }> => {
-    const client = getSupabaseClient();
-    if (!client || !isSupabaseConfigured) {
-      return { success: false, error: 'Database not connected.' };
-    }
+    const clean = emailToReset.trim().toLowerCase();
     try {
-      const clean = emailToReset.trim().toLowerCase();
-      const { error } = await client.auth.resetPasswordForEmail(clean, {
-        redirectTo: window.location.origin,
-      });
-      if (error) {
-        return { success: false, error: error.message };
+      const res = await sendAccountActivationEmail(clean);
+      if (res.success) {
+        return { success: true, message: `Password reset link sent to ${clean}! Please check your email inbox.` };
       }
-      return { success: true, message: 'Password reset link sent to your email! Please check your inbox.' };
+      return { success: false, error: res.error || 'Failed to send reset link.' };
     } catch (err: any) {
       return { success: false, error: err.message || 'Failed to send reset link.' };
     }
@@ -856,14 +774,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // If user profile was pending, update it to active
-      if (user?.id) {
+      const userId = user?.id || data?.user?.id;
+      const userEmail = user?.email || data?.user?.email;
+      if (userId || userEmail) {
         try {
-          const anonClient = getAnonSupabaseClient() || client;
-          await anonClient
-            .from('profiles')
-            .update({ status: 'active', updated_at: new Date().toISOString() })
-            .eq('id', user.id);
-
+          if (userId) {
+            await client
+              .from('profiles')
+              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .eq('id', userId);
+          } else if (userEmail) {
+            await client
+              .from('profiles')
+              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .ilike('email', userEmail);
+          }
           setUser(prev => prev ? { ...prev, status: 'active' } : null);
         } catch (_) {}
       }

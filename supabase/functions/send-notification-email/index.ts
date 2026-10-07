@@ -114,6 +114,13 @@ serve(async (req) => {
       }
 
       generatedActionLink = linkData?.properties?.action_link || portalUrl;
+      if (generatedActionLink) {
+        try {
+          const parsedLink = new URL(generatedActionLink);
+          parsedLink.searchParams.set("redirect_to", portalUrl);
+          generatedActionLink = parsedLink.toString();
+        } catch (_) {}
+      }
       finalSubject = subject || "[CEOVA] Account Activation: Set Your Workspace Password";
 
       finalText = `CEOVA Workspace Account Activation\n\nHello,\nYour CEOVA account (${cleanEmail}) is ready for activation.\n\nPlease click the link below to set your personal password and enter your workspace:\n${generatedActionLink}\n\nCEOVA Enterprise Team OS`;
