@@ -241,11 +241,48 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           gap: 20,
-          position: 'relative'
+          position: 'relative',
+          overflow: 'hidden'
         }}
       >
+        {/* Top Solid Accent Bar */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 4,
+          backgroundColor: '#2563eb'
+        }} />
+
         {/* Header Block */}
         <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            margin: '0 auto 12px auto',
+            borderRadius: 14,
+            background: '#18181b',
+            border: '1px solid #27272a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+          }}>
+            <img
+              src="/ceovaimage.png"
+              alt="CEOVA Logo"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                filter: 'invert(1)',
+                mixBlendMode: 'screen'
+              }}
+            />
+          </div>
+
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -254,37 +291,37 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
             borderRadius: 6,
             background: '#18181b',
             border: '1px solid #27272a',
-            color: '#a1a1aa',
+            color: '#38bdf8',
             fontSize: 11,
-            fontWeight: 500,
+            fontWeight: 700,
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
-            marginBottom: 10
+            marginBottom: 8
           }}>
-            <ShieldCheck size={13} style={{ color: '#a1a1aa' }} />
-            <span>Workspace Verification</span>
+            <ShieldCheck size={13} style={{ color: '#38bdf8' }} />
+            <span>Compulsory Profile Setup</span>
           </div>
 
           <h2 style={{
             fontSize: 20,
-            fontWeight: 600,
+            fontWeight: 700,
             margin: '0 0 6px 0',
             color: '#ffffff',
             letterSpacing: '-0.02em'
           }}>
-            Complete Your Profile
+            Photo &amp; Phone Verification
           </h2>
 
           <p style={{
             margin: 0,
             fontSize: 13,
-            color: '#71717a',
+            color: '#94a3b8',
             lineHeight: 1.5,
             maxWidth: 400,
             marginLeft: 'auto',
             marginRight: 'auto'
           }}>
-            Please upload a profile photo and confirm your contact details to access your workspace.
+            To maintain internal workspace security, adding your personal photo and verified phone number is compulsory.
           </p>
         </div>
 

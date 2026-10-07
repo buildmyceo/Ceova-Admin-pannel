@@ -114,6 +114,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         success: false, 
         firstTimeActivated: false, 
+        debug: { 
+          hasUser: !!targetUser, 
+          lastSignIn: targetUser?.last_sign_in_at, 
+          emailConfirmed: targetUser?.email_confirmed_at,
+          identitiesCount: targetUser?.identities?.length
+        },
         error: "Incorrect email or password. Please verify your credentials or click 'Forgot password?'." 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -69,9 +69,15 @@ const PortalMain: React.FC = () => {
 
   const { logout, user, isLoading, isPasswordRecovery, setIsPasswordRecovery } = useAuth();
 
-  // Compulsory onboarding setup gate: only gate users who are explicitly 'pending'
+  // Compulsory onboarding setup gate: photo and phone number are strictly mandatory
   const isProfileIncomplete = Boolean(
-    user && user.status === 'pending'
+    user && (
+      user.status === 'pending' ||
+      !user.avatar_url ||
+      !user.avatar_url.trim() ||
+      !user.phone ||
+      user.phone.replace(/\D/g, '').length < 7
+    )
   );
 
   const handleSelectTab = (tab: NavTab, id?: string) => {

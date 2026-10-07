@@ -993,15 +993,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (Object.keys(dbUpdates).length > 0) {
           const payload: any = { ...dbUpdates, updated_at: new Date().toISOString() };
           if (dbUpdates.phone) {
+            payload.phone = dbUpdates.phone;
             payload.phone_number = dbUpdates.phone;
           }
           if (user.email) {
-            await (anonClient || client)
+            await client
               .from('profiles')
               .update(payload)
               .ilike('email', user.email.trim().toLowerCase());
           } else {
-            await (anonClient || client)
+            await client
               .from('profiles')
               .update(payload)
               .eq('id', user.id);
