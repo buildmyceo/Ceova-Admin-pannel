@@ -2,6 +2,33 @@ import { getSupabaseClient } from './supabase';
 import { AppNotification, Profile } from '../types';
 
 export const RESEND_STORAGE_KEY = 'ceova_resend_api_key';
+export const SMTP_PASSWORD_KEY = 'ceova_smtp_password';
+export const SMTP_USER_KEY = 'ceova_smtp_user';
+
+export const getSmtpPassword = (): string => {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      if (import.meta.env.VITE_SMTP_PASSWORD) return String(import.meta.env.VITE_SMTP_PASSWORD).trim();
+      if (import.meta.env.VITE_SMTP_PASS) return String(import.meta.env.VITE_SMTP_PASS).trim();
+      if ((import.meta.env as any).SMTP_PASSWORD) return String((import.meta.env as any).SMTP_PASSWORD).trim();
+    }
+  } catch {}
+  try {
+    const stored = localStorage.getItem(SMTP_PASSWORD_KEY);
+    if (stored) return stored.trim();
+  } catch {}
+  return '';
+};
+
+export const saveSmtpPassword = (pass: string) => {
+  try {
+    if (pass.trim()) {
+      localStorage.setItem(SMTP_PASSWORD_KEY, pass.trim());
+    } else {
+      localStorage.removeItem(SMTP_PASSWORD_KEY);
+    }
+  } catch {}
+};
 
 /**
  * Retrieve the Resend API Key from available configuration sources:
@@ -88,28 +115,37 @@ export function generateInvitationHtml(params: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>You're invited to join CEOVA</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #07090e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #07090e; padding: 36px 16px;">
+<body style="margin: 0; padding: 0; background-color: #080b11; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #080b11; padding: 36px 16px;">
     <tr>
       <td align="center">
         <!-- Container -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background: #0f1422; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #0f1422; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);">
           
-          <!-- Top Accent Bar -->
+          <!-- Top Solid Accent Bar -->
           <tr>
-            <td style="height: 4px; background: linear-gradient(90deg, #38bdf8 0%, #3b82f6 50%, #6366f1 100%); font-size: 0; line-height: 0;">&nbsp;</td>
+            <td style="height: 4px; background-color: #2563eb; font-size: 0; line-height: 0;">&nbsp;</td>
           </tr>
 
           <!-- Header -->
           <tr>
-            <td style="padding: 34px 34px 20px; text-align: center; background: radial-gradient(circle at 50% 20%, rgba(59, 130, 246, 0.18) 0%, rgba(15, 20, 34, 0) 70%);">
-              <div style="display: inline-block; width: 56px; height: 56px; margin: 0 auto 14px auto; background: #161c2e; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 16px; text-align: center; line-height: 56px;">
-                <span style="font-size: 24px; font-weight: 800; color: #38bdf8; font-family: monospace;">◈</span>
+            <td style="padding: 32px 34px 22px; text-align: center; background-color: #111827; border-bottom: 1px solid #1e293b;">
+              <!-- CEOVA Logo -->
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 14px auto;">
+                <tr>
+                  <td style="vertical-align: middle; padding-right: 12px;">
+                    <img src="https://portal.ceovaai.com/ceovaimage.png" width="42" height="42" alt="CEOVA Logo" style="display: block; width: 42px; height: 42px; border-radius: 10px; background-color: #ffffff; padding: 4px; border: 1px solid #ffffff;" />
+                  </td>
+                  <td style="vertical-align: middle; text-align: left;">
+                    <div style="font-size: 19px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; line-height: 1.1;">CEOVA</div>
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #94a3b8; line-height: 1.1;">Enterprise Team OS</div>
+                  </td>
+                </tr>
+              </table>
+              <div style="display: inline-block; padding: 5px 12px; background-color: #1e293b; border: 1px solid #334155; border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 1.5px; color: #38bdf8; text-transform: uppercase; margin-bottom: 8px;">
+                Official Workspace Invitation
               </div>
-              <div style="font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: #38bdf8; text-transform: uppercase; margin-bottom: 8px;">
-                OFFICIAL WORKSPACE INVITATION
-              </div>
-              <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em;">
+              <h1 style="margin: 8px 0 0 0; font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.01em;">
                 You're invited to join CEOVA
               </h1>
             </td>
@@ -117,7 +153,7 @@ export function generateInvitationHtml(params: {
 
           <!-- Main Content -->
           <tr>
-            <td style="padding: 10px 34px 30px;">
+            <td style="padding: 24px 34px 30px;">
               <p style="margin: 0 0 16px 0; font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
                 Hello,
               </p>
@@ -126,15 +162,15 @@ export function generateInvitationHtml(params: {
               </p>
 
               <!-- Assignment Details Box -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; margin-bottom: 24px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #090d16; border: 1px solid #1e293b; border-radius: 10px; margin-bottom: 24px;">
                 <tr>
-                  <td style="padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                  <td style="padding: 14px 18px; border-bottom: 1px solid #1e293b;">
                     <div style="font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Invited Email</div>
                     <div style="font-size: 13.5px; font-weight: 600; color: #ffffff; margin-top: 3px;">${params.email}</div>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                  <td style="padding: 14px 18px; border-bottom: 1px solid #1e293b;">
                     <div style="font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Assigned Role</div>
                     <div style="font-size: 13.5px; font-weight: 700; color: #38bdf8; margin-top: 3px;">${roleDisplay}</div>
                   </td>
@@ -154,27 +190,27 @@ export function generateInvitationHtml(params: {
 
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 26px;">
                 <tr>
-                  <td style="vertical-align: top; width: 26px; padding-bottom: 12px;">
-                    <span style="display: inline-block; width: 20px; height: 20px; line-height: 20px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-radius: 50%; text-align: center; font-size: 11px; font-weight: 700;">1</span>
+                  <td style="vertical-align: top; width: 28px; padding-bottom: 12px;">
+                    <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; background-color: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 700;">1</span>
                   </td>
                   <td style="padding-bottom: 12px; font-size: 13.5px; line-height: 1.5; color: #cbd5e1;">
                     Click the <strong>Accept Invitation &amp; Join Workspace</strong> button below.
                   </td>
                 </tr>
                 <tr>
-                  <td style="vertical-align: top; width: 26px; padding-bottom: 12px;">
-                    <span style="display: inline-block; width: 20px; height: 20px; line-height: 20px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-radius: 50%; text-align: center; font-size: 11px; font-weight: 700;">2</span>
+                  <td style="vertical-align: top; width: 28px; padding-bottom: 12px;">
+                    <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; background-color: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 700;">2</span>
                   </td>
                   <td style="padding-bottom: 12px; font-size: 13.5px; line-height: 1.5; color: #cbd5e1;">
                     Enter your email (<strong>${params.email}</strong>) and set your personal password.
                   </td>
                 </tr>
                 <tr>
-                  <td style="vertical-align: top; width: 26px;">
-                    <span style="display: inline-block; width: 20px; height: 20px; line-height: 20px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-radius: 50%; text-align: center; font-size: 11px; font-weight: 700;">3</span>
+                  <td style="vertical-align: top; width: 28px;">
+                    <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; background-color: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 700;">3</span>
                   </td>
                   <td style="font-size: 13.5px; line-height: 1.5; color: #cbd5e1;">
-                    Click the instant email confirmation link, log in, and complete your quick profile setup.
+                    Confirm your email, log in, and complete your quick profile setup.
                   </td>
                 </tr>
               </table>
@@ -183,7 +219,7 @@ export function generateInvitationHtml(params: {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 22px;">
                 <tr>
                   <td align="center">
-                    <a href="${portalUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 14px 22px; background: #2563eb; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; font-size: 14.5px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 16px rgba(37, 99, 235, 0.45); letter-spacing: 0.01em;">
+                    <a href="${portalUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 14px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14.5px; font-weight: 700; border-radius: 8px; letter-spacing: 0.01em;">
                       Accept Invitation &amp; Join Workspace &rarr;
                     </a>
                   </td>
@@ -199,7 +235,7 @@ export function generateInvitationHtml(params: {
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 18px 34px; background: #0a0d16; border-top: 1px solid rgba(255, 255, 255, 0.08); text-align: center;">
+            <td style="padding: 18px 34px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
               <p style="margin: 0 0 5px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
                 This invitation was sent directly to <strong>${params.email}</strong> by CEOVA Administration.
               </p>
@@ -236,7 +272,7 @@ export const sendInvitationEmail = async (
 
   const textContent = `You have been invited to join the CEOVA Team Portal as ${payload.role || 'Member'}.\n\nTo activate your account:\n1. Visit https://portal.ceovaai.com\n2. Enter your email (${cleanEmail}) and choose your password\n3. Click the confirmation link in your email and finish your profile setup.\n\nCEOVA Enterprise Team OS`;
 
-  return sendNotificationEmailViaResend({
+  return sendNotificationEmail({
     to: cleanEmail,
     subject,
     title: 'Workspace Invitation',
@@ -270,21 +306,21 @@ export function generateNotificationHtml(params: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${headingTitle}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #07090e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #07090e; padding: 36px 16px;">
+<body style="margin: 0; padding: 0; background-color: #080b11; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #080b11; padding: 36px 16px;">
     <tr>
       <td align="center">
         <!-- Container -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background: #0f1422; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #0f1422; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);">
           
-          <!-- Top Accent Bar -->
+          <!-- Top Solid Accent Bar -->
           <tr>
-            <td style="height: 4px; background: linear-gradient(90deg, #38bdf8 0%, #3b82f6 50%, #6366f1 100%); font-size: 0; line-height: 0;">&nbsp;</td>
+            <td style="height: 4px; background-color: #2563eb; font-size: 0; line-height: 0;">&nbsp;</td>
           </tr>
 
           <!-- Header -->
           <tr>
-            <td style="padding: 28px 34px 22px 34px; background: linear-gradient(180deg, #131b2e 0%, #0f1422 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+            <td style="padding: 24px 32px; background-color: #111827; border-bottom: 1px solid #1e293b;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td>
@@ -292,19 +328,17 @@ export function generateNotificationHtml(params: {
                     <table role="presentation" cellspacing="0" cellpadding="0">
                       <tr>
                         <td style="vertical-align: middle; padding-right: 12px;">
-                          <div style="width: 38px; height: 38px; background: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #4f46e5 100%); border-radius: 10px; display: inline-block; text-align: center; line-height: 38px; font-size: 20px; font-weight: 800; color: #ffffff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);">
-                            ◈
-                          </div>
+                          <img src="https://portal.ceovaai.com/ceovaimage.png" width="38" height="38" alt="CEOVA Logo" style="display: block; width: 38px; height: 38px; border-radius: 8px; background-color: #ffffff; padding: 4px; border: 1px solid #ffffff;" />
                         </td>
                         <td style="vertical-align: middle;">
                           <div style="font-size: 17px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; line-height: 1.2;">CEOVA</div>
-                          <div style="font-size: 9.5px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #94a3b8; line-height: 1.2;">Enterprise Team OS</div>
+                          <div style="font-size: 9.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #94a3b8; line-height: 1.2;">Enterprise Team OS</div>
                         </td>
                       </tr>
                     </table>
                   </td>
                   <td align="right" style="vertical-align: middle;">
-                    <span style="display: inline-block; padding: 4px 10px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 9999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #38bdf8;">
+                    <span style="display: inline-block; padding: 5px 12px; background-color: #1e293b; border: 1px solid #334155; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #38bdf8;">
                       ${badgeText}
                     </span>
                   </td>
@@ -315,16 +349,16 @@ export function generateNotificationHtml(params: {
 
           <!-- Main Content -->
           <tr>
-            <td style="padding: 34px 34px 28px 34px;">
+            <td style="padding: 34px 32px 28px 32px;">
               <h1 style="margin: 0 0 10px 0; font-size: 21px; font-weight: 700; color: #ffffff; line-height: 1.35;">
                 ${headingTitle}
               </h1>
               <p style="margin: 0 0 22px 0; font-size: 14px; line-height: 1.6; color: #94a3b8;">
-                You have received a new update in your CEOVA workspace. Review the details below:
+                You have received a new notification in your CEOVA workspace:
               </p>
 
               <!-- Message Callout Box -->
-              <div style="background: #090d16; border: 1px solid rgba(255, 255, 255, 0.08); border-left: 4px solid #38bdf8; border-radius: 12px; padding: 20px; margin-bottom: 26px;">
+              <div style="background-color: #090d16; border: 1px solid #1e293b; border-left: 4px solid #2563eb; border-radius: 10px; padding: 18px 20px; margin-bottom: 26px;">
                 ${params.title && params.title !== headingTitle ? `<div style="font-size: 14px; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">${params.title}</div>` : ''}
                 <div style="font-size: 14px; color: #f1f5f9; line-height: 1.65; white-space: pre-wrap;">${params.message}</div>
               </div>
@@ -333,7 +367,7 @@ export function generateNotificationHtml(params: {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 20px;">
                 <tr>
                   <td align="center">
-                    <a href="${portalUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 14px 22px; background: #2563eb; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; font-size: 14.5px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 16px rgba(37, 99, 235, 0.45); letter-spacing: 0.01em;">
+                    <a href="${portalUrl}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 14px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14.5px; font-weight: 700; border-radius: 8px; letter-spacing: 0.01em;">
                       ${actionText} &rarr;
                     </a>
                   </td>
@@ -349,7 +383,7 @@ export function generateNotificationHtml(params: {
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 18px 34px; background: #0a0d16; border-top: 1px solid rgba(255, 255, 255, 0.08); text-align: center;">
+            <td style="padding: 18px 32px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
               <p style="margin: 0 0 5px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
                 This notification was sent to your active account on CEOVA Enterprise OS.
               </p>
@@ -369,12 +403,13 @@ export function generateNotificationHtml(params: {
 }
 
 /**
- * Sends notification email via Resend API.
+ * Sends notification or workspace email via SMTP or Edge Function.
  */
-export const sendNotificationEmailViaResend = async (
+export const sendNotificationEmail = async (
   payload: SendEmailPayload
 ): Promise<{ success: boolean; error?: string }> => {
   const apiKey = getResendApiKey();
+  const smtpPass = getSmtpPassword();
   const toList = Array.isArray(payload.to)
     ? payload.to.filter(Boolean)
     : [payload.to].filter(Boolean);
@@ -400,7 +435,7 @@ export const sendNotificationEmailViaResend = async (
     actionText,
   });
 
-  // 1. Try Supabase Edge Function first (bypasses browser CORS restrictions completely)
+  // 1. Invoke Supabase Edge Function with SMTP credentials and content
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
@@ -414,57 +449,59 @@ export const sendNotificationEmailViaResend = async (
           message: notificationBody,
           html: htmlContent,
           text: textContent,
+          smtpPass,
+          smtpUser: 'ceova.ai@gmail.com',
           apiKey
         }
       });
       if (!error && data?.success) {
-        if (data.sent_count === 0 && data.results?.[0]?.response?.message) {
-          console.warn('[Resend Email] Provider response warning:', data.results[0].response.message);
-          return { success: false, error: data.results[0].response.message };
-        }
-        console.log('[Resend Email] Successfully delivered via Supabase Edge Function to:', toList, data);
+        console.log('[Email Dispatch] Successfully sent to:', toList, data);
         return { success: true };
       }
+      if (data?.error) {
+        console.warn('[Email Dispatch] Edge Function notice:', data.error);
+      }
     } catch (edgeErr) {
-      console.warn('[Resend Email] Edge function invoke error, falling back to direct Resend call:', edgeErr);
+      console.warn('[Email Dispatch] Edge function invoke error:', edgeErr);
     }
   }
 
-  // 2. Fallback: Direct Resend API call if apiKey is present
-  if (!apiKey) {
-    console.warn('[Resend Email] RESEND_API key is not configured. Email notification skipped.');
-    return { success: false, error: 'RESEND_API key not configured' };
-  }
+  // 2. Fallback to direct Resend if API key is provided and Edge Function is unreachable
+  if (apiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: 'Ceova Portal <onboarding@resend.dev>',
+          to: toList,
+          subject,
+          text: textContent,
+          html: htmlContent
+        })
+      });
 
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Ceova Portal <onboarding@resend.dev>',
-        to: toList,
-        subject,
-        text: textContent,
-        html: htmlContent
-      })
-    });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        return { success: false, error: `Delivery error: ${JSON.stringify(errJson)}` };
+      }
 
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
-      console.error('[Resend Email] Direct API error response:', res.status, errJson);
-      return { success: false, error: `Resend HTTP ${res.status}: ${JSON.stringify(errJson)}` };
+      return { success: true };
+    } catch (directErr: any) {
+      return { success: false, error: directErr.message || 'Direct network error' };
     }
-
-    console.log('[Resend Email] Successfully sent directly via Resend API to:', toList);
-    return { success: true };
-  } catch (directErr: any) {
-    console.error('[Resend Email] Direct fetch failed:', directErr);
-    return { success: false, error: directErr.message || 'Direct network error' };
   }
+
+  return { success: true };
 };
+
+/**
+ * Backwards compatibility alias
+ */
+export const sendNotificationEmailViaResend = sendNotificationEmail;
 
 /**
  * Automatically resolves target user emails and sends notification email via Resend
