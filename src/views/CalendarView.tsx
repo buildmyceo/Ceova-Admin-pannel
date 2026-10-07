@@ -471,9 +471,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
   };
 
   const handleSelectAllMembers = () => {
+    const activePool = members.filter(m => m.status !== 'blocked' && m.status !== 'paused');
     setFormData(prev => ({
       ...prev,
-      selected_attendee_ids: members.map(m => m.id)
+      selected_attendee_ids: activePool.map(m => m.id)
     }));
   };
 
@@ -485,9 +486,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
   };
 
   const filteredMembersList = useMemo(() => {
-    if (!memberSearchQuery.trim()) return members;
+    const activePool = members.filter(m => m.status !== 'blocked' && m.status !== 'paused');
+    if (!memberSearchQuery.trim()) return activePool;
     const q = memberSearchQuery.toLowerCase();
-    return members.filter(m => 
+    return activePool.filter(m => 
       m.full_name?.toLowerCase().includes(q) ||
       m.email?.toLowerCase().includes(q) ||
       m.department?.toLowerCase().includes(q)

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { Profile, Department, UserStatus } from '../types';
 import { REAL_MEMBERS, REAL_DEPARTMENTS } from '../lib/realData';
 import { getSupabaseClient } from '../lib/supabase';
@@ -229,10 +229,21 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [isSupabaseConfigured, refreshData]);
 
+  const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'ceo'));
+
+  // Security & Visibility Rule: Once any user is blocked or paused by admin,
+  // their profile is completely hidden from all other users. Only admins can view and manage them.
+  const visibleMembers = useMemo(() => {
+    if (isAdmin) {
+      return members;
+    }
+    return members.filter(m => m.status !== 'blocked' && m.status !== 'paused');
+  }, [members, isAdmin]);
+
   return (
     <PortalDataContext.Provider
       value={{
-        members,
+        members: visibleMembers,
         departments,
         isLoadingData,
         refreshData,

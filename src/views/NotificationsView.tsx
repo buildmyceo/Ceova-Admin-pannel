@@ -143,9 +143,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
     setIsComposeOpen(true);
   };
 
-  // Filter list of members available for selection (exclude self)
+  // Filter list of members available for selection (exclude self, and exclude paused/blocked members)
   const selectableMembers = useMemo(() => {
-    return members.filter(m => !user || m.id !== user.id);
+    return members.filter(m => (!user || m.id !== user.id) && m.status !== 'blocked' && m.status !== 'paused');
   }, [members, user]);
 
   const filteredSelectableMembers = useMemo(() => {

@@ -216,6 +216,11 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         ...(isCur ? currentUser : {})
       };
     }).filter((m) => {
+      // If viewer is not an admin, they must NEVER see blocked or paused member profiles
+      if (!isAdmin && (m.status === 'blocked' || m.status === 'paused')) {
+        return false;
+      }
+
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = 
         !q || 
@@ -232,21 +237,22 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
 
       return matchesSearch && matchesRole;
     });
-  }, [members, currentUser, savedAccounts, searchQuery, roleFilter]);
+  }, [members, currentUser, savedAccounts, searchQuery, roleFilter, isAdmin]);
 
   // Real-time presence counts (Instant sync)
   const presenceCounts = useMemo(() => {
     let online = 0;
     let offline = 0;
-    members.forEach((m) => {
+    const activePool = isAdmin ? members : members.filter(m => m.status !== 'blocked' && m.status !== 'paused');
+    activePool.forEach((m) => {
       if (isUserOnline(m.id)) {
         online++;
       } else {
         offline++;
       }
     });
-    return { online, offline, total: members.length };
-  }, [members, isUserOnline]);
+    return { online, offline, total: activePool.length };
+  }, [members, isUserOnline, isAdmin]);
 
   return (
     <div className="view-container fade-in" style={{ paddingBottom: 48 }}>

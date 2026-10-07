@@ -408,13 +408,14 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
   // Admin and members have task assignment privileges; interns can view, submit deliverables & update status
   const canAssign = isAdminUser || isMemberUser;
 
-  // Filter assignable members: Admin -> members & interns; Member -> interns only
+  // Filter assignable members: Admin -> members & interns; Member -> interns only (excluding paused/blocked accounts)
   const assignableMembers = useMemo(() => {
+    const activeMembers = members.filter(m => m.status !== 'blocked' && m.status !== 'paused');
     if (isAdminUser) {
-      return members.filter(m => m.role === 'member' || m.role === 'intern' || m.role === 'admin' || m.role === 'ceo');
+      return activeMembers.filter(m => m.role === 'member' || m.role === 'intern' || m.role === 'admin' || m.role === 'ceo');
     }
     if (isMemberUser) {
-      return members.filter(m => m.role === 'intern');
+      return activeMembers.filter(m => m.role === 'intern');
     }
     return [];
   }, [members, isAdminUser, isMemberUser]);
