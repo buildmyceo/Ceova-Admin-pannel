@@ -448,7 +448,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </button>
         </form>
 
-
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            disabled={resetSending}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#38bdf8',
+              cursor: resetSending ? 'wait' : 'pointer',
+              padding: 0,
+              fontSize: '12.5px',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {resetSending ? 'Sending reset link...' : 'Forgot password?'}
+          </button>
+          <a
+            href="mailto:buildmyceo@gmail.com?subject=CEOVA%20Portal%20Support"
+            style={{
+              color: '#94a3b8',
+              textDecoration: 'none',
+              fontSize: '12px',
+            }}
+          >
+            Need assistance?
+          </a>
+        </div>
       </div>
     </div>
   );
