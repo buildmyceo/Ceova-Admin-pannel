@@ -59,6 +59,31 @@ let supabaseInstance: SupabaseClient | null = null;
 let lastUsedUrl = '';
 let lastUsedKey = '';
 
+const createSafeFetch = (anonKey: string) => {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (init && init.headers) {
+      let authHeader = '';
+      if (init.headers instanceof Headers) {
+        authHeader = init.headers.get('Authorization') || '';
+      } else if (typeof init.headers === 'object') {
+        authHeader = (init.headers as any)['Authorization'] || (init.headers as any)['authorization'] || '';
+      }
+      // If auth header exceeds Cloudflare limit (8KB), use anon key for database and storage requests
+      if (authHeader.length > 8000) {
+        const inputStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as any)?.url || '';
+        if (inputStr.includes('/rest/v1/') || inputStr.includes('/storage/v1/')) {
+          if (init.headers instanceof Headers) {
+            init.headers.set('Authorization', 'Bearer ' + anonKey);
+          } else {
+            (init.headers as any)['Authorization'] = 'Bearer ' + anonKey;
+          }
+        }
+      }
+    }
+    return fetch(input, init);
+  };
+};
+
 export function getSupabaseClient(): SupabaseClient | null {
   const { url, key, isConfigured } = getSupabaseCredentials();
 
@@ -76,6 +101,9 @@ export function getSupabaseClient(): SupabaseClient | null {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+      },
+      global: {
+        fetch: createSafeFetch(key),
       },
     });
     lastUsedUrl = url;

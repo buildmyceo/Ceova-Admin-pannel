@@ -166,7 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             let profileData = null;
 
             if (userEmail) {
-              const { data: byEmail } = await client
+              const { data: byEmail } = await (anonClient || client)
                 .from('profiles')
                 .select('*')
                 .ilike('email', userEmail)
@@ -175,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (!profileData) {
-              const { data: byId } = await client
+              const { data: byId } = await (anonClient || client)
                 .from('profiles')
                 .select('*')
                 .eq('id', session.user.id)
@@ -187,7 +187,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               // Strictly use profile and role fetched from Supabase
               const sanitized = sanitizeProfile(profileData);
               if (sanitized) {
-                if (session.user.user_metadata?.cover_url && !sanitized.cover_url) {
+                if (session.user.user_metadata?.cover_url && !sanitized.cover_url && !session.user.user_metadata.cover_url.startsWith('data:')) {
                   sanitized.cover_url = session.user.user_metadata.cover_url;
                 }
                 if (session.user.user_metadata?.social_links) {
@@ -245,39 +245,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
 
-          // 3. If no active session, check if there is a saved user in localStorage and strictly verify against Supabase
-          const savedUserStr = localStorage.getItem(LOCAL_USER_KEY);
-          if (savedUserStr && anonClient) {
-            try {
-              const parsed = JSON.parse(savedUserStr);
-              let pData = null;
-              if (parsed.email) {
-                const { data: byEmail } = await anonClient
-                  .from('profiles')
-                  .select('*')
-                  .ilike('email', parsed.email.trim().toLowerCase())
-                  .maybeSingle();
-                if (byEmail) pData = byEmail;
-              }
-              if (!pData && parsed.id) {
-                const { data: byId } = await anonClient
-                  .from('profiles')
-                  .select('*')
-                  .eq('id', parsed.id)
-                  .maybeSingle();
-                if (byId) pData = byId;
-              }
-              if (pData) {
-                const sanitized = sanitizeProfile(pData)!;
-                setUser(sanitized);
-                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
-                setIsLoading(false);
-                return;
-              }
-            } catch (_) {}
-          }
-
-          // If no profile found in Supabase
+          // 3. If no active Supabase Auth session, the user is signed out
           setUser(null);
           localStorage.removeItem(LOCAL_USER_KEY);
         } catch (err) {
@@ -331,7 +299,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (profileData) {
               const sanitized = sanitizeProfile(profileData);
               if (sanitized) {
-                if (session.user.user_metadata?.cover_url) {
+                if (session.user.user_metadata?.cover_url && !session.user.user_metadata.cover_url.startsWith('data:')) {
                   sanitized.cover_url = session.user.user_metadata.cover_url;
                 }
                 if (session.user.user_metadata?.social_links) {
@@ -357,24 +325,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           authListener?.subscription.unsubscribe();
         };
       } else {
-        const savedUser = localStorage.getItem(LOCAL_USER_KEY);
-        if (savedUser) {
-          try {
-            const parsed = JSON.parse(savedUser);
-            setUser(parsed);
-            if (storedAccounts.length === 0 && parsed) {
-              storedAccounts = [{ profile: parsed, session: null, lastActive: new Date().toISOString() }];
-              persistAccounts(storedAccounts);
-            }
-          } catch {
-            setUser(null);
-          }
-        } else if (storedAccounts.length > 0) {
-          setUser(storedAccounts[0].profile);
-        } else {
-          setUser(null);
-        }
-        setSavedAccounts(storedAccounts);
+        // If Supabase client is not configured, do not revive mock users
+        setUser(null);
+        localStorage.removeItem(LOCAL_USER_KEY);
+        setSavedAccounts([]);
         setIsLoading(false);
       }
     }
@@ -492,74 +446,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // If Supabase returned an error:
       if (authResult.error) {
+        setIsLoading(false);
         const errMsg = authResult.error.message || '';
         const errLower = errMsg.toLowerCase();
 
-        // Check 1: Rate limit exceeded
         if (errLower.includes('rate limit') || (authResult.error as any).status === 429) {
-          setIsLoading(false);
           return {
             success: false,
             error: 'Too many login attempts. Supabase has temporarily restricted logins. Please wait a few minutes and try again.'
           };
         }
 
-        // Check 2: Check if this member is in the CEOVA profiles directory
-        const anonClient = getAnonSupabaseClient() || client;
-        let existingProfile: any = null;
-        if (anonClient) {
-          const { data: p } = await anonClient
-            .from('profiles')
-            .select('*')
-            .ilike('email', cleanEmail)
-            .maybeSingle();
-          existingProfile = p;
+        if (errLower.includes('invalid login credentials') || errLower.includes('invalid credentials')) {
+          return {
+            success: false,
+            error: 'Incorrect email or password. Please verify your credentials and try again.'
+          };
         }
 
-        if (existingProfile) {
-          // Member exists in CEOVA directory! Allow direct entry to portal
-          let sessionToStore: { access_token: string; refresh_token: string } | null = null;
-          try {
-            const signUpAttempt = await client.auth.signUp({
-              email: cleanEmail,
-              password: rawPassword.trim(),
-              options: {
-                data: {
-                  full_name: existingProfile.full_name || cleanEmail.split('@')[0],
-                  role: existingProfile.role || 'member',
-                  department: existingProfile.department || 'Executive',
-                  designation: existingProfile.designation || 'Team Member',
-                }
-              }
-            });
-
-            if (signUpAttempt.data?.session) {
-              sessionToStore = {
-                access_token: signUpAttempt.data.session.access_token,
-                refresh_token: signUpAttempt.data.session.refresh_token,
-              };
-              if (signUpAttempt.data?.user?.id && existingProfile.id !== signUpAttempt.data.user.id) {
-                try {
-                  await client.from('profiles').update({ id: signUpAttempt.data.user.id, updated_at: new Date().toISOString() }).eq('email', cleanEmail);
-                  existingProfile.id = signUpAttempt.data.user.id;
-                } catch (_) {}
-              }
-            }
-          } catch (_) {}
-
-          const sanitizedProfile = sanitizeProfile(existingProfile)!;
-          setUser(sanitizedProfile);
-          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitizedProfile));
-          upsertAccount(sanitizedProfile, sessionToStore);
-          setIsLoading(false);
-          return { success: true };
-        }
-
-        // Not found in profiles: access restricted to CEOVA members
-        setIsLoading(false);
         return {
           success: false,
-          error: 'Wrong email. This email is not registered with CEOVA. If you think this is a mistake, please contact support.'
+          error: authResult.error.message || 'Authentication failed. Please verify your credentials.'
         };
       }
 
@@ -793,14 +700,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const sanitized = sanitizeProfile(freshProfile || target.profile)!;
 
-    if (client && isSupabaseConfigured && target.session?.access_token && target.session?.refresh_token) {
+    if (client && isSupabaseConfigured) {
+      if (!target.session?.access_token || !target.session?.refresh_token) {
+        return false;
+      }
       try {
-        await client.auth.setSession({
+        const { error: sessionErr } = await client.auth.setSession({
           access_token: target.session.access_token,
           refresh_token: target.session.refresh_token,
         });
+        if (sessionErr) {
+          console.warn('Could not restore session token for switched account:', sessionErr);
+          return false;
+        }
       } catch (err) {
         console.warn('Could not set session token for switched account:', err);
+        return false;
       }
     }
 

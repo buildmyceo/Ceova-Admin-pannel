@@ -13,9 +13,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 }) => {
   const { 
     loginWithEmail, 
-    savedAccounts, 
-    switchAccount, 
-    removeAccount,
     resetPasswordForEmail,
   } = useAuth();
 
@@ -314,135 +311,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </div>
         )}
 
-        {/* Saved Accounts section if multiple accounts exist */}
-        {savedAccounts.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ 
-              fontSize: '11px', 
-              fontWeight: 600, 
-              color: 'rgba(255, 255, 255, 0.6)', 
-              textTransform: 'uppercase', 
-              letterSpacing: '0.05em',
-              marginBottom: 8 
-            }}>
-              Saved Accounts ({savedAccounts.length})
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {savedAccounts.map((acc) => {
-                const hasActiveSession = Boolean(acc.session?.access_token);
-                return (
-                  <div
-                    key={acc.profile.id || acc.profile.email}
-                    onClick={async () => {
-                      setEmail(acc.profile.email || '');
-                      setPassword('');
-                      setErrorMessage('');
-                      setIsNotCeovaUser(false);
-                      const ok = await switchAccount(acc.profile.id);
-                      if (ok) {
-                        onLoginSuccess();
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                      <div style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        background: (acc.profile.role === 'admin' || acc.profile.role === 'ceo') ? '#3b82f6' : acc.profile.role === 'intern' ? '#f59e0b' : '#64748b',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#ffffff',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        overflow: 'hidden',
-                        flexShrink: 0
-                      }}>
-                        {acc.profile.avatar_url ? (
-                          <img src={acc.profile.avatar_url} alt={acc.profile.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          (acc.profile.full_name || 'U').charAt(0).toUpperCase()
-                        )}
-                      </div>
-                      <div style={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.2 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {acc.profile.full_name}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <span style={{ color: acc.profile.role === 'ceo' ? '#38bdf8' : acc.profile.role === 'admin' ? '#60a5fa' : acc.profile.role === 'intern' ? '#fbbf24' : '#94a3b8', fontWeight: 600 }}>
-                            {acc.profile.role === 'ceo' ? 'CEO' : acc.profile.role === 'admin' ? 'Admin' : acc.profile.role === 'intern' ? 'Intern' : 'Member'}
-                          </span>
-                          {' • '}
-                          {acc.profile.email}
-                        </div>
-                      </div>
-                    </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 600 }}>
-                        Enter Portal →
-                      </span>
-                      <button
-                        type="button"
-                        title="Remove from this device"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeAccount(acc.profile.id);
-                        }}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'rgba(255, 255, 255, 0.4)',
-                          cursor: 'pointer',
-                          padding: 3,
-                          display: 'flex',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 10, 
-              margin: '18px 0 14px', 
-              color: 'rgba(255, 255, 255, 0.4)', 
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
-              <span>Or sign into another account</span>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
-            </div>
-          </div>
-        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
