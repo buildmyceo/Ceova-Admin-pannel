@@ -1,201 +1,189 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
-  Shield, 
-  Crown, 
   User, 
-  Database, 
   LogOut, 
   LogIn, 
-  Sparkles, 
-  Settings,
   ChevronDown,
-  Bell,
-  Cpu,
-  Palette,
-  DollarSign,
-  Briefcase,
-  GraduationCap,
-  UserCheck,
-  Lock
+  Menu,
+  UserPlus,
+  Check,
+  X,
+  Bell
 } from 'lucide-react';
-import { UserRole } from '../types';
-import { usePortalData } from '../context/PortalDataContext';
+import { AddAccountModal } from './AddAccountModal';
+import { getStoredNotifications } from '../lib/notificationsService';
 
 interface NavbarProps {
   onOpenAuth: () => void;
-  onOpenConfig: () => void;
-  onOpenNotifications: () => void;
   onNavigateToProfile: () => void;
-  onOpenWaitlist: () => void;
-  onLockGateway?: () => void;
+  onNavigateToNotifications?: () => void;
+  onOpenConfig?: () => void;
+  onToggleSidebar?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
-  onOpenConfig,
-  onOpenNotifications,
   onNavigateToProfile,
-  onOpenWaitlist,
-  onLockGateway,
+  onNavigateToNotifications,
+  onToggleSidebar,
 }) => {
-  const { user, role, logout, quickLoginAs, isSupabaseConfigured, updateCurrentProfile } = useAuth();
-  const { waitlistRequests } = usePortalData();
+  const { 
+    user, 
+    savedAccounts, 
+    switchAccount, 
+    removeAccount, 
+    logout, 
+    logoutAll, 
+    updateCurrentProfile 
+  } = useAuth();
+
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const pendingWaitlist = waitlistRequests.filter(w => w.status === 'pending');
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
 
-  const statusOptions: Array<{ label: string; value: 'active' | 'away' | 'in_meeting' | 'offline' }> = [
-    { label: 'Available', value: 'active' },
-    { label: 'Away', value: 'away' },
-    { label: 'In Meeting', value: 'in_meeting' },
-    { label: 'Offline', value: 'offline' },
-  ];
+  useEffect(() => {
+    const updateUnread = () => {
+      try {
+        const notifs = getStoredNotifications();
+        const unread = notifs.filter(n => !n.read).length;
+        setUnreadNotifCount(unread);
+      } catch (err) {
+        console.error(err);
+      }
+    };
 
-  const roleProfiles: Array<{ role: UserRole; title: string; name: string; icon: any }> = [
-    { role: 'ceo', title: 'CEO', name: 'Harshit (CEO)', icon: Crown },
-    { role: 'cto', title: 'CTO', name: 'Elena Rostova (CTO)', icon: Cpu },
-    { role: 'cmo', title: 'CMO', name: 'Sophia Chen (CMO)', icon: Palette },
-    { role: 'cfo', title: 'CFO', name: 'David Sterling (CFO)', icon: DollarSign },
-    { role: 'coo', title: 'COO', name: 'Aarav Singhania (COO)', icon: Briefcase },
-    { role: 'member', title: 'Core Dev', name: 'Rahul Sharma', icon: User },
-    { role: 'intern', title: 'Intern', name: 'Aanya Patel', icon: GraduationCap }
-  ];
+    updateUnread();
+    window.addEventListener('ceova_notifications_updated', updateUnread);
+    return () => {
+      window.removeEventListener('ceova_notifications_updated', updateUnread);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+    if (showProfileMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showProfileMenu]);
+
+
 
   return (
-    <header className="top-navbar">
-      <div className="nav-left">
+    <>
+      <header className="top-navbar">
+      <div className="nav-left" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {onToggleSidebar && (
+          <button 
+            type="button" 
+            onClick={onToggleSidebar}
+            aria-label="Toggle navigation menu"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-main)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              padding: 0
+            }}
+          >
+            <Menu size={20} />
+          </button>
+        )}
+        
         <div className="brand-badge" onClick={onNavigateToProfile} style={{ cursor: 'pointer' }}>
           <div style={{
-            width: 36,
-            height: 36,
+            width: 38,
+            height: 38,
             borderRadius: 10,
-            background: '#000000',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
+            background: '#161618',
+            border: '1px solid #27272a',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
-            padding: 2,
-            boxShadow: '0 0 14px rgba(59, 130, 246, 0.25)'
+            padding: 5,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.1)'
           }}>
-            <img src="/ceovaimage.png" alt="Ceova Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img src="/ceovaimage.png" alt="Ceova Logo" style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'contain',
+              filter: 'invert(1)',
+              mixBlendMode: 'screen',
+              opacity: 0.95
+            }} />
           </div>
           <div className="brand-text">
             <h1>
               CEOVA
-              <span className="brand-pill">Team OS</span>
             </h1>
           </div>
         </div>
-
-        {/* Quick Role Switcher for instant role preview & testing */}
-        <div className="role-switch-dropdown-wrap">
-          <button 
-            type="button" 
-            className="role-switcher-btn"
-            onClick={() => setShowRoleMenu(!showRoleMenu)}
-            title="Switch user perspective to preview role-based dashboard & permissions"
-          >
-            <span className="role-switcher-label">View As:</span>
-            <span className={`role-badge role-${role}`}>
-              {role?.toUpperCase()}
-            </span>
-            <ChevronDown size={13} />
-          </button>
-
-          {showRoleMenu && (
-            <div className="role-menu-dropdown">
-              <div className="role-menu-header">Select Role Perspective</div>
-              {roleProfiles.map((p) => {
-                const IconComponent = p.icon;
-                const isSelected = role === p.role;
-
-                return (
-                  <button
-                    key={p.role}
-                    type="button"
-                    className={`role-option-btn ${isSelected ? 'active' : ''}`}
-                    onClick={() => {
-                      quickLoginAs(p.role);
-                      setShowRoleMenu(false);
-                    }}
-                  >
-                    <IconComponent size={14} className="role-option-icon" />
-                    <div className="role-option-text">
-                      <span className="role-option-title">{p.title}</span>
-                      <span className="role-option-name">{p.name}</span>
-                    </div>
-                    {isSelected && <span className="active-dot" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
 
-      <div className="nav-right">
-        {/* CEO Waitlist Pending Alert Badge */}
-        {role === 'ceo' && pendingWaitlist.length > 0 && (
+      <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {user && onNavigateToNotifications && (
           <button
             type="button"
-            className="neu-pill-btn"
-            style={{ 
-              background: 'rgba(212, 175, 55, 0.15)', 
-              border: '1px solid rgba(212, 175, 55, 0.4)',
-              padding: '4px 10px',
-              fontSize: 11.5,
+            title="Notifications & Alerts"
+            onClick={onNavigateToNotifications}
+            style={{
+              position: 'relative',
+              background: '#161618',
+              border: '1px solid #27272a',
+              borderRadius: 10,
+              width: 36,
+              height: 36,
               display: 'flex',
               alignItems: 'center',
-              gap: 6
+              justifyContent: 'center',
+              color: 'var(--text-main, #ffffff)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
             }}
-            onClick={onOpenWaitlist}
-            title={`${pendingWaitlist.length} new access clearance requests waiting for CEO approval`}
           >
-            <Crown size={13} style={{ color: 'var(--neo-gold)' }} />
-            <span style={{ color: '#fff', fontWeight: 600 }}>{pendingWaitlist.length} Clearances</span>
+            <Bell size={17} />
+            {unreadNotifCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                background: '#ef4444',
+                color: '#ffffff',
+                fontSize: 10,
+                fontWeight: 700,
+                minWidth: 16,
+                height: 16,
+                padding: '0 4px',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 6px rgba(239, 68, 68, 0.6)'
+              }}>
+                {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+              </span>
+            )}
           </button>
         )}
 
-        {/* Access Clearance / Waitlist Button */}
-        <button
-          type="button"
-          className="neu-pill-btn"
-          style={{ fontSize: 11.5, padding: '5px 12px' }}
-          onClick={onOpenWaitlist}
-          title="Apply for access clearance or view waiting list queue"
-        >
-          <UserCheck size={13} style={{ color: 'var(--neo-gold)' }} />
-          <span>Access Clearance</span>
-        </button>
-
-        {/* Notification Bell with Badge */}
-        <button
-          type="button"
-          className="notification-nav-btn"
-          onClick={onOpenNotifications}
-          title="Notification Center"
-        >
-          <Bell size={16} />
-          <span className="nav-badge-dot">3</span>
-        </button>
-
-        {/* Supabase status indicator */}
-        <button
-          type="button"
-          className="supabase-status-pill"
-          onClick={onOpenConfig}
-          title="Supabase Database & Auth status - Click to configure"
-        >
-          <span className={`status-dot ${isSupabaseConfigured ? 'connected' : 'demo'}`} />
-          <Database size={13} />
-          <span>{isSupabaseConfigured ? 'Supabase Sync' : 'Local OS Mode'}</span>
-        </button>
-
         {user ? (
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative' }} ref={dropdownRef}>
             <div 
               className="navbar-user-chip"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
@@ -208,14 +196,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {user.full_name.charAt(0)}
                   </div>
                 )}
-                <span className={`user-status-dot status-${user.status}`} style={{ width: 8, height: 8 }} />
               </div>
 
-              <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
+              <div className="navbar-user-info" style={{ textAlign: 'left', lineHeight: 1.2 }}>
+                <div className="navbar-user-name" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
                   {user.full_name}
                 </div>
                 <div 
+                  className="navbar-user-sub"
                   style={{ 
                     fontSize: 10, 
                     fontWeight: 700, 
@@ -223,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     color: 'var(--accent-primary)'
                   }}
                 >
-                  {role} • {user.department}
+                  {(user.role === 'ceo') ? 'CEO' : (user.role === 'admin') ? 'ADMIN' : user.role === 'intern' ? 'INTERN' : 'MEMBER'} • {user.department || (user.role === 'ceo' ? 'Executive' : user.role === 'admin' ? 'Administration' : 'General')}
                 </div>
               </div>
 
@@ -233,33 +221,189 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Profile Dropdown Menu */}
             {showProfileMenu && (
               <div className="profile-menu-dropdown">
-                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Status</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 6 }}>
-                    {statusOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => {
-                          updateCurrentProfile({ status: opt.value });
-                          setShowProfileMenu(false);
-                        }}
-                        style={{
-                          fontSize: 11,
-                          padding: '4px 6px',
-                          border: user.status === opt.value ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                          background: user.status === opt.value ? 'rgba(99,102,241,0.15)' : 'transparent',
-                          color: user.status === opt.value ? '#fff' : 'var(--text-muted)',
-                          borderRadius: 'var(--radius-sm)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                {/* 1. Multiple Accounts Section */}
+                <div style={{ padding: '8px 6px 4px', borderBottom: '1px solid var(--border-color)' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    padding: '2px 6px 6px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase'
+                  }}>
+                    <span>Accounts</span>
+                    <span style={{ 
+                      fontSize: 10, 
+                      background: 'rgba(255, 255, 255, 0.08)', 
+                      padding: '1px 6px', 
+                      borderRadius: 10 
+                    }}>
+                      {savedAccounts.length}
+                    </span>
                   </div>
+
+                  <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {savedAccounts.map((acc) => {
+                      const isActive = acc.profile.id === user.id;
+                      return (
+                        <div
+                          key={acc.profile.id || acc.profile.email}
+                          onClick={() => {
+                            if (!isActive) {
+                              switchAccount(acc.profile.id);
+                              setShowProfileMenu(false);
+                            }
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 8px',
+                            borderRadius: 'var(--radius-sm)',
+                            background: isActive ? '#1c1c1f' : 'transparent',
+                            border: isActive ? '1px solid #333338' : '1px solid transparent',
+                            cursor: isActive ? 'default' : 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                          className={!isActive ? 'nav-item-account-hover' : ''}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                            <div style={{
+                              width: 26,
+                              height: 26,
+                              borderRadius: '50%',
+                              background: (acc.profile.role === 'admin' || acc.profile.role === 'ceo') ? 'var(--accent-primary, #3b82f6)' : acc.profile.role === 'intern' ? '#f59e0b' : '#64748b',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              overflow: 'hidden',
+                              flexShrink: 0
+                            }}>
+                              {acc.profile.avatar_url ? (
+                                <img src={acc.profile.avatar_url} alt={acc.profile.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                (acc.profile.full_name || 'U').charAt(0).toUpperCase()
+                              )}
+                            </div>
+
+                            <div style={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.2 }}>
+                              <div style={{ 
+                                fontSize: 12, 
+                                fontWeight: 600, 
+                                color: 'var(--text-main)', 
+                                overflow: 'hidden', 
+                                textOverflow: 'ellipsis', 
+                                whiteSpace: 'nowrap' 
+                              }} >
+                                {acc.profile.full_name}
+                              </div>
+                              <div style={{ 
+                                fontSize: 10, 
+                                color: 'var(--text-muted)', 
+                                overflow: 'hidden', 
+                                textOverflow: 'ellipsis', 
+                                whiteSpace: 'nowrap' 
+                              }}>
+                                <span style={{ 
+                                  color: (acc.profile.role === 'admin' || acc.profile.role === 'ceo') ? 'var(--accent-primary)' : acc.profile.role === 'intern' ? '#f59e0b' : 'var(--text-muted)',
+                                  fontWeight: 600,
+                                  textTransform: 'uppercase',
+                                  fontSize: 9
+                                }}>
+                                  {acc.profile.role === 'ceo' ? 'CEO' : acc.profile.role === 'admin' ? 'Admin' : acc.profile.role === 'intern' ? 'Intern' : 'Member'}
+                                </span>
+                                {' • '}
+                                {acc.profile.email}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 6 }}>
+                            {isActive ? (
+                              <span style={{ 
+                                color: '#10b981', 
+                                fontSize: 10, 
+                                fontWeight: 600, 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: 2,
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                padding: '2px 5px',
+                                borderRadius: 4
+                              }}>
+                                <Check size={11} />
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                title="Remove account from device"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeAccount(acc.profile.id);
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: 'var(--text-muted)',
+                                  cursor: 'pointer',
+                                  padding: 3,
+                                  borderRadius: 4,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  opacity: 0.6,
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                                onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
+                              >
+                                <X size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add another account action button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setIsAddAccountOpen(true);
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 7,
+                      padding: '8px 10px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: '#ffffff',
+                      background: '#161618',
+                      border: '1px dashed #333338',
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer',
+                      marginTop: 6,
+                      marginBottom: 2,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#222226')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = '#161618')}
+                  >
+                    <UserPlus size={14} />
+                    <span>Add another account</span>
+                  </button>
                 </div>
 
+                {/* 3. Navigation & Actions */}
                 <button
                   type="button"
                   className="nav-item"
@@ -276,44 +420,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   className="nav-item"
-                  style={{ padding: '8px 10px', fontSize: 13 }}
-                  onClick={() => {
-                    onOpenConfig();
-                    setShowProfileMenu(false);
-                  }}
-                >
-                  <Settings size={15} />
-                  Database & Auth
-                </button>
-
-                {onLockGateway && (
-                  <button
-                    type="button"
-                    className="nav-item"
-                    style={{ padding: '8px 10px', fontSize: 13 }}
-                    onClick={() => {
-                      onLockGateway();
-                      setShowProfileMenu(false);
-                    }}
-                  >
-                    <Lock size={15} />
-                    Lock Gateway Screen
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  className="nav-item"
                   style={{ padding: '8px 10px', fontSize: 13, color: 'var(--danger)' }}
                   onClick={() => {
                     logout();
-                    if (onLockGateway) onLockGateway();
                     setShowProfileMenu(false);
                   }}
                 >
                   <LogOut size={15} />
                   Sign Out
                 </button>
+
+                {savedAccounts.length > 1 && (
+                  <button
+                    type="button"
+                    className="nav-item"
+                    style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)' }}
+                    onClick={() => {
+                      logoutAll();
+                      setShowProfileMenu(false);
+                    }}
+                  >
+                    <LogOut size={13} />
+                    Sign out of all accounts
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -324,6 +454,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
       </div>
-    </header>
+
+      </header>
+
+      {/* Add Account Modal */}
+      <AddAccountModal 
+        isOpen={isAddAccountOpen} 
+        onClose={() => setIsAddAccountOpen(false)} 
+      />
+    </>
   );
 };

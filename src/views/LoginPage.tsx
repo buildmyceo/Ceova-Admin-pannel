@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { usePortalData } from '../context/PortalDataContext';
-import { Eye, EyeOff, Lock, Mail, User, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { getSupabaseClient, getAnonSupabaseClient } from '../lib/supabase';
+import { Eye, EyeOff, Lock, Mail, User, AlertCircle, CheckCircle2, ArrowRight, X } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
@@ -11,70 +11,77 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLoginSuccess,
 }) => {
-  const { loginWithEmail, signUpWithEmail } = useAuth();
-  const { submitWaitlistRequest } = usePortalData();
+  const { 
+    loginWithEmail, 
+    savedAccounts, 
+    switchAccount, 
+    removeAccount,
+    resetPasswordForEmail,
+  } = useAuth();
 
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isNotCeovaUser, setIsNotCeovaUser] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [resetSending, setResetSending] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setIsNotCeovaUser(false);
     setSuccessMessage('');
     setLoading(true);
 
-    if (mode === 'signin') {
-      const res = await loginWithEmail(email, password);
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password;
+
+    const res = await loginWithEmail(cleanEmail, cleanPassword);
+    
+    if (res.success) {
       setLoading(false);
-      if (res.success) {
-        onLoginSuccess();
-      } else {
-        setErrorMessage(res.error || 'Failed to sign in. Please verify your email and password.');
-      }
+      onLoginSuccess();
+      return;
+    }
+
+    const errText = res.error || 'Authentication failed. Please verify your credentials.';
+    setErrorMessage(errText);
+
+    if (errText.toLowerCase().includes('wrong email') || errText.toLowerCase().includes('not registered with ceova') || errText.toLowerCase().includes('not from ceova')) {
+      setIsNotCeovaUser(true);
     } else {
-      if (!fullName.trim()) {
-        setErrorMessage('Please provide your full name.');
-        setLoading(false);
-        return;
+      setIsNotCeovaUser(false);
+    }
+
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your email address in the field above to receive a password reset link.');
+      return;
+    }
+    setResetSending(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      const res = await resetPasswordForEmail(cleanEmail);
+      if (res.success) {
+        setSuccessMessage(res.message || 'Password reset link sent! Check your email inbox and spam folder.');
+      } else {
+        setErrorMessage(res.error || 'Failed to send password reset email.');
       }
-
-      // Submit to CEO Waiting List queue and sign up
-      try {
-        await submitWaitlistRequest({
-          full_name: fullName.trim(),
-          email: email.trim(),
-          requested_role: 'member',
-          department: 'Development',
-          reason: 'Direct portal account registration',
-        });
-
-        const signRes = await signUpWithEmail(email, password, {
-          fullName: fullName.trim(),
-          role: 'member',
-          department: 'Development',
-        });
-
-        setLoading(false);
-        if (signRes.success) {
-          setSuccessMessage(
-            'Registration submitted successfully! Your account is queued on the Waiting List for CEO clearance.'
-          );
-        } else {
-          setErrorMessage(signRes.error || 'Registration failed. Please try again.');
-        }
-      } catch (err: any) {
-        setLoading(false);
-        setErrorMessage(err.message || 'Registration request failed.');
-      }
+    } catch (e: any) {
+      setErrorMessage(e?.message || 'Error requesting password reset.');
+    } finally {
+      setResetSending(false);
     }
   };
+
 
   return (
     <div
@@ -85,7 +92,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         width: '100vw',
         height: '100vh',
         minHeight: '100svh',
-        backgroundColor: '#000000',
+        backgroundColor: 'transparent',
         overflowX: 'hidden',
         overflowY: 'auto',
         display: 'flex',
@@ -95,12 +102,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         zIndex: 50,
       }}
     >
-      {/* 1. BACKGROUND VIDEO */}
+      {/* 1. BACKGROUND VIDEO & POSTER */}
       <video
         autoPlay
         loop
         muted
         playsInline
+        poster="/images/sky.png"
         aria-hidden="true"
         style={{
           position: 'absolute',
@@ -114,48 +122,66 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         }}
       >
         <source
-          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260801_001207_ec20d138-aa45-4b2b-ab8c-bdc71607f240.mp4"
+          src="/video/sky.mp4"
           type="video/mp4"
         />
       </video>
 
-      {/* 2. CENTERED LOGIN CARD */}
+      {/* Atmospheric Contrast Overlay */}
+      <div 
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(circle at 50% 30%, rgba(6, 9, 18, 0.35) 0%, rgba(3, 5, 12, 0.65) 100%)',
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* 2. CENTERED LOGIN CARD - GLASSMORPHISM (40-60% BLUR) */}
       <div
         style={{
           position: 'relative',
           zIndex: 10,
           width: '100%',
           maxWidth: '440px',
-          background: 'rgba(8, 8, 8, 0.88)',
-          backdropFilter: 'blur(28px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+          background: 'rgba(12, 16, 26, 0.52)',
+          backdropFilter: 'blur(28px) saturate(170%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(170%)',
           border: '1px solid rgba(255, 255, 255, 0.12)',
-          borderRadius: '18px',
-          padding: '32px 28px',
-          boxShadow: '0 24px 70px rgba(0, 0, 0, 0.85), 0 0 40px rgba(59, 130, 246, 0.12)',
+          borderRadius: '24px',
+          padding: '36px 32px',
+          boxShadow: '0 24px 70px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
         }}
       >
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div
             style={{
-              width: 52,
-              height: 52,
-              margin: '0 auto 14px auto',
-              borderRadius: '12px',
-              background: '#000000',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
+              width: 64,
+              height: 64,
+              margin: '0 auto 16px auto',
+              borderRadius: '18px',
+              background: '#161618',
+              border: '1px solid #27272a',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 4,
-              boxShadow: '0 0 20px rgba(59, 130, 246, 0.25)',
+              padding: 12,
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
             }}
           >
             <img
               src="/ceovaimage.png"
               alt="Ceova Logo"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'contain',
+                filter: 'invert(1) drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
+                mixBlendMode: 'screen',
+                opacity: 0.95
+              }}
             />
           </div>
 
@@ -173,83 +199,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             }}
           >
             CEOVA
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                padding: '2px 8px',
-                borderRadius: '9999px',
-                background: 'rgba(59, 130, 246, 0.15)',
-                color: '#3b82f6',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
-              }}
-            >
-              Team OS
-            </span>
           </h2>
-          <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.55)', margin: 0 }}>
-            Internal Company Management Platform
-          </p>
+
         </div>
 
-        {/* Tab Switcher: Sign In & Sign Up */}
-        <div
-          style={{
-            display: 'flex',
-            background: 'rgba(0, 0, 0, 0.65)',
-            padding: 4,
-            borderRadius: '10px',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            marginBottom: 20,
-          }}
-        >
-          <button
-            type="button"
-            style={{
-              flex: 1,
-              padding: '10px 14px',
-              border: 'none',
-              background: mode === 'signin' ? '#ffffff' : 'transparent',
-              color: mode === 'signin' ? '#000000' : 'rgba(255, 255, 255, 0.6)',
-              fontWeight: 700,
-              fontSize: '13px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              transition: 'all 0.18s ease',
-            }}
-            onClick={() => {
-              setMode('signin');
-              setErrorMessage('');
-              setSuccessMessage('');
-            }}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            style={{
-              flex: 1,
-              padding: '10px 14px',
-              border: 'none',
-              background: mode === 'signup' ? '#ffffff' : 'transparent',
-              color: mode === 'signup' ? '#000000' : 'rgba(255, 255, 255, 0.6)',
-              fontWeight: 700,
-              fontSize: '13px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              transition: 'all 0.18s ease',
-            }}
-            onClick={() => {
-              setMode('signup');
-              setErrorMessage('');
-              setSuccessMessage('');
-            }}
-          >
-            Sign Up
-          </button>
-        </div>
 
         {/* Alert Messages */}
         {errorMessage && (
@@ -257,18 +210,87 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             style={{
               background: 'rgba(239, 68, 68, 0.12)',
               border: '1px solid rgba(239, 68, 68, 0.35)',
-              borderRadius: '8px',
-              padding: '10px 14px',
+              borderRadius: '10px',
+              padding: '12px 14px',
               marginBottom: 16,
               color: '#f87171',
               fontSize: '13px',
               display: 'flex',
-              alignItems: 'flex-start',
+              flexDirection: 'column',
               gap: 8,
             }}
           >
-            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>{errorMessage}</span>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <AlertCircle size={17} style={{ flexShrink: 0, marginTop: 1, color: '#f87171' }} />
+              <div style={{ flex: 1, lineHeight: 1.45 }}>
+                {isNotCeovaUser && (
+                  <div style={{ fontWeight: 700, color: '#fca5a5', marginBottom: 2, fontSize: '13px' }}>
+                    Access Restricted
+                  </div>
+                )}
+                <span>{errorMessage}</span>
+
+                {/* If password error, offer fast password reset */}
+                {errorMessage.toLowerCase().includes('incorrect password') && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      disabled={resetSending}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        background: 'rgba(239, 68, 68, 0.2)',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        color: '#fca5a5',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: resetSending ? 'wait' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <Lock size={13} />
+                      {resetSending ? 'Sending reset link...' : 'Reset My Password via Email'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {isNotCeovaUser && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, borderTop: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                <a
+                  href={`mailto:buildmyceo@gmail.com?subject=${encodeURIComponent('CEOVA Portal Access Request')}&body=${encodeURIComponent(`Hello CEOVA Team,\n\nI am requesting access to the CEOVA Portal with my email address: ${email.trim()}\n\nIf this was a mistake, please verify and invite my account.\n\nThank you!`)}`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    transition: 'all 0.15s ease',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.35)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                  }}
+                >
+                  <Mail size={13} />
+                  <span>Mail Support (buildmyceo@gmail.com)</span>
+                </a>
+              </div>
+            )}
           </div>
         )}
 
@@ -292,36 +314,138 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </div>
         )}
 
+        {/* Saved Accounts section if multiple accounts exist */}
+        {savedAccounts.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ 
+              fontSize: '11px', 
+              fontWeight: 600, 
+              color: 'rgba(255, 255, 255, 0.6)', 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.05em',
+              marginBottom: 8 
+            }}>
+              Saved Accounts ({savedAccounts.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {savedAccounts.map((acc) => {
+                const hasActiveSession = Boolean(acc.session?.access_token);
+                return (
+                  <div
+                    key={acc.profile.id || acc.profile.email}
+                    onClick={async () => {
+                      setEmail(acc.profile.email || '');
+                      setPassword('');
+                      setErrorMessage('');
+                      setIsNotCeovaUser(false);
+                      const ok = await switchAccount(acc.profile.id);
+                      if (ok) {
+                        onLoginSuccess();
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                      <div style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: (acc.profile.role === 'admin' || acc.profile.role === 'ceo') ? '#3b82f6' : acc.profile.role === 'intern' ? '#f59e0b' : '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        overflow: 'hidden',
+                        flexShrink: 0
+                      }}>
+                        {acc.profile.avatar_url ? (
+                          <img src={acc.profile.avatar_url} alt={acc.profile.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          (acc.profile.full_name || 'U').charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div style={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.2 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {acc.profile.full_name}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ color: acc.profile.role === 'ceo' ? '#38bdf8' : acc.profile.role === 'admin' ? '#60a5fa' : acc.profile.role === 'intern' ? '#fbbf24' : '#94a3b8', fontWeight: 600 }}>
+                            {acc.profile.role === 'ceo' ? 'CEO' : acc.profile.role === 'admin' ? 'Admin' : acc.profile.role === 'intern' ? 'Intern' : 'Member'}
+                          </span>
+                          {' • '}
+                          {acc.profile.email}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 600 }}>
+                        Enter Portal →
+                      </span>
+                      <button
+                        type="button"
+                        title="Remove from this device"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeAccount(acc.profile.id);
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'rgba(255, 255, 255, 0.4)',
+                          cursor: 'pointer',
+                          padding: 3,
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 10, 
+              margin: '18px 0 14px', 
+              color: 'rgba(255, 255, 255, 0.4)', 
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
+              <span>Or sign into another account</span>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.1)' }} />
+            </div>
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSubmit}>
-          {mode === 'signup' && (
-            <div className="form-group" style={{ marginBottom: 14 }}>
-              <label className="form-label" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)', marginBottom: 6 }}>
-                Full Name
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Elena Rostova"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px 10px 36px',
-                    borderRadius: '8px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    color: '#ffffff',
-                    fontSize: '13px',
-                    outline: 'none',
-                  }}
-                />
-                <User size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)' }} />
-              </div>
-            </div>
-          )}
 
           <div className="form-group" style={{ marginBottom: 14 }}>
             <label className="form-label" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)', marginBottom: 6 }}>
@@ -351,9 +475,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </div>
 
           <div className="form-group" style={{ marginBottom: 20 }}>
-            <label className="form-label" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)', marginBottom: 6 }}>
-              Password
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label className="form-label" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)' }}>
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetSending}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#60a5fa',
+                  fontSize: '11.5px',
+                  fontWeight: 500,
+                  cursor: resetSending ? 'wait' : 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline',
+                  opacity: resetSending ? 0.6 : 0.9,
+                }}
+              >
+                {resetSending ? 'Sending reset link...' : 'Forgot password?'}
+              </button>
+            </div>
             <div style={{ position: 'relative' }}>
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -413,22 +557,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              boxShadow: '0 4px 16px rgba(59, 130, 246, 0.35)',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
               transition: 'all 0.15s ease',
               opacity: loading ? 0.7 : 1,
             }}
           >
             {loading ? (
               'Processing...'
-            ) : mode === 'signin' ? (
+            ) : (
               <>
                 Sign In to Portal <ArrowRight size={16} />
               </>
-            ) : (
-              'Complete Registration'
             )}
           </button>
         </form>
+
+
       </div>
     </div>
   );

@@ -34,6 +34,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
 -- 3. Departments Table
 CREATE TABLE IF NOT EXISTS public.departments (
@@ -290,7 +291,35 @@ TO authenticated
 WITH CHECK (true);
 
 -- ==============================================================================
+-- PRIVILEGE ESCALATION PROTECTION TRIGGER
+-- Prevents authenticated non-admin users from altering their assigned role
+-- ==============================================================================
+
+CREATE OR REPLACE FUNCTION public.protect_profile_role()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    IF NOT public.is_admin() THEN
+      RAISE EXCEPTION 'Unauthorized: only administrators can change member roles.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_protect_profile_role ON public.profiles;
+CREATE TRIGGER trg_protect_profile_role
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_profile_role();
+
+-- ==============================================================================
 -- AUTOMATIC PROFILE CREATION TRIGGER (ON SUPABASE AUTH SIGNUP)
+-- Protected against arbitrary role self-elevation
 -- ==============================================================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -300,12 +329,38 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_role TEXT;
+  v_role TEXT := 'member';
   v_name TEXT;
   v_department TEXT;
+  v_has_admin BOOLEAN;
+  v_invite_role TEXT;
 BEGIN
-  v_role := COALESCE(new.raw_user_meta_data->>'role', 'member');
-  IF v_role NOT IN ('admin', 'head', 'member') THEN
+  -- 1. Check if an admin already exists in the system
+  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE role = 'admin') INTO v_has_admin;
+
+  -- 2. Check if an invitation table exists and if this email was invited
+  BEGIN
+    SELECT role INTO v_invite_role 
+    FROM public.invitations 
+    WHERE lower(email) = lower(new.email) 
+    LIMIT 1;
+  EXCEPTION WHEN OTHERS THEN
+    v_invite_role := NULL;
+  END;
+
+  IF v_invite_role IS NOT NULL THEN
+    v_role := v_invite_role;
+    -- Consume the invitation
+    BEGIN
+      DELETE FROM public.invitations WHERE lower(email) = lower(new.email);
+    EXCEPTION WHEN OTHERS THEN
+      -- Silently continue if invitations delete fails
+    END;
+  ELSIF NOT v_has_admin THEN
+    -- Initial setup bootstrap: allow first user to be administrator
+    v_role := 'admin';
+  ELSE
+    -- For any other self-signups, never allow arbitrary role elevation
     v_role := 'member';
   END IF;
 
@@ -322,6 +377,7 @@ BEGIN
     CASE 
       WHEN v_role = 'admin' THEN 'System Administrator'
       WHEN v_role = 'head' THEN 'Department Head'
+      WHEN v_role = 'intern' THEN 'Associate Intern'
       ELSE 'Associate Specialist'
     END,
     'active'

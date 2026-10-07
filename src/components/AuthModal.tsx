@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { usePortalData } from '../context/PortalDataContext';
-import { X, Mail, Lock, User, Briefcase, Shield, Crown, Eye, EyeOff, Sparkles, CheckCircle, Clock } from 'lucide-react';
-import { UserRole } from '../types';
+import { getSupabaseClient } from '../lib/supabase';
+import { X, Eye, EyeOff, CheckCircle, Mail, AlertCircle } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -11,24 +10,19 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
-  const { loginWithEmail, signUpWithEmail, quickLoginAs, isSupabaseConfigured } = useAuth();
-  const { submitWaitlistRequest } = usePortalData();
+  const { loginWithEmail, signUpWithEmail } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Registration fields
   const [fullName, setFullName] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('member');
-  const [department, setDepartment] = useState('Development');
   
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isNotCeovaUser, setIsNotCeovaUser] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Handle ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -44,17 +38,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setIsNotCeovaUser(false);
     setSuccessMessage('');
     setLoading(true);
 
     if (mode === 'signin') {
-      const res = await loginWithEmail(email, password);
+      const cleanEmail = email.trim().toLowerCase();
+      const res = await loginWithEmail(cleanEmail, password);
       setLoading(false);
       if (res.success) {
         if (onLoginSuccess) onLoginSuccess();
         onClose();
       } else {
-        setErrorMessage(res.error || 'Failed to sign in. Please verify your credentials.');
+        const errText = res.error || 'Authentication failed. Please verify your credentials.';
+        setErrorMessage(errText);
+        if (errText.toLowerCase().includes('wrong email') || errText.toLowerCase().includes('not registered with ceova') || errText.toLowerCase().includes('not from ceova')) {
+          setIsNotCeovaUser(true);
+        } else {
+          setIsNotCeovaUser(false);
+        }
       }
     } else {
       if (!fullName.trim()) {
@@ -63,17 +65,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         return;
       }
 
-      // Automatically queue on CEO Waiting List
-      await submitWaitlistRequest({
-        full_name: fullName.trim(),
-        email: email.trim(),
-        requested_role: selectedRole,
-        department,
-        reason: 'New team member registration through portal gate'
-      });
-
+      const res = await signUpWithEmail(email, password, { fullName: fullName.trim() });
       setLoading(false);
-      setSuccessMessage('Your registration is queued on the Waiting List! CEO Harshit has received your clearance dossier on his Executive Command deck.');
+      if (res.success) {
+        setSuccessMessage('CEO account registered successfully!');
+        setTimeout(() => {
+          if (onLoginSuccess) onLoginSuccess();
+          onClose();
+        }, 1000);
+      } else {
+        setErrorMessage(res.error || 'Failed to sign up.');
+      }
     }
   };
 
@@ -92,16 +94,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               alignItems: 'center',
               justifyContent: 'center',
               padding: 2,
-              boxShadow: '0 0 10px rgba(59, 130, 246, 0.2)'
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)'
             }}>
               <img src="/ceovaimage.png" alt="Ceova" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: 16 }}>
-                {mode === 'signin' ? 'Sign In' : 'Sign Up'}
+                {mode === 'signin' ? 'Sign In to Ceova OS' : 'CEO Portal Registration'}
               </h3>
-              <div style={{ fontSize: 11, color: 'var(--accent-primary)', fontWeight: 600 }}>
-                {mode === 'signin' ? 'Ceova Team OS • Internal Access' : 'Register for Portal Access'}
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Founder & Executive Command
               </div>
             </div>
           </div>
@@ -116,7 +118,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         </div>
 
         <div className="modal-body">
-          {/* Mode Switch Tabs: Only Sign In and Sign Up */}
           <div 
             style={{ 
               display: 'flex', 
@@ -166,16 +167,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           {errorMessage && (
             <div 
               style={{ 
-                background: 'var(--danger-bg)', 
-                border: '1px solid rgba(239,68,68,0.3)', 
-                color: 'var(--danger)', 
-                padding: '10px 14px', 
+                background: 'rgba(239, 68, 68, 0.12)', 
+                border: '1px solid rgba(239, 68, 68, 0.35)', 
+                color: '#f87171', 
+                padding: '12px 14px', 
                 borderRadius: 'var(--radius-md)',
                 fontSize: 13,
-                marginBottom: 16
+                marginBottom: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8
               }}
             >
-              {errorMessage}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                <div style={{ flex: 1, lineHeight: 1.45 }}>
+                  {isNotCeovaUser && (
+                    <div style={{ fontWeight: 700, color: '#fca5a5', marginBottom: 2 }}>
+                      Access Restricted
+                    </div>
+                  )}
+                  <span>{errorMessage}</span>
+                </div>
+              </div>
+
+              {isNotCeovaUser && (
+                <div style={{ paddingTop: 4, borderTop: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                  <a
+                    href={`mailto:buildmyceo@gmail.com?subject=${encodeURIComponent('CEOVA Portal Access Request')}&body=${encodeURIComponent(`Hello CEOVA Team,\n\nI am requesting access to the CEOVA Portal for: ${email.trim()}\n\nIf this was a mistake, please verify and invite my account.\n\nThank you!`)}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(239, 68, 68, 0.25)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      color: '#ffffff',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Mail size={12} />
+                    <span>Mail Support (buildmyceo@gmail.com)</span>
+                  </a>
+                </div>
+              )}
             </div>
           )}
 
@@ -201,35 +240,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
           <form onSubmit={handleSubmit}>
             {mode === 'signup' && (
-              <>
-                <div className="form-group">
-                  <label className="form-label">Full Name</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Elena Rostova"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-              </>
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Founder & CEO"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+              </div>
             )}
 
             <div className="form-group">
               <label className="form-label">Email Address</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="email"
-                  className="form-input"
-                  placeholder="name@ceova.online"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
+              <input
+                type="email"
+                className="form-input"
+                placeholder="name@ceova.online"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
 
             <div className="form-group">
@@ -272,8 +305,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
               {loading 
                 ? 'Authenticating...' 
                 : mode === 'signin' 
-                  ? 'Sign In' 
-                  : 'Complete Registration'}
+                  ? 'Sign In as CEO' 
+                  : 'Register CEO Account'}
             </button>
           </form>
         </div>

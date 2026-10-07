@@ -1,463 +1,935 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { usePortalData } from '../../context/PortalDataContext';
 import { 
   Building2, 
-  TrendingUp, 
-  Users, 
-  AlertTriangle, 
-  DollarSign, 
-  Clock, 
-  CheckCircle2, 
-  ArrowUpRight, 
+  Database, 
   ShieldCheck, 
-  Layers, 
-  ChevronRight,
   Sparkles,
-  Flame,
-  ArrowRight,
   Crown,
-  Lock,
-  Compass,
-  UserCheck,
-  XCircle,
-  Mail,
-  Phone
+  User,
+  Camera,
+  CheckCircle2,
+  Cpu,
+  Layers,
+  Activity,
+  ArrowRight,
+  Plus,
+  Key,
+  X,
+  CreditCard,
+  Users,
+  DollarSign,
+  Settings,
+  Calendar,
+  Clock,
+  Video,
+  CheckSquare,
+  Copy,
+  Check,
+  Briefcase,
+  AlertCircle,
+  ExternalLink,
+  ChevronRight,
+  Paperclip,
+  Bell
 } from 'lucide-react';
 import { NavTab } from '../../components/Sidebar';
+import { Task, TaskPriority, TaskStatus, Meeting, MeetingCategory } from '../../types';
+import { getVisibleMeetings } from '../../lib/meetingsService';
+import { sanitizeUrl } from '../../lib/security';
+
+const TASKS_STORAGE_KEY = 'ceova_local_tasks_cache_v2';
+
+const CATEGORY_CONFIG: Record<MeetingCategory, { label: string; color: string; bg: string; border: string }> = {
+  executive: { label: 'Executive Briefing', color: '#60a5fa', bg: 'rgba(59, 130, 246, 0.15)', border: '#3b82f6' },
+  standup: { label: 'Team Standup', color: '#34d399', bg: 'rgba(16, 185, 129, 0.15)', border: '#10b981' },
+  review: { label: 'Deliverable Review', color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.15)', border: '#f59e0b' },
+  sprint: { label: 'Sprint Planning', color: '#a78bfa', bg: 'rgba(139, 92, 246, 0.15)', border: '#8b5cf6' },
+  general: { label: 'Team Sync', color: '#e4e4e7', bg: 'rgba(255, 255, 255, 0.08)', border: '#71717a' }
+};
 
 interface CEODashboardViewProps {
-  onNavigate: (tab: NavTab) => void;
-  onOpenTaskModal: () => void;
-  onOpenAnnouncementModal: () => void;
+  onNavigate: (tab: NavTab, id?: string) => void;
+  onOpenTaskModal?: () => void;
+  onOpenAnnouncementModal?: () => void;
 }
 
 export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
   onNavigate,
-  onOpenTaskModal,
-  onOpenAnnouncementModal,
 }) => {
-  const { user } = useAuth();
-  const { 
-    members, 
-    departments, 
-    projects, 
-    financials, 
-    strategicDecisions, 
-    activityLogs,
-    updateDecisionStatus,
-    waitlistRequests,
-    resolveWaitlistRequest
-  } = usePortalData();
+  const { user, role, isSupabaseConfigured } = useAuth();
+  const { departments, members } = usePortalData();
 
-  const activeProjectsCount = projects.filter(p => p.status === 'active').length;
-  const atRiskProjectsCount = projects.filter(p => p.status === 'at_risk' || p.risks.length > 1).length;
-  const totalMembers = members.length;
-  const pendingDecisionsCount = strategicDecisions.filter(d => d.status === 'pending').length;
-  const pendingWaitlist = waitlistRequests.filter(w => w.status === 'pending');
+
+  // Member tasks & meetings state
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const raw = localStorage.getItem(TASKS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [meetings, setMeetings] = useState<Meeting[]>(() => {
+    return getVisibleMeetings(user);
+  });
+
+  const [copiedMeetId, setCopiedMeetId] = useState<string | null>(null);
+  const [taskViewTab, setTaskViewTab] = useState<'assigned' | 'given'>('assigned');
+
+  const isAdmin = role === 'admin' || role === 'ceo';
+
+
+
+  // Load latest tasks & meetings and listen for real-time changes
+  useEffect(() => {
+    const syncMeetings = () => {
+      setMeetings(getVisibleMeetings(user));
+    };
+
+    const syncTasks = async () => {
+      try {
+        const { getSupabaseClient } = await import('../../lib/supabase');
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          const { data } = await supabase
+            .from('tasks')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (data && Array.isArray(data)) {
+            setTasks(data as Task[]);
+            localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(data));
+          }
+        }
+      } catch {
+        // Fallback to localStorage
+        try {
+          const raw = localStorage.getItem(TASKS_STORAGE_KEY);
+          if (raw) setTasks(JSON.parse(raw));
+        } catch {}
+      }
+    };
+
+    syncMeetings();
+    syncTasks();
+
+    window.addEventListener('ceova_meetings_updated', syncMeetings);
+    window.addEventListener('storage', syncTasks);
+
+    return () => {
+      window.removeEventListener('ceova_meetings_updated', syncMeetings);
+      window.removeEventListener('storage', syncTasks);
+    };
+  }, [user]);
+
+  // Handle Copy Meet Link
+  const handleCopyLink = (meet: Meeting) => {
+    if (!meet.meet_link) return;
+    navigator.clipboard.writeText(meet.meet_link);
+    setCopiedMeetId(meet.id);
+    setTimeout(() => setCopiedMeetId(null), 2000);
+  };
+
+  // Helper date calculations
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayFormatted = useMemo(() => {
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }, []);
+
+  // Filter today's meetings (or upcoming if none today)
+  const todayMeetings = useMemo(() => {
+    return meetings.filter(m => m.date === todayStr);
+  }, [meetings, todayStr]);
+
+  const upcomingMeetings = useMemo(() => {
+    return meetings.filter(m => m.date >= todayStr).slice(0, 5);
+  }, [meetings, todayStr]);
+
+  // Tasks assigned to this user
+  const myAssignedTasks = useMemo(() => {
+    if (!user) return [];
+    return tasks.filter(t => 
+      t.assigned_to_id === user.id ||
+      (t.assigned_to_ids && t.assigned_to_ids.includes(user.id)) ||
+      (t.assigned_to_name && user.full_name && t.assigned_to_name.trim().toLowerCase() === user.full_name.trim().toLowerCase())
+    );
+  }, [tasks, user]);
+
+  // Tasks given / created by this user
+  const tasksGivenByMe = useMemo(() => {
+    if (!user) return [];
+    return tasks.filter(t => 
+      t.assigned_by_id === user.id ||
+      (t.assigned_by_name && user.full_name && t.assigned_by_name.trim().toLowerCase() === user.full_name.trim().toLowerCase())
+    );
+  }, [tasks, user]);
+
+  const pendingAssignedCount = useMemo(() => {
+    return myAssignedTasks.filter(t => t.status !== 'completed').length;
+  }, [myAssignedTasks]);
+
+  const completedDeliverablesCount = useMemo(() => {
+    return myAssignedTasks.filter(t => t.status === 'completed').length;
+  }, [myAssignedTasks]);
+
+  const getPriorityBadge = (p: TaskPriority) => {
+    switch (p) {
+      case 'urgent': return { label: 'Urgent', bg: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: 'rgba(239, 68, 68, 0.3)' };
+      case 'high': return { label: 'High', bg: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: 'rgba(245, 158, 11, 0.3)' };
+      case 'low': return { label: 'Low', bg: 'rgba(255, 255, 255, 0.05)', color: '#a1a1aa', border: 'rgba(255, 255, 255, 0.1)' };
+      case 'normal':
+      default: return { label: 'Normal', bg: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: 'rgba(59, 130, 246, 0.3)' };
+    }
+  };
+
+  const getStatusBadge = (s: TaskStatus) => {
+    switch (s) {
+      case 'completed': return { label: 'Completed', color: '#34d399', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)' };
+      case 'review': return { label: 'Under Review', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.3)' };
+      case 'in_progress': return { label: 'In Progress', color: '#60a5fa', bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.3)' };
+      case 'todo':
+      default: return { label: 'To Do', color: '#e4e4e7', bg: 'rgba(255, 255, 255, 0.06)', border: 'rgba(255, 255, 255, 0.12)' };
+    }
+  };
 
   return (
     <div className="view-container">
-      {/* Neo-Classical Top Header with Roman Inscription */}
-      <div className="view-header-row" style={{ alignItems: 'center' }}>
-        <div>
-          <div className="neo-sub-roman">IMPERIUM ET ORDO • EXECUTIVE GOVERNANCE</div>
-          <h2 className="neo-serif-title" style={{ fontSize: 28, marginTop: 4 }}>
-            Ceova Executive Command
-          </h2>
-          <p className="view-subtitle">
-            Chief Executive Officer • Overall strategic alignment, cross-departmental throughput, and capital health.
-          </p>
-        </div>
 
-        <div className="view-actions-row">
-          <button className="neu-pill-btn" onClick={onOpenAnnouncementModal}>
-            <Sparkles size={14} style={{ color: 'var(--accent-primary)' }} />
-            <span>Broadcast Notice</span>
-          </button>
-          <button className="neu-pill-btn primary" onClick={() => onNavigate('executive_room')}>
-            <Lock size={14} />
-            <span>Executive Chamber</span>
-          </button>
+
+      {/* 2. USER PROFILE & IDENTITY BANNER (GLASSMORPHISM) */}
+      <div 
+        className="bento-card dashboard-banner-card" 
+        style={{ 
+          padding: '24px 28px', 
+          marginBottom: 24,
+          background: 'rgba(12, 16, 26, 0.55)',
+          backdropFilter: 'blur(28px) saturate(170%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(170%)',
+          border: '1px solid rgba(255, 255, 255, 0.11)',
+          boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
+        }}
+      >
+        <div className="dashboard-banner-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 20 }}>
+          {/* Left: Avatar & Identity Details */}
+          <div className="dashboard-banner-identity" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            {/* User Avatar */}
+            <div style={{ position: 'relative' }}>
+              <div style={{
+                width: 68,
+                height: 68,
+                borderRadius: '50%',
+                background: '#18181c',
+                border: '2px solid rgba(255, 255, 255, 0.18)',
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ fontSize: 26, fontWeight: 700, color: '#ffffff' }}>
+                    {user?.full_name?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                )}
+              </div>
+              {/* Online Dot */}
+              <span style={{
+                position: 'absolute',
+                bottom: 2,
+                right: 2,
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                background: '#22c55e',
+                border: '2px solid #0a0d14'
+              }} />
+            </div>
+
+            {/* Name, Designation, Role Badges */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h1 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-main)', margin: 0, letterSpacing: '-0.02em' }}>
+                  {user?.full_name || 'Team Member'}
+                </h1>
+
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  background: isAdmin ? 'rgba(255, 255, 255, 0.12)' : 'rgba(59, 130, 246, 0.15)',
+                  border: isAdmin ? '1px solid rgba(255, 255, 255, 0.22)' : '1px solid rgba(59, 130, 246, 0.3)',
+                  color: isAdmin ? '#ffffff' : '#60a5fa',
+                  textTransform: 'uppercase'
+                }}>
+                  <ShieldCheck size={11} />
+                  {role ? role.toUpperCase() : 'MEMBER'}
+                </span>
+
+                <span style={{
+                  fontSize: 11,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  color: 'var(--text-muted)'
+                }}>
+                  {user?.department || 'General'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, color: 'var(--text-muted)', fontSize: 13, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Briefcase size={14} style={{ color: 'var(--text-subtle)' }} />
+                  <span style={{ color: '#e4e4e7' }}>{user?.designation || 'Member'}</span>
+                </div>
+                <span>•</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Calendar size={13} style={{ color: 'var(--text-subtle)' }} />
+                  <span>{todayFormatted}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Main Bento Grid */}
-      <div className="bento-grid">
-        {/* Bento Box 1: Executive Mission Deck (Span 8) */}
-        <div className="bento-card bento-col-8">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span className="badge-gold">
-              <Crown size={12} /> Office of the Founder & CEO
-            </span>
-            <span className="badge-live-os">
-              <span className="pulsing-green-dot" /> Live Telemetry • OS v1.0
-            </span>
-          </div>
-
-          <h3 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 8 }}>
-            Welcome back, {user?.full_name || 'Harshit'}
-          </h3>
-          <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.5, maxWidth: 620, marginBottom: 20 }}>
-            Ceova commercial rollout is tracking at <strong>72% overall completion</strong>. Edge hardware benchmarks for Ceova CCTV are performing within target limits, and Q4 market positioning is converging on schedule.
-          </p>
-
-          {/* Neumorphic Inset Execution Progress Bar */}
-          <div className="neu-inset-box" style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 12 }}>
-              <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Company Execution Index (Sprint 14)</span>
-              <strong style={{ color: '#fff', fontFamily: 'var(--font-serif)' }}>72% ON TRACK</strong>
-            </div>
-            <div className="mini-progress-bar" style={{ height: 8, background: 'rgba(255, 255, 255, 0.05)' }}>
-              <div 
-                className="mini-bar-fill" 
-                style={{ 
-                  width: '72%', 
-                  background: 'linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #d4af37 100%)',
-                  boxShadow: '0 0 12px rgba(212, 175, 55, 0.4)'
-                }} 
-              />
-            </div>
-          </div>
-
-          {/* Quick Action Pill Bar */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button className="neu-pill-btn" onClick={() => onNavigate('projects')}>
-              <Layers size={14} style={{ color: '#818cf8' }} />
-              <span>Inspect Projects ({projects.length})</span>
-            </button>
-            <button className="neu-pill-btn" onClick={() => onNavigate('chat')}>
-              <ShieldCheck size={14} style={{ color: '#34d399' }} />
-              <span>Enter Executive Chat</span>
-            </button>
-            <button className="neu-pill-btn" onClick={() => onNavigate('team')}>
-              <Users size={14} style={{ color: '#38bdf8' }} />
-              <span>Org Hierarchy ({members.length})</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Bento Box 2: Capital & Treasury Capsule (Span 4) */}
-        <div className="bento-card bento-col-4 gold-border">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="neo-sub-roman">FISCUS • TREASURY</div>
-            <div className="neo-monogram">C</div>
-          </div>
-
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Treasury Cash Balance</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#fff', margin: '4px 0 12px', letterSpacing: '-0.02em' }}>
-            ₹4.20 <span style={{ fontSize: 18, color: 'var(--neo-gold)' }}>Cr</span>
-          </div>
-
-          <div className="neu-inset-box" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 4 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Monthly Revenue:</span>
-              <strong style={{ color: '#34d399' }}>₹24.5 L</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 4 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Monthly Net Burn:</span>
-              <strong style={{ color: '#f87171' }}>₹8.3 L</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Fiscal Runway:</span>
-              <strong style={{ color: 'var(--neo-gold)' }}>18.5 Months</strong>
-            </div>
-          </div>
-
-          <button 
-            className="neu-pill-btn" 
-            style={{ width: '100%', justifyContent: 'center' }}
-            onClick={() => onNavigate('reports')}
-          >
-            <DollarSign size={13} style={{ color: 'var(--neo-gold)' }} />
-            <span>Open Financial Ledger</span>
-          </button>
-        </div>
-
-        {/* Bento Box 3: Metric - Active Projects (Span 3) */}
-        <div className="bento-card bento-col-3" onClick={() => onNavigate('projects')} style={{ cursor: 'pointer' }}>
-          <div className="metric-header">
-            <span className="metric-label">Active Projects</span>
-            <div className="metric-icon-wrap blue"><Layers size={16} /></div>
-          </div>
-          <div className="metric-value">{activeProjectsCount}</div>
-          <div className="metric-footer positive">
-            <ArrowUpRight size={13} /> 2 launching this month
-          </div>
-        </div>
-
-        {/* Bento Box 4: Metric - Team Members (Span 3) */}
-        <div className="bento-card bento-col-3" onClick={() => onNavigate('team')} style={{ cursor: 'pointer' }}>
-          <div className="metric-header">
-            <span className="metric-label">Total Team</span>
-            <div className="metric-icon-wrap purple"><Users size={16} /></div>
-          </div>
-          <div className="metric-value">{totalMembers}</div>
-          <div className="metric-footer neutral">5 C-Suite • 4 Core • 2 Interns</div>
-        </div>
-
-        {/* Bento Box 5: Metric - Projects At Risk (Span 3) */}
-        <div className="bento-card bento-col-3" onClick={() => onNavigate('projects')} style={{ cursor: 'pointer' }}>
-          <div className="metric-header">
-            <span className="metric-label">Projects At Risk</span>
-            <div className="metric-icon-wrap orange"><AlertTriangle size={16} /></div>
-          </div>
-          <div className="metric-value">{atRiskProjectsCount}</div>
-          <div className="metric-footer warning">Zero delayed milestones</div>
-        </div>
-
-        {/* Bento Box 6: Metric - Deadlines (Span 3) */}
-        <div className="bento-card bento-col-3" onClick={() => onNavigate('tasks')} style={{ cursor: 'pointer' }}>
-          <div className="metric-header">
-            <span className="metric-label">Upcoming Deadlines</span>
-            <div className="metric-icon-wrap red"><Clock size={16} /></div>
-          </div>
-          <div className="metric-value">3</div>
-          <div className="metric-footer neutral">CCTV human detection due Wed</div>
-        </div>
-
-        {/* Bento Box 7: Department Matrix (Span 7) */}
-        <div className="bento-card bento-col-7">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <Building2 size={16} className="panel-icon gold" />
-              <h3 className="neo-serif-title" style={{ fontSize: 16 }}>Department Status & Executive Health</h3>
-            </div>
-            <span className="badge-subtle">4 Core Departments</span>
-          </div>
-
-          <div className="departments-ceo-list">
-            {departments.map((dept, index) => (
-              <div key={dept.id} className="dept-ceo-item">
-                <div className="dept-item-top">
-                  <div className="dept-item-identity">
-                    <span className="dept-color-bar" style={{ backgroundColor: dept.color }} />
-                    <div>
-                      <div className="dept-name-row">
-                        <span style={{ fontSize: 11, fontFamily: 'var(--font-serif)', color: 'var(--text-subtle)' }}>
-                          {['I', 'II', 'III', 'IV'][index]} •
-                        </span>
-                        <h4>{dept.name}</h4>
-                        <span className={`status-pill status-${(dept.status || 'Active').toLowerCase().replace(' ', '-')}`}>
-                          {dept.status || 'Active'}
-                        </span>
-                      </div>
-                      <div className="dept-lead-label">Lead: {dept.c_suite_leader}</div>
-                    </div>
-                  </div>
-
-                  <div className="dept-progress-wrap">
-                    <span className="dept-progress-pct">{dept.progress}%</span>
-                    <div className="mini-progress-bar">
-                      <div className="mini-bar-fill" style={{ width: `${dept.progress}%`, backgroundColor: dept.color }} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="dept-metrics-row">
-                  <span className="dept-stat"><strong>{dept.member_count}</strong> active staff</span>
-                  <span className="dept-stat-divider">•</span>
-                  <span className="dept-stat"><strong>{dept.pending_tasks_count}</strong> pending tasks</span>
-                </div>
-
-                {dept.critical_issues && dept.critical_issues.length > 0 && (
-                  <div className="dept-issue-box">
-                    <AlertTriangle size={13} style={{ color: 'var(--warning)', flexShrink: 0 }} />
-                    <span>{dept.critical_issues[0]}</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bento Box 8: Strategic Decisions & Audit History (Span 5) */}
-        <div className="bento-card bento-col-5">
-          <div className="panel-header">
-            <div className="panel-title-wrap">
-              <ShieldCheck size={16} className="panel-icon gold" />
-              <h3 className="neo-serif-title" style={{ fontSize: 16 }}>Strategic Decisions</h3>
-            </div>
-            <span className="badge-warning-soft">{pendingDecisionsCount} Pending</span>
-          </div>
-
-          <div className="decisions-list">
-            {strategicDecisions.map((decision, dIdx) => (
-              <div key={decision.id} className={`decision-item ${decision.status}`}>
-                <div className="decision-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-serif)', color: 'var(--neo-gold)' }}>
-                      {['I', 'II', 'III'][dIdx]}
-                    </span>
-                    <h5>{decision.title}</h5>
-                  </div>
-                  <span className={`impact-badge ${(decision.impact || 'medium').toLowerCase()}`}>
-                    {decision.impact || 'Medium'}
-                  </span>
-                </div>
-                <p className="decision-desc">{decision.description}</p>
-                <div className="decision-footer">
-                  <span className="decision-owner">Lead: {decision.owner}</span>
-                  <div className="decision-actions">
-                    {decision.status === 'pending' ? (
-                      <button 
-                        className="btn-tiny-success"
-                        onClick={() => updateDecisionStatus(decision.id, 'decided')}
-                      >
-                        <CheckCircle2 size={12} /> Approve
-                      </button>
-                    ) : (
-                      <span className="decision-finalized">
-                        <CheckCircle2 size={12} /> FINALIZED
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="neo-divider" />
-
-          {/* Recent Audit Mini Feed */}
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-subtle)', marginBottom: 8, letterSpacing: '0.05em' }}>
-            Latest Audit Entry
-          </div>
-          {activityLogs[0] && (
-            <div className="neu-inset-box" style={{ fontSize: 12 }}>
-              <div style={{ color: '#fff', fontWeight: 600 }}>{activityLogs[0].action}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 2 }}>{activityLogs[0].details}</div>
-              <div style={{ color: 'var(--text-subtle)', fontSize: 10, marginTop: 4 }}>
-                {activityLogs[0].user_name} • {new Date(activityLogs[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      {/* 3. QUICK STATS SUMMARY KPI CARDS (4 TILES) */}
+      <div className="dashboard-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 14, marginBottom: 24 }}>
+        {/* Today's Meetings */}
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('calendar')}>
+          <div>
+            <div className="stat-info">
+              <span className="title">Today's Meetings</span>
+              <div className="value" style={{ color: '#38bdf8' }}>{todayMeetings.length}</div>
+              <div className="subtitle" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: todayMeetings.length > 0 ? '#22c55e' : '#71717a' }} />
+                <span>{todayMeetings.length > 0 ? `${todayMeetings.length} scheduled today` : 'No meetings today'}</span>
               </div>
             </div>
-          )}
+          </div>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8' }}>
+            <Video size={18} />
+          </div>
         </div>
 
-        {/* Bento Box 9: Access Clearance & Waiting List Queue (Span 12) */}
-        <div className="bento-card bento-col-12" style={{ border: '1px solid rgba(212, 175, 55, 0.3)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        {/* Assigned Tasks Pending */}
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('tasks', 'mine')}>
+          <div>
+            <div className="stat-info">
+              <span className="title">Tasks Assigned to Me</span>
+              <div className="value" style={{ color: '#60a5fa' }}>{pendingAssignedCount}</div>
+              <div className="subtitle" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: pendingAssignedCount > 0 ? '#3b82f6' : '#22c55e' }} />
+                <span>{pendingAssignedCount > 0 ? 'Pending deliverables' : 'All tasks cleared'}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa' }}>
+            <CheckSquare size={18} />
+          </div>
+        </div>
+
+        {/* Tasks Given / Delegated by Me */}
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('tasks', 'delegated')}>
+          <div>
+            <div className="stat-info">
+              <span className="title">Tasks Given by Me</span>
+              <div className="value" style={{ color: '#c084fc' }}>{tasksGivenByMe.length}</div>
+              <div className="subtitle" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7' }} />
+                <span>Tasks delegated to members</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c084fc' }}>
+            <Users size={18} />
+          </div>
+        </div>
+
+        {/* Completed Deliverables */}
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('saved')}>
+          <div>
+            <div className="stat-info">
+              <span className="title">Completed Tasks</span>
+              <div className="value" style={{ color: '#4ade80' }}>{completedDeliverablesCount}</div>
+              <div className="subtitle" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
+                <span>Finished deliverables</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80' }}>
+            <CheckCircle2 size={18} />
+          </div>
+        </div>
+      </div>
+
+      {/* 4. MAIN DUAL SECTION: LEFT TODAY'S MEETINGS, RIGHT TODAY'S TASKS */}
+      <div 
+        className="dashboard-dual-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
+          gap: 20,
+          alignItems: 'start'
+        }}
+      >
+        {/* =========================================================================
+            LEFT COLUMN: TODAY'S MEETINGS & CONFERENCES (GOOGLE MEET)
+            ========================================================================= */}
+        <div 
+          className="bento-card" 
+          style={{ 
+            padding: 24,
+            background: 'rgba(12, 16, 26, 0.55)',
+            backdropFilter: 'blur(28px) saturate(170%)',
+            WebkitBackdropFilter: 'blur(28px) saturate(170%)',
+            border: '1px solid rgba(255, 255, 255, 0.11)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ 
-                padding: '4px 8px', 
-                background: 'rgba(0, 0, 0, 0.4)', 
-                borderRadius: 8, 
-                border: '1px solid rgba(212, 175, 55, 0.3)',
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
                 display: 'flex',
-                alignItems: 'center'
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#38bdf8'
               }}>
-                <img src="/ceovaimage.png" alt="Ceova" style={{ height: 20, width: 'auto' }} />
+                <Video size={18} />
               </div>
               <div>
-                <span className="neo-sub-roman">V • ADMISSIONES ET VETTING • ACCESS CLEARANCE QUEUE</span>
-                <h3 className="neo-serif-title" style={{ fontSize: 18, margin: '2px 0 0', color: '#fff' }}>
-                  New User Admission & Waiting List
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                  Today's Meetings
                 </h3>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {todayMeetings.length} video conferences for today
+                </span>
               </div>
             </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span className="badge-gold">
-                {pendingWaitlist.length} Applicants Awaiting CEO Approval
-              </span>
-            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('calendar')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                background: 'transparent',
+                border: 'none',
+                color: '#60a5fa',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Full Calendar <ArrowRight size={13} />
+            </button>
           </div>
 
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, maxWidth: 840, lineHeight: 1.5 }}>
-            External candidates, contractors, and incoming team members requesting entry to Ceova Team OS.
-            As Founder & CEO, your executive clearance activates their cryptographic profile and departmental workspace.
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 14 }}>
-            {waitlistRequests.map((req) => (
-              <div 
-                key={req.id} 
-                className="neu-inset-box" 
-                style={{ 
-                  padding: '16px 18px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  borderLeft: req.status === 'pending' 
-                    ? '3px solid var(--accent-primary)' 
-                    : req.status === 'approved' 
-                      ? '3px solid #3b82f6' 
-                      : '3px solid #ef4444'
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <div>
-                      <h4 style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: 0 }}>{req.full_name}</h4>
-                      <div style={{ fontSize: 11.5, color: 'var(--accent-primary)', marginTop: 2, fontWeight: 600 }}>
-                        {req.department} • <span style={{ textTransform: 'capitalize' }}>{req.requested_role}</span>
-                      </div>
-                    </div>
-                    <span 
-                      className={`status-pill status-${req.status === 'approved' ? 'completed' : req.status === 'rejected' ? 'blocked' : 'in_progress'}`}
-                      style={{ fontSize: 10 }}
-                    >
-                      {req.status === 'pending' ? 'WAITLIST QUEUED' : req.status.toUpperCase()}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '8px 0 10px', fontSize: 11.5, color: 'var(--text-muted)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Mail size={12} style={{ color: 'var(--accent-primary)' }} />
-                      <span>{req.email}</span>
-                    </div>
-                    {req.phone && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Phone size={12} style={{ color: 'var(--accent-primary)' }} />
-                        <span>{req.phone}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ 
-                    padding: '8px 10px', 
-                    background: 'rgba(255, 255, 255, 0.03)', 
-                    borderRadius: 8, 
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
+          {/* Meetings List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {todayMeetings.length === 0 ? (
+              <div style={{
+                padding: '36px 20px',
+                textAlign: 'center',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px dashed rgba(255, 255, 255, 0.1)',
+                borderRadius: 14,
+                color: 'var(--text-muted)'
+              }}>
+                <Video size={32} style={{ opacity: 0.3, margin: '0 auto 10px' }} />
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', marginBottom: 4 }}>
+                  No Meetings Scheduled for Today
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 16 }}>
+                  You have no pending video conferences today. You have quiet focus time!
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('calendar')}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 8,
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: '#ffffff',
                     fontSize: 12,
-                    color: 'var(--text-main)',
-                    lineHeight: 1.4,
-                    marginBottom: 12
-                  }}>
-                    "{req.reason}"
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <span style={{ fontSize: 10.5, color: 'var(--text-subtle)' }}>
-                    Requested: {new Date(req.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-
-                  {req.status === 'pending' ? (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button 
-                        className="btn-tiny-success"
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11.5, borderRadius: 6, cursor: 'pointer' }}
-                        onClick={() => resolveWaitlistRequest(req.id, 'approved')}
-                      >
-                        <UserCheck size={13} /> Grant Clearance
-                      </button>
-                      <button 
-                        className="btn-tiny-danger"
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: 11.5, borderRadius: 6, cursor: 'pointer' }}
-                        onClick={() => resolveWaitlistRequest(req.id, 'rejected')}
-                      >
-                        <XCircle size={13} /> Decline
-                      </button>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: 11, color: req.status === 'approved' ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                      {req.status === 'approved' ? '✓ Clearance Granted' : '✕ Request Declined'}
-                    </span>
-                  )}
-                </div>
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  View Full Schedule
+                </button>
               </div>
-            ))}
+            ) : (
+              todayMeetings.map(meet => {
+                const cat = CATEGORY_CONFIG[meet.category] || CATEGORY_CONFIG.general;
+                const isCopied = copiedMeetId === meet.id;
+
+                return (
+                  <div
+                    key={meet.id}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.035)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: 14,
+                      padding: '16px 18px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            background: cat.bg,
+                            color: cat.color,
+                            border: `1px solid ${cat.border}40`,
+                            textTransform: 'uppercase'
+                          }}>
+                            {cat.label}
+                          </span>
+
+                          <span style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 11,
+                            color: '#60a5fa',
+                            fontWeight: 600
+                          }}>
+                            <Clock size={12} />
+                            {meet.start_time} ({meet.duration_minutes} min)
+                          </span>
+                        </div>
+
+                        <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#ffffff' }}>
+                          {meet.title}
+                        </h4>
+                      </div>
+                    </div>
+
+                    {meet.description && (
+                      <p style={{ margin: '0 0 12px 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                        {meet.description}
+                      </p>
+                    )}
+
+                    {/* Actions: Join Google Meet + Copy Link */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-subtle)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Users size={12} />
+                        <span>{meet.target_type === 'all' ? 'All Team Members' : (meet.attendee_names?.join(', ') || 'Invited')}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyLink(meet)}
+                          title="Copy Google Meet URL"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '6px 10px',
+                            borderRadius: 6,
+                            background: isCopied ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                            border: isCopied ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: isCopied ? '#34d399' : 'var(--text-muted)',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                          <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                        </button>
+
+                        <a
+                          href={sanitizeUrl(meet.meet_link)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 14px',
+                            borderRadius: 6,
+                            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                            color: '#ffffff',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)'
+                          }}
+                        >
+                          <Video size={13} />
+                          Join Google Meet
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            {/* Upcoming meetings preview if fewer than 2 today */}
+            {todayMeetings.length < 2 && upcomingMeetings.filter(m => m.date > todayStr).length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                  Coming Up Next
+                </div>
+                {upcomingMeetings.filter(m => m.date > todayStr).slice(0, 2).map(m => (
+                  <div 
+                    key={m.id}
+                    onClick={() => onNavigate('calendar')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      marginBottom: 6,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#ffffff' }}>{m.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{m.date} at {m.start_time}</div>
+                    </div>
+                    <ChevronRight size={14} style={{ color: 'var(--text-subtle)' }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* =========================================================================
+            RIGHT COLUMN: TODAY'S TASKS & DELEGATED TASKS
+            ========================================================================= */}
+        <div 
+          className="bento-card" 
+          style={{ 
+            padding: 24,
+            background: 'rgba(12, 16, 26, 0.55)',
+            backdropFilter: 'blur(28px) saturate(170%)',
+            WebkitBackdropFilter: 'blur(28px) saturate(170%)',
+            border: '1px solid rgba(255, 255, 255, 0.11)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
+          }}
+        >
+          {/* Header with Switch Tabs */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div>
+              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                Work & Deliverables
+              </h3>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Track tasks assigned to you or delegated to members
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('tasks')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                background: 'transparent',
+                border: 'none',
+                color: '#60a5fa',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              All Tasks <ArrowRight size={13} />
+            </button>
+          </div>
+
+          {/* Toggle Pills: Assigned To Me vs Tasks Given By Me */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'rgba(0, 0, 0, 0.35)',
+            padding: 4,
+            borderRadius: 10,
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            marginBottom: 16
+          }}>
+            <button
+              type="button"
+              onClick={() => setTaskViewTab('assigned')}
+              style={{
+                flex: 1,
+                padding: '7px 12px',
+                borderRadius: 8,
+                border: 'none',
+                background: taskViewTab === 'assigned' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+                color: taskViewTab === 'assigned' ? '#ffffff' : 'var(--text-muted)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Assigned to Me ({myAssignedTasks.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTaskViewTab('given')}
+              style={{
+                flex: 1,
+                padding: '7px 12px',
+                borderRadius: 8,
+                border: 'none',
+                background: taskViewTab === 'given' ? 'rgba(168, 85, 247, 0.25)' : 'transparent',
+                color: taskViewTab === 'given' ? '#ffffff' : 'var(--text-muted)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              Given by Me ({tasksGivenByMe.length})
+            </button>
+          </div>
+
+          {/* Task Feed */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {taskViewTab === 'assigned' ? (
+              myAssignedTasks.length === 0 ? (
+                <div style={{
+                  padding: '36px 20px',
+                  textAlign: 'center',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px dashed rgba(255, 255, 255, 0.1)',
+                  borderRadius: 14,
+                  color: 'var(--text-muted)'
+                }}>
+                  <CheckSquare size={32} style={{ opacity: 0.3, margin: '0 auto 10px' }} />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', marginBottom: 4 }}>
+                    No Tasks Assigned to You
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 16 }}>
+                    You currently have no tasks assigned to your queue.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('tasks')}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Open Tasks Board
+                  </button>
+                </div>
+              ) : (
+                myAssignedTasks.slice(0, 5).map(task => {
+                  const pBadge = getPriorityBadge(task.priority);
+                  const sBadge = getStatusBadge(task.status);
+
+                  return (
+                    <div
+                      key={task.id}
+                      onClick={() => onNavigate('tasks')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.035)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: 12,
+                        padding: '14px 16px',
+                        cursor: 'pointer',
+                        transition: 'transform 0.15s ease, border-color 0.15s ease',
+                        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 7px',
+                            borderRadius: 4,
+                            background: pBadge.bg,
+                            color: pBadge.color,
+                            border: `1px solid ${pBadge.border}`
+                          }}>
+                            {pBadge.label}
+                          </span>
+
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '2px 7px',
+                            borderRadius: 4,
+                            background: sBadge.bg,
+                            color: sBadge.color,
+                            border: `1px solid ${sBadge.border}`
+                          }}>
+                            {sBadge.label}
+                          </span>
+                        </div>
+
+                        {task.due_date && (
+                          <div style={{ fontSize: 11, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Clock size={11} />
+                            <span>Due: {task.due_date}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', marginBottom: 4 }}>
+                        {task.title}
+                      </div>
+
+                      {task.assigned_by_name && (
+                        <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>
+                          Given by: <strong style={{ color: '#e4e4e7' }}>{task.assigned_by_name}</strong>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )
+            ) : (
+              /* TASKS GIVEN / DELEGATED BY ME */
+              tasksGivenByMe.length === 0 ? (
+                <div style={{
+                  padding: '36px 20px',
+                  textAlign: 'center',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px dashed rgba(255, 255, 255, 0.1)',
+                  borderRadius: 14,
+                  color: 'var(--text-muted)'
+                }}>
+                  <Users size={32} style={{ opacity: 0.3, margin: '0 auto 10px' }} />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', marginBottom: 4 }}>
+                    No Tasks Delegated Yet
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginBottom: 16 }}>
+                    You haven't assigned any deliverables to team members yet.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('tasks')}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Assign a Task
+                  </button>
+                </div>
+              ) : (
+                tasksGivenByMe.slice(0, 5).map(task => {
+                  const pBadge = getPriorityBadge(task.priority);
+                  const sBadge = getStatusBadge(task.status);
+
+                  return (
+                    <div
+                      key={task.id}
+                      onClick={() => onNavigate('tasks')}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.035)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: 12,
+                        padding: '14px 16px',
+                        cursor: 'pointer',
+                        transition: 'transform 0.15s ease, border-color 0.15s ease',
+                        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 7px',
+                            borderRadius: 4,
+                            background: pBadge.bg,
+                            color: pBadge.color,
+                            border: `1px solid ${pBadge.border}`
+                          }}>
+                            {pBadge.label}
+                          </span>
+
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '2px 7px',
+                            borderRadius: 4,
+                            background: sBadge.bg,
+                            color: sBadge.color,
+                            border: `1px solid ${sBadge.border}`
+                          }}>
+                            {sBadge.label}
+                          </span>
+                        </div>
+
+                        {task.due_date && (
+                          <div style={{ fontSize: 11, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Clock size={11} />
+                            <span>Due: {task.due_date}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff', marginBottom: 4 }}>
+                        {task.title}
+                      </div>
+
+                      <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>
+                        Given to: <strong style={{ color: '#60a5fa' }}>{task.assigned_to_name || 'Team Member'}</strong>
+                      </div>
+                    </div>
+                  );
+                })
+              )
+            )}
           </div>
         </div>
       </div>

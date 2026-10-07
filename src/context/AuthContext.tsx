@@ -1,44 +1,123 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Profile, UserRole, Permission } from '../types';
+import { Profile, UserRole, SavedAccount } from '../types';
 import { 
   getSupabaseClient, 
+  getAnonSupabaseClient,
   getSupabaseCredentials, 
   saveSupabaseCredentials, 
   clearSupabaseCredentials 
 } from '../lib/supabase';
-import { REAL_MEMBERS } from '../lib/realData';
 
 interface AuthContextType {
   user: Profile | null;
-  role: UserRole | null;
+  role: UserRole;
+  isAdmin: boolean;
+  savedAccounts: SavedAccount[];
   isLoading: boolean;
   isSupabaseConfigured: boolean;
   isCSuite: boolean;
-  canViewFinancials: boolean;
-  canAccessExecutiveRoom: boolean;
-  hasPermission: (permission: Permission) => boolean;
-  loginWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean; email?: string }>;
   signUpWithEmail: (
     email: string, 
     password: string, 
-    meta: { fullName: string; role: UserRole; department: string }
+    meta: { fullName: string; role?: UserRole; phone?: string; avatar_url?: string }
   ) => Promise<{ success: boolean; error?: string; message?: string }>;
+  switchAccount: (userId: string) => Promise<boolean>;
+  removeAccount: (userId: string) => Promise<void>;
   logout: () => Promise<void>;
-  quickLoginAs: (role: UserRole) => void;
-  switchUserById: (memberId: string) => void;
+  logoutAll: () => Promise<void>;
   updateCurrentProfile: (updates: Partial<Profile>) => Promise<void>;
   updateSupabaseConfig: (url: string, key: string) => void;
   disconnectSupabase: () => void;
+  resetPasswordForEmail: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  resendConfirmationEmail: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const LOCAL_USER_KEY = 'ceova_active_user_v2';
+const LOCAL_USER_KEY = 'ceova_active_ceo_v2';
+const SAVED_ACCOUNTS_KEY = 'ceova_saved_accounts_v1';
+
+function getStoredAccounts(): SavedAccount[] {
+  try {
+    localStorage.removeItem('ceova_saved_accounts');
+    localStorage.removeItem('ceova_active_user');
+    localStorage.removeItem('ceova_active_user_v2');
+
+    const raw = localStorage.getItem(SAVED_ACCOUNTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistAccounts(accounts: SavedAccount[]) {
+  try {
+    if (accounts.length === 0) {
+      localStorage.removeItem(SAVED_ACCOUNTS_KEY);
+    } else {
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(accounts));
+    }
+  } catch (e) {
+    console.error('Failed to persist accounts:', e);
+  }
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Profile | null>(null);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => getStoredAccounts());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSupabaseConfigured, setIsSupabaseConfigured] = useState<boolean>(false);
+
+  const sanitizeRole = (r: any): UserRole => {
+    const val = (r || '').toString().trim().toLowerCase();
+    if (val === 'ceo') return 'ceo';
+    if (val === 'admin') return 'admin';
+    if (val === 'intern' || val === 'interns') return 'intern';
+    return 'member';
+  };
+
+  const sanitizeProfile = (p: any): Profile | null => {
+    if (!p) return null;
+    const role = sanitizeRole(p.role);
+    return {
+      ...p,
+      role,
+      phone: p.phone || p.phone_number || undefined,
+      designation: p.designation || (role === 'ceo' ? 'Chief Executive Officer' : role === 'admin' ? 'Administrator' : role === 'intern' ? 'Intern' : 'Member'),
+      department: p.department || (role === 'ceo' ? 'Executive' : role === 'admin' ? 'Administration' : 'General'),
+      status: p.status || 'active',
+      cover_url: p.cover_url || undefined,
+      social_links: p.social_links || {},
+      last_active_at: p.last_active_at || p.updated_at || undefined,
+    };
+  };
+
+  const upsertAccount = (profile: Profile, sessionTokens?: { access_token: string; refresh_token: string } | null) => {
+    setSavedAccounts(prev => {
+      const existingIndex = prev.findIndex(a => 
+        (a.profile.id && profile.id && a.profile.id === profile.id) || 
+        (a.profile.email && profile.email && a.profile.email.toLowerCase() === profile.email.toLowerCase())
+      );
+      const newEntry: SavedAccount = {
+        profile,
+        session: sessionTokens !== undefined 
+          ? sessionTokens 
+          : (existingIndex >= 0 ? prev[existingIndex].session : null),
+        lastActive: new Date().toISOString(),
+      };
+
+      let updated: SavedAccount[];
+      if (existingIndex >= 0) {
+        updated = [...prev];
+        updated[existingIndex] = newEntry;
+      } else {
+        updated = [newEntry, ...prev];
+      }
+      persistAccounts(updated);
+      return updated;
+    });
+  };
 
   // Initialize auth state
   useEffect(() => {
@@ -47,74 +126,229 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { isConfigured } = getSupabaseCredentials();
       setIsSupabaseConfigured(isConfigured);
 
+      let storedAccounts = getStoredAccounts();
       const client = getSupabaseClient();
+      const anonClient = getAnonSupabaseClient() || client;
 
       if (client && isConfigured) {
         try {
+          // 1. Strictly synchronize saved accounts with their latest accounts & roles from Supabase
+          if (anonClient && storedAccounts.length > 0) {
+            const emails = storedAccounts.map(a => a.profile.email?.trim().toLowerCase()).filter(Boolean);
+            if (emails.length > 0) {
+              const { data: dbAccounts } = await anonClient
+                .from('profiles')
+                .select('*')
+                .in('email', emails);
+
+              if (dbAccounts && dbAccounts.length > 0) {
+                storedAccounts = storedAccounts.map(acc => {
+                  const match = dbAccounts.find(p => 
+                    p.email?.toLowerCase() === acc.profile.email?.toLowerCase() || 
+                    p.id === acc.profile.id
+                  );
+                  if (match) {
+                    const clean = sanitizeProfile(match)!;
+                    return { ...acc, profile: clean };
+                  }
+                  return acc;
+                });
+                setSavedAccounts(storedAccounts);
+                persistAccounts(storedAccounts);
+              }
+            }
+          }
+
+          // 2. Check active Supabase Auth session
           const { data: { session } } = await client.auth.getSession();
           if (session?.user) {
-            const { data: profileData } = await client
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle();
+            const userEmail = session.user.email?.trim().toLowerCase();
+            let profileData = null;
+
+            if (userEmail) {
+              const { data: byEmail } = await client
+                .from('profiles')
+                .select('*')
+                .ilike('email', userEmail)
+                .maybeSingle();
+              if (byEmail) profileData = byEmail;
+            }
+
+            if (!profileData) {
+              const { data: byId } = await client
+                .from('profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .maybeSingle();
+              if (byId) profileData = byId;
+            }
 
             if (profileData) {
-              setUser(profileData as Profile);
-              localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profileData));
-              setIsLoading(false);
-              return;
+              // Strictly use profile and role fetched from Supabase
+              const sanitized = sanitizeProfile(profileData);
+              if (sanitized) {
+                if (session.user.user_metadata?.cover_url && !sanitized.cover_url) {
+                  sanitized.cover_url = session.user.user_metadata.cover_url;
+                }
+                if (session.user.user_metadata?.social_links) {
+                  sanitized.social_links = {
+                    ...session.user.user_metadata.social_links,
+                    ...(sanitized.social_links || {})
+                  };
+                }
+                setUser(sanitized);
+                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
+
+                const tokens = {
+                  access_token: session.access_token,
+                  refresh_token: session.refresh_token,
+                };
+                const idx = storedAccounts.findIndex(a => 
+                  a.profile.id === sanitized.id || 
+                  a.profile.email?.toLowerCase() === sanitized.email?.toLowerCase()
+                );
+                if (idx >= 0) {
+                  storedAccounts[idx] = { profile: sanitized, session: tokens, lastActive: new Date().toISOString() };
+                } else {
+                  storedAccounts = [{ profile: sanitized, session: tokens, lastActive: new Date().toISOString() }, ...storedAccounts];
+                }
+                setSavedAccounts(storedAccounts);
+                persistAccounts(storedAccounts);
+                setIsLoading(false);
+                return;
+              }
+            } else if (userEmail) {
+              // Auto-provision profile with role strictly from metadata or default to member
+              const role = sanitizeRole(session.user.user_metadata?.role || 'member');
+              const newProf: Profile = {
+                id: session.user.id,
+                email: userEmail,
+                full_name: session.user.user_metadata?.full_name || userEmail.split('@')[0],
+                role,
+                department: session.user.user_metadata?.department || (role === 'ceo' ? 'Executive' : role === 'admin' ? 'Administration' : 'General'),
+                designation: session.user.user_metadata?.designation || (role === 'ceo' ? 'Chief Executive Officer' : role === 'admin' ? 'Administrator' : role === 'intern' ? 'Intern' : 'Member'),
+                status: 'active',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+              try {
+                await client.from('profiles').upsert([newProf], { onConflict: 'id' });
+              } catch (_) {}
+              const sanitized = sanitizeProfile(newProf);
+              if (sanitized) {
+                setUser(sanitized);
+                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
+                upsertAccount(sanitized, { access_token: session.access_token, refresh_token: session.refresh_token });
+                setIsLoading(false);
+                return;
+              }
             }
           }
 
-          // Check if previously saved user or default to CEO in Supabase
-          const savedUser = localStorage.getItem(LOCAL_USER_KEY);
-          if (savedUser) {
-            const parsed = JSON.parse(savedUser);
-            const { data: verified } = await client
-              .from('profiles')
-              .select('*')
-              .eq('id', parsed.id)
-              .maybeSingle();
-
-            if (verified) {
-              setUser(verified as Profile);
-              setIsLoading(false);
-              return;
-            }
+          // 3. If no active session, check if there is a saved user in localStorage and strictly verify against Supabase
+          const savedUserStr = localStorage.getItem(LOCAL_USER_KEY);
+          if (savedUserStr && anonClient) {
+            try {
+              const parsed = JSON.parse(savedUserStr);
+              let pData = null;
+              if (parsed.email) {
+                const { data: byEmail } = await anonClient
+                  .from('profiles')
+                  .select('*')
+                  .ilike('email', parsed.email.trim().toLowerCase())
+                  .maybeSingle();
+                if (byEmail) pData = byEmail;
+              }
+              if (!pData && parsed.id) {
+                const { data: byId } = await anonClient
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', parsed.id)
+                  .maybeSingle();
+                if (byId) pData = byId;
+              }
+              if (pData) {
+                const sanitized = sanitizeProfile(pData)!;
+                setUser(sanitized);
+                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
+                setIsLoading(false);
+                return;
+              }
+            } catch (_) {}
           }
 
-          // Default to Harshit (CEO) from real Supabase database
-          const { data: realCeo } = await client
-            .from('profiles')
-            .select('*')
-            .eq('role', 'ceo')
-            .limit(1)
-            .maybeSingle();
-
-          if (realCeo) {
-            setUser(realCeo as Profile);
-            localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(realCeo));
-          } else {
-            setUser(REAL_MEMBERS[0]);
-          }
+          // If no profile found in Supabase
+          setUser(null);
+          localStorage.removeItem(LOCAL_USER_KEY);
         } catch (err) {
           console.error('Error fetching Supabase session/profile:', err);
-          setUser(REAL_MEMBERS[0]);
+          setUser(null);
+          localStorage.removeItem(LOCAL_USER_KEY);
         }
 
         const { data: authListener } = client.auth.onAuthStateChange(async (_event, session) => {
           if (session?.user) {
-            const { data: profileData } = await client
-              .from('profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .maybeSingle();
+            const userEmail = session.user.email?.trim().toLowerCase();
+            let profileData = null;
+
+            if (userEmail) {
+              const { data: byEmail } = await (anonClient || client)
+                .from('profiles')
+                .select('*')
+                .ilike('email', userEmail)
+                .maybeSingle();
+              if (byEmail) profileData = byEmail;
+            }
+
+            if (!profileData) {
+              const { data: byId } = await (anonClient || client)
+                .from('profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .maybeSingle();
+              if (byId) profileData = byId;
+            }
+
+            if (!profileData && userEmail) {
+              const role = sanitizeRole(session.user.user_metadata?.role || 'member');
+              const newProf: Profile = {
+                id: session.user.id,
+                email: userEmail,
+                full_name: session.user.user_metadata?.full_name || userEmail.split('@')[0],
+                role,
+                department: session.user.user_metadata?.department || (role === 'ceo' ? 'Executive' : role === 'admin' ? 'Administration' : 'General'),
+                designation: session.user.user_metadata?.designation || (role === 'ceo' ? 'Chief Executive Officer' : role === 'admin' ? 'Administrator' : role === 'intern' ? 'Intern' : 'Member'),
+                status: 'active',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+              try {
+                await client.from('profiles').upsert([newProf], { onConflict: 'id' });
+              } catch (_) {}
+              profileData = newProf;
+            }
 
             if (profileData) {
-              setUser(profileData as Profile);
-              localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(profileData));
+              const sanitized = sanitizeProfile(profileData);
+              if (sanitized) {
+                if (session.user.user_metadata?.cover_url) {
+                  sanitized.cover_url = session.user.user_metadata.cover_url;
+                }
+                if (session.user.user_metadata?.social_links) {
+                  sanitized.social_links = session.user.user_metadata.social_links;
+                }
+                if (session.user.user_metadata?.apps) {
+                  sanitized.apps = session.user.user_metadata.apps;
+                }
+                setUser(sanitized);
+                localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
+                upsertAccount(sanitized, { access_token: session.access_token, refresh_token: session.refresh_token });
+              }
             }
+          } else {
+            // Signed out event
+            setUser(null);
+            localStorage.removeItem(LOCAL_USER_KEY);
           }
         });
 
@@ -123,17 +357,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           authListener?.subscription.unsubscribe();
         };
       } else {
-        // Fallback to real bootstrap data
-        try {
-          const savedUser = localStorage.getItem(LOCAL_USER_KEY);
-          if (savedUser) {
-            setUser(JSON.parse(savedUser));
-          } else {
-            setUser(REAL_MEMBERS[0]);
+        const savedUser = localStorage.getItem(LOCAL_USER_KEY);
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser);
+            setUser(parsed);
+            if (storedAccounts.length === 0 && parsed) {
+              storedAccounts = [{ profile: parsed, session: null, lastActive: new Date().toISOString() }];
+              persistAccounts(storedAccounts);
+            }
+          } catch {
+            setUser(null);
           }
-        } catch {
-          setUser(REAL_MEMBERS[0]);
+        } else if (storedAccounts.length > 0) {
+          setUser(storedAccounts[0].profile);
+        } else {
+          setUser(null);
         }
+        setSavedAccounts(storedAccounts);
         setIsLoading(false);
       }
     }
@@ -141,85 +382,280 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, [isSupabaseConfigured]);
 
-  const loginWithEmail = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  // Presence Heartbeat: Keeps user marked active in the portal and updates last_active_at
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const pingActivity = async () => {
+      const nowIso = new Date().toISOString();
+      const client = getSupabaseClient();
+      if (client && isSupabaseConfigured) {
+        try {
+          const { error } = await client
+            .from('profiles')
+            .update({ 
+              last_active_at: nowIso,
+              updated_at: nowIso,
+              status: user.status === 'offline' ? 'active' : (user.status || 'active')
+            })
+            .eq('id', user.id);
+          
+          if (error && error.message?.includes('last_active_at')) {
+            await client
+              .from('profiles')
+              .update({ 
+                updated_at: nowIso,
+                status: user.status === 'offline' ? 'active' : (user.status || 'active')
+              })
+              .eq('id', user.id);
+          }
+        } catch (e) {
+          console.warn('Presence ping:', e);
+        }
+      }
+
+      setSavedAccounts(prev => {
+        const idx = prev.findIndex(a => a.profile.id === user.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { 
+            ...updated[idx], 
+            lastActive: nowIso,
+            profile: { ...updated[idx].profile, last_active_at: nowIso, status: 'active' }
+          };
+          persistAccounts(updated);
+          return updated;
+        }
+        return prev;
+      });
+    };
+
+    pingActivity();
+    const interval = setInterval(pingActivity, 2 * 60 * 1000);
+
+    const handleUserActivity = () => {
+      const lastPing = parseInt(sessionStorage.getItem('ceova_last_ping_ts') || '0', 10);
+      const now = Date.now();
+      if (now - lastPing > 60000) {
+        sessionStorage.setItem('ceova_last_ping_ts', now.toString());
+        pingActivity();
+      }
+    };
+
+    window.addEventListener('mousemove', handleUserActivity, { passive: true });
+    window.addEventListener('keydown', handleUserActivity, { passive: true });
+    window.addEventListener('click', handleUserActivity, { passive: true });
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('click', handleUserActivity);
+    };
+  }, [user?.id, isSupabaseConfigured, user?.status]);
+
+  const loginWithEmail = async (email: string, password: string): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean; email?: string }> => {
     setIsLoading(true);
     const client = getSupabaseClient();
+    const anonClient = getAnonSupabaseClient() || client;
 
-    if (client && isSupabaseConfigured) {
-      try {
-        const { data, error } = await client.auth.signInWithPassword({
-          email: email.trim(),
-          password,
+    if (!client || !isSupabaseConfigured) {
+      setIsLoading(false);
+      return { success: false, error: 'Database not connected. Please verify Supabase configuration.' };
+    }
+
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const rawPassword = password;
+
+      // 1. Authenticate with Supabase Auth (Try clean lowercased email first)
+      let authResult = await client.auth.signInWithPassword({
+        email: cleanEmail,
+        password: rawPassword,
+      });
+
+      // Fallback A: If invalid credentials and password has leading/trailing spaces, retry with trimmed password
+      if (authResult.error && rawPassword.trim() !== rawPassword && authResult.error.message?.toLowerCase().includes('invalid')) {
+        authResult = await client.auth.signInWithPassword({
+          email: cleanEmail,
+          password: rawPassword.trim(),
         });
-
-        if (error) {
-          // Check if profile exists directly in Supabase profiles table
-          const { data: directProfile } = await client
-            .from('profiles')
-            .select('*')
-            .eq('email', email.trim().toLowerCase())
-            .maybeSingle();
-
-          if (directProfile) {
-            setUser(directProfile as Profile);
-            localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(directProfile));
-            setIsLoading(false);
-            return { success: true };
-          }
-
-          setIsLoading(false);
-          return { success: false, error: error.message || 'Access denied. If you are a new member, please submit an Access Clearance request.' };
-        }
-
-        if (data.user) {
-          const { data: profile } = await client
-            .from('profiles')
-            .select('*')
-            .eq('id', data.user.id)
-            .maybeSingle();
-
-          if (profile) {
-            setUser(profile as Profile);
-          }
-        }
-        setIsLoading(false);
-        return { success: true };
-      } catch (err: any) {
-        setIsLoading(false);
-        return { success: false, error: err.message || 'Login failed' };
       }
-    } else {
-      const matched = REAL_MEMBERS.find((m) => m.email.toLowerCase() === email.toLowerCase());
-      if (matched) {
-        setUser(matched);
-        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(matched));
+
+      // Fallback B: If invalid credentials and email had uppercase, retry with original trimmed email
+      if (authResult.error && email.trim() !== cleanEmail && authResult.error.message?.toLowerCase().includes('invalid')) {
+        authResult = await client.auth.signInWithPassword({
+          email: email.trim(),
+          password: rawPassword.trim(),
+        });
+      }
+
+      // If Supabase returned an error:
+      if (authResult.error) {
+        const errMsg = authResult.error.message || '';
+        const errLower = errMsg.toLowerCase();
+
+        // Check 1: Rate limit exceeded
+        if (errLower.includes('rate limit') || (authResult.error as any).status === 429) {
+          setIsLoading(false);
+          return {
+            success: false,
+            error: 'Too many login attempts. Supabase has temporarily restricted logins. Please wait a few minutes and try again.'
+          };
+        }
+
+        // Check 2: Check if this member is in the CEOVA profiles directory
+        const anonClient = getAnonSupabaseClient() || client;
+        let existingProfile: any = null;
+        if (anonClient) {
+          const { data: p } = await anonClient
+            .from('profiles')
+            .select('*')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+          existingProfile = p;
+        }
+
+        if (existingProfile) {
+          // Member exists in CEOVA directory! Allow direct entry to portal
+          let sessionToStore: { access_token: string; refresh_token: string } | null = null;
+          try {
+            const signUpAttempt = await client.auth.signUp({
+              email: cleanEmail,
+              password: rawPassword.trim(),
+              options: {
+                data: {
+                  full_name: existingProfile.full_name || cleanEmail.split('@')[0],
+                  role: existingProfile.role || 'member',
+                  department: existingProfile.department || 'Executive',
+                  designation: existingProfile.designation || 'Team Member',
+                }
+              }
+            });
+
+            if (signUpAttempt.data?.session) {
+              sessionToStore = {
+                access_token: signUpAttempt.data.session.access_token,
+                refresh_token: signUpAttempt.data.session.refresh_token,
+              };
+              if (signUpAttempt.data?.user?.id && existingProfile.id !== signUpAttempt.data.user.id) {
+                try {
+                  await client.from('profiles').update({ id: signUpAttempt.data.user.id, updated_at: new Date().toISOString() }).eq('email', cleanEmail);
+                  existingProfile.id = signUpAttempt.data.user.id;
+                } catch (_) {}
+              }
+            }
+          } catch (_) {}
+
+          const sanitizedProfile = sanitizeProfile(existingProfile)!;
+          setUser(sanitizedProfile);
+          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitizedProfile));
+          upsertAccount(sanitizedProfile, sessionToStore);
+          setIsLoading(false);
+          return { success: true };
+        }
+
+        // Not found in profiles: access restricted to CEOVA members
+        setIsLoading(false);
+        return {
+          success: false,
+          error: 'Wrong email. This email is not registered with CEOVA. If you think this is a mistake, please contact support.'
+        };
+      }
+
+      // Authentication succeeded
+      if (authResult.data.user) {
+        let dbProfile: any = null;
+
+        if (cleanEmail) {
+          const { data: byEmail } = await (anonClient || client)
+            .from('profiles')
+            .select('*')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+          if (byEmail) dbProfile = byEmail;
+        }
+
+        if (!dbProfile) {
+          const { data: byId } = await (anonClient || client)
+            .from('profiles')
+            .select('*')
+            .eq('id', authResult.data.user.id)
+            .maybeSingle();
+          if (byId) dbProfile = byId;
+        }
+
+        if (!dbProfile) {
+          // User authenticated with valid Supabase Auth credentials! Auto-provision their profile
+          const userMeta = authResult.data.user.user_metadata || {};
+          const assignedRole = sanitizeRole(userMeta.role || 'member');
+          const newProf: Profile = {
+            id: authResult.data.user.id,
+            email: authResult.data.user.email || cleanEmail,
+            full_name: userMeta.full_name || cleanEmail.split('@')[0],
+            role: assignedRole,
+            department: userMeta.department || (assignedRole === 'ceo' ? 'Executive' : assignedRole === 'admin' ? 'Administration' : 'Development'),
+            designation: userMeta.designation || (assignedRole === 'ceo' ? 'Chief Executive Officer' : assignedRole === 'admin' ? 'Administrator' : 'Team Member'),
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          try {
+            await client.from('profiles').upsert([newProf], { onConflict: 'id' });
+          } catch (_) {}
+          dbProfile = newProf;
+        }
+
+        if (dbProfile && dbProfile.id !== authResult.data.user.id) {
+          try {
+            await (anonClient || client).from('profiles').update({ id: authResult.data.user.id }).ilike('email', cleanEmail);
+            dbProfile.id = authResult.data.user.id;
+          } catch (_) {}
+        }
+
+        const sanitizedProfile = sanitizeProfile(dbProfile)!;
+        setUser(sanitizedProfile);
+        localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitizedProfile));
+        const tokens = authResult.data.session ? {
+          access_token: authResult.data.session.access_token,
+          refresh_token: authResult.data.session.refresh_token,
+        } : null;
+        upsertAccount(sanitizedProfile, tokens);
         setIsLoading(false);
         return { success: true };
       }
 
       setIsLoading(false);
-      return { success: false, error: 'Account not recognized. Please submit an access clearance request on the waiting list.' };
+      return { success: false, error: 'User data missing from authentication response.' };
+    } catch (err: any) {
+      setIsLoading(false);
+      return { success: false, error: err.message || 'Login failed' };
     }
   };
 
   const signUpWithEmail = async (
-    email: string,
-    password: string,
-    meta: { fullName: string; role: UserRole; department: string }
+    email: string, 
+    password: string, 
+    meta: { fullName: string; role?: UserRole; phone?: string; avatar_url?: string }
   ): Promise<{ success: boolean; error?: string; message?: string }> => {
     setIsLoading(true);
     const client = getSupabaseClient();
 
     if (client && isSupabaseConfigured) {
       try {
+        const cleanEmail = email.trim().toLowerCase();
+        const assignedRole = sanitizeRole(meta.role);
         const { data, error } = await client.auth.signUp({
-          email: email.trim(),
+          email: cleanEmail,
           password,
           options: {
             data: {
               full_name: meta.fullName,
-              role: meta.role,
-              department: meta.department,
+              role: assignedRole,
+              phone: meta.phone,
+              avatar_url: meta.avatar_url,
+              department: assignedRole === 'admin' ? 'Administration' : 'General',
+              designation: assignedRole === 'admin' ? 'Administrator' : assignedRole === 'intern' ? 'Intern' : 'Member'
             },
           },
         });
@@ -232,16 +668,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.user) {
           const newProfile: Profile = {
             id: data.user.id,
-            email: email.trim(),
+            email: cleanEmail,
             full_name: meta.fullName,
-            role: meta.role,
-            department: meta.department,
-            designation: meta.role === 'ceo' ? 'Chief Executive Officer' : 'Team Member',
+            role: assignedRole,
+            phone: meta.phone,
+            avatar_url: meta.avatar_url,
+            department: assignedRole === 'admin' ? 'Administration' : 'General',
+            designation: assignedRole === 'admin' ? 'Administrator' : assignedRole === 'intern' ? 'Intern' : 'Member',
             status: 'active',
-            permissions: ['manage_tasks'],
             created_at: new Date().toISOString(),
           };
           setUser(newProfile);
+          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(newProfile));
+          const tokens = data.session ? {
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          } : null;
+          upsertAccount(newProfile, tokens);
+
+          // Also upsert profile directly into Supabase profiles table
+          try {
+            await client.from('profiles').upsert([{
+              id: data.user.id,
+              email: cleanEmail,
+              full_name: meta.fullName,
+              role: assignedRole,
+              phone: meta.phone,
+              avatar_url: meta.avatar_url,
+              department: assignedRole === 'admin' ? 'Administration' : 'General',
+              designation: assignedRole === 'admin' ? 'Administrator' : assignedRole === 'intern' ? 'Intern' : 'Member',
+              status: 'active',
+              updated_at: new Date().toISOString()
+            }], { onConflict: 'id' });
+          } catch (upsertErr) {
+            console.warn('Upsert profile in signUpWithEmail:', upsertErr);
+          }
         }
 
         setIsLoading(false);
@@ -251,25 +712,131 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: err.message || 'Sign up failed' };
       }
     } else {
-      const newDemoUser: Profile = {
-        id: 'usr-new-' + Date.now(),
-        email: email.trim(),
-        full_name: meta.fullName,
-        role: meta.role,
-        department: meta.department,
-        designation: 'Team Member',
-        status: 'active',
-        permissions: ['manage_tasks'],
-        created_at: new Date().toISOString(),
-      };
-      setUser(newDemoUser);
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(newDemoUser));
       setIsLoading(false);
-      return { success: true };
+      return { success: false, error: 'Database not connected.' };
+    }
+  };
+
+  const resetPasswordForEmail = async (emailToReset: string): Promise<{ success: boolean; error?: string; message?: string }> => {
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured) {
+      return { success: false, error: 'Database not connected.' };
+    }
+    try {
+      const clean = emailToReset.trim().toLowerCase();
+      const { error } = await client.auth.resetPasswordForEmail(clean, {
+        redirectTo: window.location.origin,
+      });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, message: 'Password reset link sent to your email! Please check your inbox.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to send reset link.' };
+    }
+  };
+
+  const resendConfirmationEmail = async (emailToResend: string): Promise<{ success: boolean; error?: string; message?: string }> => {
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured) {
+      return { success: false, error: 'Database not connected.' };
+    }
+    try {
+      const clean = emailToResend.trim().toLowerCase();
+      const { error } = await client.auth.resend({
+        type: 'signup',
+        email: clean,
+      });
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      return { success: true, message: 'Verification link resent to your email!' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to resend confirmation email.' };
+    }
+  };
+
+  const switchAccount = async (userId: string): Promise<boolean> => {
+    const target = savedAccounts.find(a => 
+      a.profile.id === userId || 
+      a.profile.email?.toLowerCase() === userId.toLowerCase()
+    );
+    if (!target) return false;
+
+    const client = getSupabaseClient();
+    const anonClient = getAnonSupabaseClient() || client;
+
+    // Strictly fetch fresh account profile & role directly from Supabase
+    let freshProfile = null;
+    if (anonClient) {
+      try {
+        if (target.profile.email) {
+          const { data } = await anonClient
+            .from('profiles')
+            .select('*')
+            .ilike('email', target.profile.email.trim().toLowerCase())
+            .maybeSingle();
+          if (data) freshProfile = data;
+        }
+        if (!freshProfile && target.profile.id) {
+          const { data } = await anonClient
+            .from('profiles')
+            .select('*')
+            .eq('id', target.profile.id)
+            .maybeSingle();
+          if (data) freshProfile = data;
+        }
+      } catch (err) {
+        console.warn('Error fetching fresh profile for switch:', err);
+      }
+    }
+
+    const sanitized = sanitizeProfile(freshProfile || target.profile)!;
+
+    if (client && isSupabaseConfigured && target.session?.access_token && target.session?.refresh_token) {
+      try {
+        await client.auth.setSession({
+          access_token: target.session.access_token,
+          refresh_token: target.session.refresh_token,
+        });
+      } catch (err) {
+        console.warn('Could not set session token for switched account:', err);
+      }
+    }
+
+    setUser(sanitized);
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
+
+    setSavedAccounts(prev => {
+      const updated = prev.map(a => 
+        (a.profile.id === target.profile.id || a.profile.email?.toLowerCase() === target.profile.email?.toLowerCase())
+          ? { ...a, profile: sanitized, lastActive: new Date().toISOString() } 
+          : a
+      );
+      persistAccounts(updated);
+      return updated;
+    });
+
+    return true;
+  };
+
+  const removeAccount = async (userId: string) => {
+    const updated = savedAccounts.filter(a => a.profile.id !== userId);
+    setSavedAccounts(updated);
+    persistAccounts(updated);
+
+    if (user?.id === userId) {
+      if (updated.length > 0) {
+        await switchAccount(updated[0].profile.id);
+      } else {
+        await logout();
+      }
     }
   };
 
   const logout = async () => {
+    const currentUserId = user?.id;
+    const currentUserEmail = user?.email;
     const client = getSupabaseClient();
     if (client && isSupabaseConfigured) {
       try {
@@ -280,57 +847,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setUser(null);
     localStorage.removeItem(LOCAL_USER_KEY);
+
+    // Completely log out and remove from saved accounts on this device
+    setSavedAccounts(prev => {
+      const remaining = prev.filter(a => {
+        const matchesId = currentUserId && a.profile.id === currentUserId;
+        const matchesEmail = currentUserEmail && a.profile.email?.toLowerCase() === currentUserEmail.toLowerCase();
+        return !matchesId && !matchesEmail;
+      });
+      persistAccounts(remaining);
+      return remaining;
+    });
+
+    try {
+      sessionStorage.clear();
+      // Remove any Supabase auth tokens from localStorage
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (_) {}
   };
 
-  const quickLoginAs = async (targetRole: UserRole) => {
+  const logoutAll = async () => {
     const client = getSupabaseClient();
-    if (client) {
+    if (client && isSupabaseConfigured) {
       try {
-        const { data } = await client
-          .from('profiles')
-          .select('*')
-          .eq('role', targetRole)
-          .limit(1)
-          .maybeSingle();
-
-        if (data) {
-          setUser(data as Profile);
-          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(data));
-          return;
-        }
-      } catch (err) {
-        console.error('Error fetching role from Supabase:', err);
+        await client.auth.signOut();
+      } catch (e) {
+        console.error('Error signing out', e);
       }
     }
-    const target = REAL_MEMBERS.find((m) => m.role === targetRole) || REAL_MEMBERS[0];
-    setUser(target);
-    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(target));
-  };
+    setUser(null);
+    setSavedAccounts([]);
+    localStorage.removeItem(LOCAL_USER_KEY);
+    localStorage.removeItem(SAVED_ACCOUNTS_KEY);
 
-  const switchUserById = async (memberId: string) => {
-    const client = getSupabaseClient();
-    if (client) {
-      try {
-        const { data } = await client
-          .from('profiles')
-          .select('*')
-          .eq('id', memberId)
-          .maybeSingle();
-
-        if (data) {
-          setUser(data as Profile);
-          localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(data));
-          return;
+    try {
+      sessionStorage.clear();
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          localStorage.removeItem(key);
         }
-      } catch (err) {
-        console.error('Error switching user in Supabase:', err);
-      }
-    }
-    const target = REAL_MEMBERS.find((m) => m.id === memberId);
-    if (target) {
-      setUser(target);
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(target));
-    }
+      });
+    } catch (_) {}
   };
 
   const updateCurrentProfile = async (updates: Partial<Profile>) => {
@@ -339,10 +900,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(updated);
     localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(updated));
 
+    setSavedAccounts(prev => {
+      const refreshed = prev.map(a => a.profile.id === user.id ? { ...a, profile: updated } : a);
+      persistAccounts(refreshed);
+      return refreshed;
+    });
+
     const client = getSupabaseClient();
+    const anonClient = getAnonSupabaseClient() || client;
     if (client && isSupabaseConfigured) {
       try {
-        await client.from('profiles').update(updates).eq('id', user.id);
+        const { apps, ...dbUpdates } = updates;
+        
+        // 1. Direct update to Supabase public.profiles table (including cover_url, social_links, etc.)
+        if (Object.keys(dbUpdates).length > 0) {
+          const payload: any = { ...dbUpdates, updated_at: new Date().toISOString() };
+          if (dbUpdates.phone) {
+            payload.phone_number = dbUpdates.phone;
+          }
+          if (user.email) {
+            await (anonClient || client)
+              .from('profiles')
+              .update(payload)
+              .ilike('email', user.email.trim().toLowerCase());
+          } else {
+            await (anonClient || client)
+              .from('profiles')
+              .update(payload)
+              .eq('id', user.id);
+          }
+        }
+
+        // 2. Also keep user_metadata synced in Supabase Auth (safe metadata only, skip large base64)
+        try {
+          const metaUpdates: any = {};
+          if (updates.full_name) metaUpdates.full_name = updates.full_name;
+          if (updates.social_links) metaUpdates.social_links = updates.social_links;
+          if (apps !== undefined) metaUpdates.apps = apps;
+          if (updates.cover_url && !updates.cover_url.startsWith('data:')) {
+            metaUpdates.cover_url = updates.cover_url;
+          }
+          if (updates.avatar_url && !updates.avatar_url.startsWith('data:')) {
+            metaUpdates.avatar_url = updates.avatar_url;
+          }
+
+          if (Object.keys(metaUpdates).length > 0) {
+            await client.auth.updateUser({ data: metaUpdates });
+          }
+        } catch (metaErr) {
+          console.warn('Could not update user_metadata in auth:', metaErr);
+        }
       } catch (err) {
         console.error('Failed to sync profile update:', err);
       }
@@ -360,36 +967,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsSupabaseConfigured(false);
   };
 
-  // Helper checks
-  const role = user?.role || null;
-  const isCSuite = role === 'ceo' || role === 'cto' || role === 'cmo' || role === 'cfo' || role === 'coo' || role === 'admin';
-  const canViewFinancials = role === 'cfo' || role === 'ceo' || role === 'admin' || (user?.permissions?.includes('view_financials') ?? false);
-  const canAccessExecutiveRoom = isCSuite || (user?.permissions?.includes('view_executive_room') ?? false);
-
-  const hasPermission = (permission: Permission): boolean => {
-    if (role === 'ceo' || role === 'admin') return true;
-    return user?.permissions?.includes(permission) ?? false;
-  };
-
   return (
     <AuthContext.Provider
       value={{
         user,
-        role,
+        role: sanitizeRole(user?.role),
+        isAdmin: sanitizeRole(user?.role) === 'admin' || sanitizeRole(user?.role) === 'ceo',
+        savedAccounts,
         isLoading,
         isSupabaseConfigured,
-        isCSuite,
-        canViewFinancials,
-        canAccessExecutiveRoom,
-        hasPermission,
+        isCSuite: sanitizeRole(user?.role) === 'admin' || sanitizeRole(user?.role) === 'ceo',
         loginWithEmail,
         signUpWithEmail,
+        switchAccount,
+        removeAccount,
         logout,
-        quickLoginAs,
-        switchUserById,
+        logoutAll,
         updateCurrentProfile,
         updateSupabaseConfig,
         disconnectSupabase,
+        resetPasswordForEmail,
+        resendConfirmationEmail,
       }}
     >
       {children}

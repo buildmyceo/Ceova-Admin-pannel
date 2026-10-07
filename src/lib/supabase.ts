@@ -83,6 +83,23 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
 }
 
+export function getAnonSupabaseClient(): SupabaseClient | null {
+  const { url, key, isConfigured } = getSupabaseCredentials();
+  if (!isConfigured) return null;
+  try {
+    return createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to create anon Supabase client:', err);
+    return null;
+  }
+}
+
 // Health check / Connection test
 export async function testSupabaseConnection(url: string, key: string): Promise<{ success: boolean; message: string }> {
   try {
