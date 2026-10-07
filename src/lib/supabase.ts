@@ -4,6 +4,10 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const STORAGE_URL_KEY = 'ceova_supabase_url';
 const STORAGE_ANON_KEY = 'ceova_supabase_anon_key';
 
+// Default Supabase project credentials for Ceova Portal (used when env vars are not set in Vercel/hosting)
+const DEFAULT_SUPABASE_URL = 'https://yuvkddpfcokqctomsbun.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1dmtkZHBmY29rcWN0b21zYnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMzgwMjksImV4cCI6MjA5OTgxNDAyOX0.6sNzr-PbmDTsETaVAKycsxiwJCVKTgwsgFuWshnj1hM';
+
 export function getSupabaseCredentials(): { url: string; key: string; isConfigured: boolean } {
   // Check env vars first
   const envUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -19,8 +23,8 @@ export function getSupabaseCredentials(): { url: string; key: string; isConfigur
     console.warn('Could not read localStorage', e);
   }
 
-  const url = (localUrl || envUrl).trim();
-  const key = (localKey || envKey).trim();
+  const url = (localUrl || envUrl || DEFAULT_SUPABASE_URL).trim();
+  const key = (localKey || envKey || DEFAULT_SUPABASE_ANON_KEY).trim();
 
   // Basic validation (must have valid format and not be placeholder)
   const isConfigured = 
