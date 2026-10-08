@@ -59,8 +59,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   } | null>(null);
   const [activationError, setActivationError] = useState('');
   const [isNotInvited, setIsNotInvited] = useState(false);
-  const [isSubmittingActivation, setIsSubmittingActivation] = useState(false);
-  const [activationLinkSent, setActivationLinkSent] = useState(false);
+
+  // OTP Verification States
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
+  // Cooldown countdown effect
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCooldown]);
 
   // Check URL parameters for confirmation or direct activation tab switch
   useEffect(() => {
@@ -211,10 +225,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   // --------------------------------------------------------------------------
-  // 4. STEP 2: CONFIRM PASSWORD & SEND CONFIRMATION LINK HANDLER
+  // 4. STEP 2: DISPATCH 6-DIGIT ACTIVATION CODE (OTP)
   // --------------------------------------------------------------------------
-  const handleConfirmAndSendActivation = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const cleanEmail = activateEmail.trim().toLowerCase();
 
     if (!newPassword || newPassword.length < 6) {
@@ -227,7 +241,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    setIsSubmittingActivation(true);
+    setIsSendingOtp(true);
     setActivationError('');
 
     try {
@@ -236,26 +250,81 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
       const { data, error } = await client.functions.invoke('send-notification-email', {
         body: {
-          action: 'activate-account-with-password',
+          action: 'send-activation-otp',
           to: [cleanEmail],
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to dispatch verification code.');
+      }
+
+      if (data && data.success) {
+        setOtpSent(true);
+        setOtpCooldown(60);
+        setOtpCode('');
+      } else {
+        setActivationError(data?.error || 'Unable to send verification code. Please try again.');
+      }
+    } catch (err: any) {
+      setActivationError(err?.message || 'Error sending verification code.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // 5. STEP 3: VERIFY OTP & LOG IN DIRECTLY
+  // --------------------------------------------------------------------------
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = activateEmail.trim().toLowerCase();
+    const cleanOtp = otpCode.trim().replace(/\s+/g, '');
+
+    if (!cleanOtp || cleanOtp.length !== 6) {
+      setActivationError('Please enter the complete 6-digit verification code.');
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setActivationError('');
+
+    try {
+      const client = getSupabaseClient();
+      if (!client) throw new Error('Database connection is not available.');
+
+      const { data, error } = await client.functions.invoke('send-notification-email', {
+        body: {
+          action: 'verify-activation-otp',
+          to: [cleanEmail],
+          otp: cleanOtp,
           password: newPassword,
         }
       });
 
       if (error) {
-        throw new Error(error.message || 'Failed to dispatch activation email.');
+        throw new Error(error.message || 'Verification service error.');
       }
 
-      if (data && data.success) {
-        // Step 3: Success! Show confirmation sent screen
-        setActivationLinkSent(true);
+      if (data && data.success && data.activated) {
+        // Log in immediately using the established password!
+        const loginRes = await loginWithEmail(cleanEmail, newPassword);
+        if (loginRes.success) {
+          onLoginSuccess();
+          return;
+        }
+
+        // Fallback: switch to sign in tab
+        setActiveTab('signin');
+        setSignInEmail(cleanEmail);
+        setSignInSuccess('Account activated successfully! Please sign in with your password.');
       } else {
-        setActivationError(data?.error || 'Unable to complete activation. Please try again or contact support.');
+        setActivationError(data?.error || 'Incorrect or expired verification code.');
       }
     } catch (err: any) {
-      setActivationError(err?.message || 'An error occurred while creating your password.');
+      setActivationError(err?.message || 'Verification failed. Please check the code and try again.');
     } finally {
-      setIsSubmittingActivation(false);
+      setIsVerifyingOtp(false);
     }
   };
 
@@ -267,7 +336,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setActivationError('');
     setNewPassword('');
     setConfirmPassword('');
-    setActivationLinkSent(false);
+    setOtpSent(false);
+    setOtpCode('');
   };
 
   return (
@@ -689,14 +759,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         {/* ========================================================================= */}
         {activeTab === 'activate' && (
           <div>
-            {/* Case A: Activation Confirmation Link Dispatched Screen */}
-            {activationLinkSent ? (
-              <div style={{ textAlign: 'center', padding: '10px 0' }}>
+            {/* Case A: OTP 6-Digit Verification Code Screen */}
+            {otpSent ? (
+              <div style={{ textAlign: 'center' }}>
                 <div
                   style={{
-                    width: 60,
-                    height: 60,
-                    margin: '0 auto 16px auto',
+                    width: 58,
+                    height: 58,
+                    margin: '0 auto 14px auto',
                     borderRadius: '50%',
                     background: 'rgba(34, 197, 94, 0.15)',
                     border: '1px solid rgba(34, 197, 94, 0.4)',
@@ -707,65 +777,140 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     boxShadow: '0 0 25px rgba(34, 197, 94, 0.25)',
                   }}
                 >
-                  <Mail size={28} />
+                  <ShieldCheck size={28} />
                 </div>
 
-                <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 700, color: '#ffffff' }}>
-                  Confirmation Link Sent!
+                <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 700, color: '#ffffff' }}>
+                  Enter Verification Code
                 </h3>
 
-                <p style={{ margin: '0 0 16px 0', fontSize: '13.5px', color: '#94a3b8', lineHeight: 1.55 }}>
-                  We have dispatched a secure workspace activation link to:
+                <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#94a3b8', lineHeight: 1.5 }}>
+                  We sent a 6-digit code to:
                   <br />
                   <strong style={{ color: '#4ade80' }}>{activateEmail}</strong>
                 </p>
 
-                <div
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '10px',
-                    padding: '14px 16px',
-                    marginBottom: 20,
-                    textAlign: 'left',
-                    fontSize: '12.5px',
-                    color: '#cbd5e1',
-                    lineHeight: 1.6,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: '#4ade80', marginBottom: 4 }}>
-                    Next step to enter your workspace:
+                {activationError && (
+                  <div
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      borderRadius: '10px',
+                      padding: '11px 13px',
+                      marginBottom: 16,
+                      color: '#f87171',
+                      fontSize: '12.5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                    <span>{activationError}</span>
                   </div>
-                  <div>1. Open your email inbox (or spam folder).</div>
-                  <div>2. Click the <strong>Confirm Email &amp; Enter CEOVA Orbit</strong> link.</div>
-                  <div>3. You will immediately enter the portal with your newly set password!</div>
-                </div>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('signin');
-                    setSignInEmail(activateEmail);
-                    setSignInSuccess('Password set! Please check your email to confirm and enter.');
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '9px',
-                    background: '#2563eb',
-                    color: '#ffffff',
-                    border: 'none',
-                    fontWeight: 700,
-                    fontSize: '13.5px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                  }}
-                >
-                  Return to Sign In <ArrowRight size={15} />
-                </button>
+                <form onSubmit={handleVerifyOtp}>
+                  <div style={{ marginBottom: 18 }}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      autoFocus
+                      placeholder="000000"
+                      value={otpCode}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setOtpCode(val);
+                        setActivationError('');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        borderRadius: '10px',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        border: '2px solid #16a34a',
+                        color: '#ffffff',
+                        fontSize: '26px',
+                        fontWeight: 800,
+                        letterSpacing: '10px',
+                        textAlign: 'center',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: 8 }}>
+                      Code expires in 10 minutes &bull; Check your Inbox or Spam
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isVerifyingOtp || otpCode.length !== 6}
+                    style={{
+                      width: '100%',
+                      padding: '13px',
+                      borderRadius: '9px',
+                      background: '#16a34a',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      cursor: (isVerifyingOtp || otpCode.length !== 6) ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
+                      opacity: (isVerifyingOtp || otpCode.length !== 6) ? 0.6 : 1,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isVerifyingOtp ? (
+                      'Verifying & Logging In...'
+                    ) : (
+                      <>
+                        Verify Code &amp; Enter Workspace <ArrowRight size={16} />
+                      </>
+                    )}
+                  </button>
+
+                  <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <button
+                      type="button"
+                      disabled={otpCooldown > 0 || isSendingOtp}
+                      onClick={() => handleSendOtp()}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: otpCooldown > 0 ? '#64748b' : '#4ade80',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: otpCooldown > 0 ? 'not-allowed' : 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {otpCooldown > 0 ? `Resend code in ${otpCooldown}s` : 'Resend Code'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setOtpSent(false)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      &larr; Back to edit password
+                    </button>
+                  </div>
+                </form>
               </div>
             ) : (
               /* Case B: Standard Activation Workflow (Step 1 + Step 2) */
@@ -916,7 +1061,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
                 {/* Step 2: NEW BOX APPEARS (Only if verified as invited!) */}
                 {invitationVerified && (
-                  <form onSubmit={handleConfirmAndSendActivation} style={{ marginTop: 18 }}>
+                  <form onSubmit={handleSendOtp} style={{ marginTop: 18 }}>
                     {/* Verified Banner */}
                     <div
                       style={{
@@ -1063,7 +1208,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     {/* Submit Button */}
                     <button
                       type="submit"
-                      disabled={isSubmittingActivation || !newPassword || newPassword !== confirmPassword || newPassword.length < 6}
+                      disabled={isSendingOtp || !newPassword || newPassword !== confirmPassword || newPassword.length < 6}
                       style={{
                         width: '100%',
                         padding: '13px',
@@ -1073,20 +1218,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         border: 'none',
                         fontWeight: 700,
                         fontSize: '14px',
-                        cursor: (isSubmittingActivation || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 'not-allowed' : 'pointer',
+                        cursor: (isSendingOtp || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 8,
                         boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
-                        opacity: (isSubmittingActivation || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 0.6 : 1,
+                        opacity: (isSendingOtp || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 0.6 : 1,
                       }}
                     >
-                      {isSubmittingActivation ? (
-                        'Generating Confirmation Link...'
+                      {isSendingOtp ? (
+                        'Sending 6-Digit Code...'
                       ) : (
                         <>
-                          Confirm &amp; Send Activation Link <ArrowRight size={16} />
+                          Get 6-Digit Verification Code <ArrowRight size={16} />
                         </>
                       )}
                     </button>

@@ -29,6 +29,7 @@ serve(async (req) => {
       role: incomingRole,
       department: incomingDepartment,
       inviterName: incomingInviter,
+      otp: incomingOtp,
     } = await req.json();
 
     const recipients = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
@@ -97,7 +98,328 @@ serve(async (req) => {
       });
     }
 
-    // 2. Action: Set Password & Dispatch Confirmation Email (Only for Invited Members!)
+    // --------------------------------------------------------------------------
+    // ACTION: Send Activation OTP Code
+    // --------------------------------------------------------------------------
+    if (action === 'send-activation-otp') {
+      if (!serviceRoleKey) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
+      }
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+
+      // Strict check: User must be invited!
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      let invitation = null;
+      if (!profile) {
+        const { data: inv } = await supabaseAdmin
+          .from('invitations')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        invitation = inv;
+      }
+
+      if (!profile && !invitation) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          isInvited: false, 
+          error: "Access Denied: This email is not invited to CEOVA Orbit. Account setup is restricted to invited members only." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // Generate 6-digit numeric OTP
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+      // Store in otp_verifications table
+      await supabaseAdmin
+        .from('otp_verifications')
+        .delete()
+        .ilike('email', cleanEmail);
+
+      const { error: insertErr } = await supabaseAdmin
+        .from('otp_verifications')
+        .insert({
+          email: cleanEmail,
+          otp_code: otpCode,
+          expires_at: expiresAt,
+          attempts: 0,
+        });
+
+      if (insertErr) {
+        console.error("[OTP Store Error]", insertErr.message);
+        throw new Error("Failed to store verification code: " + insertErr.message);
+      }
+
+      const memberName = profile?.full_name || invitation?.full_name || cleanEmail.split('@')[0];
+      finalSubject = `[CEOVA Orbit] Your Account Activation Code: ${otpCode}`;
+      finalText = `Hello ${memberName},\n\nYour 6-digit CEOVA Orbit account activation code is: ${otpCode}\n\nThis code will expire in 10 minutes. Enter this code on the activation screen to establish your workspace access.\n\nCEOVA Orbit • Enterprise Team OS`;
+
+      finalHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Account Activation Code</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #07090e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #07090e; padding: 36px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #0f1422; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);">
+          <tr>
+            <td style="height: 4px; background: #16a34a; font-size: 0; line-height: 0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding: 34px 34px 22px; text-align: center; background-color: #111827; border-bottom: 1px solid #1e293b;">
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 16px auto;">
+                <tr>
+                  <td style="vertical-align: middle; padding-right: 12px;">
+                    <img src="https://portal.ceovaai.com/ceovaimage.png" width="44" height="44" alt="CEOVA Orbit Logo" style="display: block; width: 44px; height: 44px; border-radius: 12px; background-color: #ffffff; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.3);" />
+                  </td>
+                  <td style="vertical-align: middle; text-align: left;">
+                    <div style="font-size: 20px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; line-height: 1.1;">CEOVA <span style="color: #4ade80;">ORBIT</span></div>
+                    <div style="font-size: 9.5px; font-weight: 700; letter-spacing: 2.2px; text-transform: uppercase; color: #94a3b8; line-height: 1.1; margin-top: 2px;">Enterprise Team OS</div>
+                  </td>
+                </tr>
+              </table>
+              <div style="display: inline-block; padding: 6px 14px; background-color: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 9999px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #4ade80; text-transform: uppercase; margin-bottom: 10px;">
+                SECURITY VERIFICATION &bull; ONE-TIME CODE
+              </div>
+              <h1 style="margin: 10px 0 6px 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em;">
+                Your Activation Code
+              </h1>
+              <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #94a3b8;">
+                Use the verification code below to activate your account.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 30px 34px 32px;">
+              <p style="margin: 0 0 16px 0; font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
+                Hello <strong>${memberName}</strong>,
+              </p>
+              <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+                Enter this 6-digit one-time password (OTP) on the CEOVA Orbit activation page to complete your account setup:
+              </p>
+              
+              <!-- Big Solid Soft Green OTP Box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin: 22px 0;">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; padding: 18px 36px; background-color: rgba(34, 197, 94, 0.1); border: 2px dashed #16a34a; border-radius: 12px; text-align: center;">
+                      <span style="font-size: 38px; font-weight: 800; letter-spacing: 12px; color: #4ade80; font-family: 'Courier New', Courier, monospace; display: block; margin-left: 12px;">${otpCode}</span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="background-color: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 12.5px; color: #94a3b8; line-height: 1.5;">
+                <strong style="color: #4ade80;">⏱ Validity:</strong> This code is valid for <strong>10 minutes</strong>. If you did not request this code, please ignore this email.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 18px 34px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
+              <p style="margin: 0 0 5px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+                Delivered to <strong>${cleanEmail}</strong> for CEOVA Orbit workspace verification.
+              </p>
+              <p style="margin: 0; font-size: 10.5px; color: #475569;">
+                CEOVA Orbit &bull; Enterprise Team OS &bull; <a href="https://portal.ceovaai.com" style="color: #64748b; text-decoration: none;">portal.ceovaai.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `;
+    }
+
+    // --------------------------------------------------------------------------
+    // ACTION: Verify Activation OTP & Activate Account
+    // --------------------------------------------------------------------------
+    if (action === 'verify-activation-otp') {
+      if (!serviceRoleKey) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
+      }
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+
+      if (!incomingOtp) {
+        return new Response(JSON.stringify({ success: false, error: "Please enter the 6-digit verification code." }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      const cleanCode = String(incomingOtp).trim().replace(/\s+/g, '');
+
+      // Retrieve OTP record
+      const { data: record, error: fetchErr } = await supabaseAdmin
+        .from('otp_verifications')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr || !record) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: "No active verification code found for this email. Please request a new code." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // Check expiration
+      if (new Date() > new Date(record.expires_at)) {
+        await supabaseAdmin.from('otp_verifications').delete().ilike('email', cleanEmail);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: "Verification code has expired (valid 10 mins). Please click 'Resend OTP' to get a new code." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // Check max attempts (rate limiting)
+      if (record.attempts >= 5) {
+        await supabaseAdmin.from('otp_verifications').delete().ilike('email', cleanEmail);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: "Too many incorrect attempts. For security, please request a new verification code." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // Check code match
+      if (record.otp_code !== cleanCode) {
+        await supabaseAdmin
+          .from('otp_verifications')
+          .update({ attempts: (record.attempts || 0) + 1 })
+          .eq('id', record.id);
+
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: "Incorrect verification code. Please check your email and try again." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // CODE IS VALID! Delete record to prevent reuse
+      await supabaseAdmin.from('otp_verifications').delete().ilike('email', cleanEmail);
+
+      // Verify user is invited
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      let invitation = null;
+      if (!profile) {
+        const { data: inv } = await supabaseAdmin
+          .from('invitations')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        invitation = inv;
+      }
+
+      if (!profile && !invitation) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: "Account record not found. Please contact your workspace administrator." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // Create or update auth user with the chosen password
+      const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+      let targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+
+      if (!targetUser) {
+        const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          password: setDirectPassword,
+          email_confirm: true,
+        });
+        if (createErr) throw new Error(`Failed to activate account: ${createErr.message}`);
+        targetUser = created.user;
+      } else {
+        const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
+          password: setDirectPassword,
+          email_confirm: true,
+        });
+        if (updateErr) throw new Error(`Failed to activate account: ${updateErr.message}`);
+      }
+
+      // Activate profile!
+      if (profile) {
+        await supabaseAdmin
+          .from('profiles')
+          .update({
+            id: targetUser.id,
+            status: 'active',
+            updated_at: new Date().toISOString()
+          })
+          .ilike('email', cleanEmail);
+      } else if (invitation) {
+        await supabaseAdmin
+          .from('profiles')
+          .insert({
+            id: targetUser.id,
+            email: cleanEmail,
+            full_name: invitation.full_name || cleanEmail.split('@')[0],
+            role: invitation.role || 'member',
+            department: invitation.department || 'General',
+            status: 'active',
+            updated_at: new Date().toISOString()
+          });
+      }
+
+      // Remove invitation if exists
+      if (invitation) {
+        await supabaseAdmin.from('invitations').delete().ilike('email', cleanEmail);
+      }
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        activated: true, 
+        message: "Account verified and activated successfully! You can now sign in." 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // 2. Action: Set Password & Dispatch Confirmation Email (Legacy Magiclink Fallback)
     if (action === 'activate-account-with-password' || action === 'activate-and-send-confirmation') {
       if (!serviceRoleKey) {
         throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
