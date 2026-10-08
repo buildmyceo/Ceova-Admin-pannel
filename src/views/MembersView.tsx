@@ -185,7 +185,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         console.warn('Invitation email notice:', emailErr);
       }
 
-      setMessage(`Member ${cleanEmail} added! Official invitation email sent with activation instructions.`);
+      setMessage(`Invitation sent! ${cleanEmail} has been invited to CEOVA Orbit to set their password.`);
       setEmail('');
       setRole('member');
       setTimeout(() => {

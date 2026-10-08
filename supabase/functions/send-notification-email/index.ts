@@ -26,6 +26,9 @@ serve(async (req) => {
       apiKey: clientApiKey,
       action,
       password: setDirectPassword,
+      role: incomingRole,
+      department: incomingDepartment,
+      inviterName: incomingInviter,
     } = await req.json();
 
     const recipients = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
@@ -127,8 +130,8 @@ serve(async (req) => {
       });
     }
 
-    // Handle automated activation / recovery link generation via Supabase Admin
-    if (action === 'activate-user' || action === 'send-activation-email') {
+    // Handle automated activation / recovery / invitation link generation via Supabase Admin
+    if (action === 'activate-user' || action === 'send-activation-email' || action === 'invite-member-orbit' || action === 'send-invitation') {
       if (!serviceRoleKey) {
         throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for admin user activation.");
       }
@@ -164,7 +167,9 @@ serve(async (req) => {
             .from('profiles')
             .update({
               id: targetUser.id,
-              status: 'active',
+              ...(incomingRole ? { role: incomingRole } : {}),
+              ...(incomingDepartment ? { department: incomingDepartment } : {}),
+              status: 'pending',
               updated_at: new Date().toISOString()
             })
             .ilike('email', cleanEmail);
@@ -205,9 +210,14 @@ serve(async (req) => {
           generatedActionLink = parsedLink.toString();
         } catch (_) {}
       }
-      finalSubject = subject || "[CEOVA] Account Activation: Set Your Workspace Password";
 
-      finalText = `CEOVA Workspace Account Activation\n\nHello,\nYour CEOVA account (${cleanEmail}) is ready for activation.\n\nPlease click the link below to set your personal password and enter your workspace:\n${generatedActionLink}\n\nCEOVA Enterprise Team OS`;
+      const roleDisplay = (incomingRole || 'Member').toUpperCase();
+      const departmentDisplay = incomingDepartment || (incomingRole === 'admin' ? 'Administration' : incomingRole === 'intern' ? 'Internship' : 'Development');
+      const inviterDisplay = incomingInviter || 'CEOVA Administration';
+
+      finalSubject = subject || "You're Invited to CEOVA Orbit — Set Your Password to Get Started";
+
+      finalText = `You're Invited to CEOVA Orbit!\n\nHello,\n${inviterDisplay} has invited you to join the private CEOVA Orbit workspace as ${roleDisplay} (${departmentDisplay}).\n\nSet your password now and get started:\n${generatedActionLink}\n\nCEOVA Orbit • Enterprise Team OS`;
 
       finalHtml = `
 <!DOCTYPE html>
@@ -215,39 +225,42 @@ serve(async (req) => {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Activate Your CEOVA Account</title>
+  <title>You're Invited to CEOVA Orbit</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #080b11; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #080b11; padding: 36px 16px;">
+<body style="margin: 0; padding: 0; background-color: #07090e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #07090e; padding: 36px 16px;">
     <tr>
       <td align="center">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #0f1422; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);">
           
-          <!-- Top Blue Bar -->
+          <!-- Top Glowing Gradient Bar -->
           <tr>
-            <td style="height: 4px; background-color: #2563eb; font-size: 0; line-height: 0;">&nbsp;</td>
+            <td style="height: 4px; background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #06b6d4 100%); font-size: 0; line-height: 0;">&nbsp;</td>
           </tr>
 
           <!-- Header -->
           <tr>
-            <td style="padding: 30px 34px 20px; text-align: center; background-color: #111827; border-bottom: 1px solid #1e293b;">
-              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 14px auto;">
+            <td style="padding: 34px 34px 22px; text-align: center; background-color: #111827; border-bottom: 1px solid #1e293b;">
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 16px auto;">
                 <tr>
                   <td style="vertical-align: middle; padding-right: 12px;">
-                    <img src="https://portal.ceovaai.com/ceovaimage.png" width="40" height="40" alt="CEOVA Logo" style="display: block; width: 40px; height: 40px; border-radius: 10px; background-color: #ffffff; padding: 4px; border: 1px solid #ffffff;" />
+                    <img src="https://portal.ceovaai.com/ceovaimage.png" width="44" height="44" alt="CEOVA Orbit Logo" style="display: block; width: 44px; height: 44px; border-radius: 12px; background-color: #ffffff; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.3);" />
                   </td>
                   <td style="vertical-align: middle; text-align: left;">
-                    <div style="font-size: 18px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; line-height: 1.1;">CEOVA</div>
-                    <div style="font-size: 9.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #94a3b8; line-height: 1.1;">Enterprise Team OS</div>
+                    <div style="font-size: 20px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; line-height: 1.1;">CEOVA <span style="color: #38bdf8;">ORBIT</span></div>
+                    <div style="font-size: 9.5px; font-weight: 700; letter-spacing: 2.2px; text-transform: uppercase; color: #94a3b8; line-height: 1.1; margin-top: 2px;">Enterprise Team OS</div>
                   </td>
                 </tr>
               </table>
-              <div style="display: inline-block; padding: 5px 12px; background-color: #1e293b; border: 1px solid #334155; border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 1.5px; color: #38bdf8; text-transform: uppercase;">
-                ACCOUNT ACTIVATION
+              <div style="display: inline-block; padding: 6px 14px; background-color: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 9999px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #38bdf8; text-transform: uppercase; margin-bottom: 10px;">
+                CEOVA ORBIT &bull; OFFICIAL INVITATION
               </div>
-              <h1 style="margin: 12px 0 0 0; font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.01em;">
-                Activate Your Workspace Account
+              <h1 style="margin: 10px 0 6px 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em;">
+                You're Invited to CEOVA Orbit
               </h1>
+              <p style="margin: 0; font-size: 14.5px; line-height: 1.5; color: #94a3b8;">
+                Set your password now and get started with your workspace.
+              </p>
             </td>
           </tr>
 
@@ -258,23 +271,83 @@ serve(async (req) => {
                 Hello,
               </p>
               <p style="margin: 0 0 22px 0; font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
-                Your private workspace account (<strong>${cleanEmail}</strong>) is ready. Click the button below to set your personal password and enter the <strong>CEOVA Portal</strong>:
+                <strong>${inviterDisplay}</strong> has invited you to join the private <strong>CEOVA Orbit</strong> team workspace. You have been granted workspace access to collaborate with the team, track initiatives, and access portal tools.
               </p>
 
-              <!-- Action Button -->
+              <!-- Assignment Details Box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #090d16; border: 1px solid #1e293b; border-radius: 12px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #1e293b;">
+                    <div style="font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Workspace</div>
+                    <div style="font-size: 13.5px; font-weight: 700; color: #ffffff; margin-top: 3px;">CEOVA Orbit (portal.ceovaai.com)</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #1e293b;">
+                    <div style="font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Invited Email</div>
+                    <div style="font-size: 13.5px; font-weight: 600; color: #ffffff; margin-top: 3px;">${cleanEmail}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 13px 18px; border-bottom: 1px solid #1e293b;">
+                    <div style="font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Assigned Role</div>
+                    <div style="font-size: 13.5px; font-weight: 700; color: #38bdf8; margin-top: 3px;">${roleDisplay}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 13px 18px;">
+                    <div style="font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Department</div>
+                    <div style="font-size: 13.5px; font-weight: 600; color: #e2e8f0; margin-top: 3px;">${departmentDisplay}</div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Primary Action Button -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
                 <tr>
                   <td align="center">
-                    <a href="${generatedActionLink}" target="_blank" style="display: inline-block; width: 100%; box-sizing: border-box; text-align: center; padding: 14px 22px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 14.5px; font-weight: 700; border-radius: 8px; letter-spacing: 0.01em;">
-                      Activate Account &amp; Set Password &rarr;
+                    <a href="${generatedActionLink}" target="_blank" style="display: block; width: 100%; box-sizing: border-box; text-align: center; padding: 15px 24px; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 20px rgba(37, 99, 235, 0.4); letter-spacing: 0.02em;">
+                      Set Your Password &amp; Get Started &rarr;
                     </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Steps Guide -->
+              <div style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 12px;">
+                How to get started:
+              </div>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 22px;">
+                <tr>
+                  <td style="vertical-align: top; width: 28px; padding-bottom: 10px;">
+                    <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; background-color: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 700;">1</span>
+                  </td>
+                  <td style="padding-bottom: 10px; font-size: 13.5px; line-height: 1.5; color: #cbd5e1;">
+                    Click the <strong>Set Your Password &amp; Get Started</strong> button above.
+                  </td>
+                </tr>
+                <tr>
+                  <td style="vertical-align: top; width: 28px; padding-bottom: 10px;">
+                    <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; background-color: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 700;">2</span>
+                  </td>
+                  <td style="padding-bottom: 10px; font-size: 13.5px; line-height: 1.5; color: #cbd5e1;">
+                    Establish your personal secure password for <strong>${cleanEmail}</strong>.
+                  </td>
+                </tr>
+                <tr>
+                  <td style="vertical-align: top; width: 28px;">
+                    <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; background-color: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 700;">3</span>
+                  </td>
+                  <td style="font-size: 13.5px; line-height: 1.5; color: #cbd5e1;">
+                    Complete your quick profile details and start collaborating in CEOVA Orbit.
                   </td>
                 </tr>
               </table>
 
               <!-- Notice Box -->
               <div style="background-color: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 12.5px; color: #94a3b8; line-height: 1.5;">
-                <strong style="color: #cbd5e1;">Next Steps:</strong> Clicking the link above will open the secure CEOVA portal and prompt you to establish your account password. Once saved, your account will be fully activated.
+                <strong style="color: #cbd5e1;">Instant Setup:</strong> Clicking the link above establishes a direct session and guides you straight into password setup.
               </div>
 
               <!-- Fallback Link -->
@@ -287,11 +360,11 @@ serve(async (req) => {
           <!-- Footer -->
           <tr>
             <td style="padding: 18px 34px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
-              <p style="margin: 0 0 4px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
-                This activation link was generated securely for <strong>${cleanEmail}</strong>.
+              <p style="margin: 0 0 5px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+                This invitation was securely dispatched to <strong>${cleanEmail}</strong> by CEOVA Administration.
               </p>
-              <p style="margin: 0; font-size: 11px; color: #475569; line-height: 1.4;">
-                CEOVA Enterprise Team OS &bull; <a href="https://portal.ceovaai.com" style="color: #64748b; text-decoration: none;">portal.ceovaai.com</a>
+              <p style="margin: 0; font-size: 10.5px; color: #475569;">
+                CEOVA Orbit &bull; Enterprise Team OS &bull; <a href="https://portal.ceovaai.com" style="color: #64748b; text-decoration: none;">portal.ceovaai.com</a>
               </p>
             </td>
           </tr>
