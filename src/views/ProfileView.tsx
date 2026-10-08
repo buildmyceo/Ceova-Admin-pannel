@@ -402,7 +402,7 @@ export const ProfileView: React.FC = () => {
     <div style={{ 
       position: 'relative', 
       width: '100%', 
-      height: 260, 
+      height: 'clamp(120px, 30vw, 220px)', 
       backgroundColor: '#09090b',
       backgroundImage: coverUrl ? `url("${sanitizeUrl(coverUrl)}")` : 'none',
       backgroundSize: 'cover',
@@ -452,12 +452,12 @@ export const ProfileView: React.FC = () => {
   if (!isEditing) {
     return (
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
-        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div className="page-title-wrap">
-            <h2 className="neo-serif-title" style={{ margin: 0, fontSize: 24, fontWeight: 700, color: '#ffffff' }}>
-              My Profile & Personal Preferences
+        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+          <div className="page-title-wrap" style={{ minWidth: 0, flex: 1, paddingLeft: 2 }}>
+            <h2 className="neo-serif-title" style={{ margin: 0, fontSize: 'clamp(20px, 4.8vw, 24px)', fontWeight: 700, color: '#ffffff' }}>
+              My Profile &amp; Preferences
             </h2>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--text-muted)' }}>
               Manage your executive credentials, personal avatar, and system visibility
             </p>
           </div>
@@ -497,22 +497,22 @@ export const ProfileView: React.FC = () => {
         >
           {renderCoverPhoto()}
 
-          <div style={{ padding: '0 32px 32px', position: 'relative' }}>
+          <div style={{ padding: '0 clamp(16px, 4vw, 32px) clamp(20px, 4vw, 32px)', position: 'relative' }}>
             {/* Identity Row: Overlapping Avatar and Action Row */}
             <div style={{ 
               display: 'flex', 
               alignItems: 'flex-end', 
               justifyContent: 'space-between',
-              gap: 20, 
-              marginTop: -58, 
+              gap: 16, 
+              marginTop: 'clamp(-40px, -9vw, -58px)', 
               marginBottom: 20,
               flexWrap: 'wrap'
             }}>
               <div style={{ position: 'relative' }}>
                 <div 
                   style={{ 
-                    width: 114, 
-                    height: 114, 
+                    width: 'clamp(84px, 18vw, 114px)', 
+                    height: 'clamp(84px, 18vw, 114px)', 
                     borderRadius: '50%',
                     border: '4px solid #0d0d0f',
                     background: '#161618',
@@ -527,7 +527,7 @@ export const ProfileView: React.FC = () => {
                   {user?.avatar_url ? (
                     <img src={sanitizeUrl(user.avatar_url)} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38, fontWeight: 700, color: '#ffffff' }}>
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(28px, 6vw, 38px)', fontWeight: 700, color: '#ffffff' }}>
                       {user?.full_name?.charAt(0) || 'U'}
                     </div>
                   )}
@@ -719,17 +719,17 @@ export const ProfileView: React.FC = () => {
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 5,
-                      padding: '4px 10px',
-                      borderRadius: 6,
-                      background: 'transparent',
-                      border: '1px dashed rgba(255, 255, 255, 0.15)',
+                      gap: 6,
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px dashed rgba(255, 255, 255, 0.2)',
                       color: 'var(--text-muted)',
-                      fontSize: 11,
+                      fontSize: 12,
                       cursor: 'pointer'
                     }}
                   >
-                    <Plus size={11} /> Connect Social Links
+                    <Plus size={12} /> Connect Social Links
                   </button>
                 )}
               </div>
@@ -742,7 +742,7 @@ export const ProfileView: React.FC = () => {
                 background: 'rgba(255, 255, 255, 0.02)',
                 border: '1px solid rgba(255, 255, 255, 0.06)',
                 borderRadius: 'var(--radius-md)',
-                padding: '18px 20px'
+                padding: 'clamp(14px, 3.5vw, 20px)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                   <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
@@ -809,9 +809,9 @@ export const ProfileView: React.FC = () => {
                 background: 'rgba(255, 255, 255, 0.02)',
                 border: '1px solid rgba(255, 255, 255, 0.06)',
                 borderRadius: 'var(--radius-md)',
-                padding: '18px 20px'
+                padding: 'clamp(14px, 3.5vw, 20px)'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
                       <Sparkles size={14} />
@@ -862,12 +862,12 @@ export const ProfileView: React.FC = () => {
                 background: 'rgba(255, 255, 255, 0.02)',
                 border: '1px solid rgba(255, 255, 255, 0.06)',
                 borderRadius: 'var(--radius-md)',
-                padding: '18px 20px',
+                padding: 'clamp(14px, 3.5vw, 20px)',
                 display: 'flex',
                 flexDirection: 'column',
                 gridColumn: '1 / -1'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
                       <FileText size={14} />

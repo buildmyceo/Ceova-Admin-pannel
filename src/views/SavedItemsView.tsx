@@ -375,19 +375,21 @@ export const SavedItemsView: React.FC<SavedItemsViewProps> = ({ onNavigate }) =>
         flexWrap: 'wrap',
         gap: 12
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', maxWidth: '100%' }}>
           <button
             type="button"
             onClick={() => setFilterType('all')}
             style={{
-              padding: '5px 12px',
-              fontSize: 11.5,
+              padding: '6px 14px',
+              fontSize: 12,
               fontWeight: filterType === 'all' ? 600 : 500,
               border: filterType === 'all' ? '1px solid #333338' : '1px solid transparent',
               borderRadius: 6,
               background: filterType === 'all' ? '#27272a' : 'transparent',
               color: filterType === 'all' ? '#ffffff' : '#8e8e93',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
             All Saved ({savedTasks.length})
@@ -396,14 +398,16 @@ export const SavedItemsView: React.FC<SavedItemsViewProps> = ({ onNavigate }) =>
             type="button"
             onClick={() => setFilterType('files')}
             style={{
-              padding: '5px 12px',
-              fontSize: 11.5,
+              padding: '6px 14px',
+              fontSize: 12,
               fontWeight: filterType === 'files' ? 600 : 500,
               border: filterType === 'files' ? '1px solid #333338' : '1px solid transparent',
               borderRadius: 6,
               background: filterType === 'files' ? '#27272a' : 'transparent',
               color: filterType === 'files' ? '#ffffff' : '#8e8e93',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
             With Uploaded Files
@@ -412,14 +416,16 @@ export const SavedItemsView: React.FC<SavedItemsViewProps> = ({ onNavigate }) =>
             type="button"
             onClick={() => setFilterType('notes')}
             style={{
-              padding: '5px 12px',
-              fontSize: 11.5,
+              padding: '6px 14px',
+              fontSize: 12,
               fontWeight: filterType === 'notes' ? 600 : 500,
               border: filterType === 'notes' ? '1px solid #333338' : '1px solid transparent',
               borderRadius: 6,
               background: filterType === 'notes' ? '#27272a' : 'transparent',
               color: filterType === 'notes' ? '#ffffff' : '#8e8e93',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
             With Written Notes
@@ -427,7 +433,7 @@ export const SavedItemsView: React.FC<SavedItemsViewProps> = ({ onNavigate }) =>
         </div>
 
         {/* Search */}
-        <div style={{ position: 'relative', minWidth: 260 }}>
+        <div style={{ position: 'relative', width: '100%', maxWidth: 360, minWidth: 200, flex: 1 }}>
           <Search size={14} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#71717a' }} />
           <input
             type="text"

@@ -449,8 +449,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             }}>
               <Bell size={20} />
             </div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: 'var(--text-main, #ffffff)' }}>
-              Notifications & Team Messaging
+            <h1 style={{ fontSize: 'clamp(19px, 4.5vw, 24px)', fontWeight: 700, margin: 0, color: 'var(--text-main, #ffffff)' }}>
+              Notifications &amp; Team Messaging
             </h1>
             {unreadCount > 0 && (
               <span style={{
@@ -466,13 +466,13 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
               </span>
             )}
           </div>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted, #a1a1aa)' }}>
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-muted, #a1a1aa)' }}>
             Send messages, broadcast company alerts, and exchange photos, files, and links with team members.
           </p>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => handleOpenComposeModal()}
@@ -563,31 +563,36 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
           border: '1px solid rgba(255, 255, 255, 0.08)',
           borderRadius: 10,
           padding: 3,
-          gap: 4
+          gap: 4,
+          width: '100%',
+          maxWidth: 420
         }}>
           <button
             type="button"
             onClick={() => setActiveCategory('inbox')}
             style={{
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 7,
-              padding: '7px 16px',
+              padding: '7px 14px',
               borderRadius: 8,
               border: 'none',
               background: activeCategory === 'inbox' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
               color: activeCategory === 'inbox' ? '#60a5fa' : 'var(--text-muted)',
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.15s ease'
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap'
             }}
           >
             <Bell size={14} />
-            <span>Inbox & Received</span>
+            <span>Inbox &amp; Received</span>
             <span style={{
               background: activeCategory === 'inbox' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255, 255, 255, 0.06)',
-              fontSize: 11,
+              fontSize: 10.5,
               padding: '1px 6px',
               borderRadius: 8,
               color: activeCategory === 'inbox' ? '#ffffff' : 'inherit'
@@ -600,25 +605,28 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             type="button"
             onClick={() => setActiveCategory('sent')}
             style={{
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 7,
-              padding: '7px 16px',
+              padding: '7px 14px',
               borderRadius: 8,
               border: 'none',
               background: activeCategory === 'sent' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
               color: activeCategory === 'sent' ? '#60a5fa' : 'var(--text-muted)',
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.15s ease'
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap'
             }}
           >
             <Send size={14} />
             <span>Sent Messages</span>
             <span style={{
               background: activeCategory === 'sent' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255, 255, 255, 0.06)',
-              fontSize: 11,
+              fontSize: 10.5,
               padding: '1px 6px',
               borderRadius: 8,
               color: activeCategory === 'sent' ? '#ffffff' : 'inherit'
@@ -651,12 +659,13 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
       </div>
 
       {/* Filter Tabs */}
-      <div style={{
+      <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         marginBottom: 20,
         overflowX: 'auto',
+        maxWidth: '100%',
         paddingBottom: 4
       }}>
         {[
@@ -781,7 +790,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                     ? '1px solid rgba(255, 255, 255, 0.08)' 
                     : '1px solid rgba(59, 130, 246, 0.35)',
                   borderRadius: 16,
-                  padding: '20px 22px',
+                  padding: 'clamp(14px, 3.5vw, 20px)',
                   display: 'flex',
                   alignItems: 'flex-start',
                   justifyContent: 'space-between',
