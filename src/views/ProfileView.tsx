@@ -20,22 +20,9 @@ import {
   FileText,
   CheckCircle2,
   Globe,
-  Plus,
-  Smartphone,
-  Download,
-  Bell,
-  BellRing,
-  Share2
+  Plus
 } from 'lucide-react';
 import { UserStatus } from '../types';
-import { 
-  isStandaloneApp, 
-  triggerPwaInstall, 
-  getNotificationPermission, 
-  requestNotificationPermission, 
-  dispatchInAppNotification,
-  playNotificationChime 
-} from '../lib/pushNotifications';
 
 interface ImageEditorProps {
   imageSrc: string;
@@ -228,57 +215,6 @@ export const ProfileView: React.FC = () => {
   
   const [editorImageSrc, setEditorImageSrc] = useState<string | null>(null);
 
-  // Mobile PWA & Push Notifications States
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => getNotificationPermission());
-  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(() => isStandaloneApp());
-  const [showIosGuide, setShowIosGuide] = useState<boolean>(false);
-  const [copiedMobileLink, setCopiedMobileLink] = useState<boolean>(false);
-  const [testNotifSent, setTestNotifSent] = useState<boolean>(false);
-
-  useEffect(() => {
-    const handleInstallable = () => setIsAppInstalled(isStandaloneApp());
-    window.addEventListener('ceova_pwa_installable', handleInstallable);
-    window.addEventListener('ceova_pwa_installed', () => setIsAppInstalled(true));
-    return () => {
-      window.removeEventListener('ceova_pwa_installable', handleInstallable);
-      window.removeEventListener('ceova_pwa_installed', () => setIsAppInstalled(true));
-    };
-  }, []);
-
-  const handleEnableNotifications = async () => {
-    const granted = await requestNotificationPermission();
-    setNotificationPermission(granted ? 'granted' : 'denied');
-    if (granted) {
-      dispatchInAppNotification(
-        'Notifications Active!',
-        'You will now receive instant in-app sound and device push alerts for tasks and team updates.',
-        { avatar: user?.avatar_url }
-      );
-    }
-  };
-
-  const handleTestNotification = () => {
-    setTestNotifSent(true);
-    try {
-      playNotificationChime();
-    } catch (_) {}
-    dispatchInAppNotification(
-      'CEOVA Orbit In-App Alert',
-      `Hello ${user?.full_name || 'Team Member'}! In-app notifications and sound alerts are working properly.`,
-      { avatar: user?.avatar_url }
-    );
-    setTimeout(() => setTestNotifSent(false), 2500);
-  };
-
-  const handleInstallPwa = async () => {
-    const success = await triggerPwaInstall();
-    if (success) {
-      setIsAppInstalled(true);
-    } else {
-      alert("To install on Android: In Chrome, tap the ⋮ menu in the top-right and select 'Install app' or 'Add to Home screen'.");
-    }
-  };
-
   // Sync component state whenever user changes or updates
   useEffect(() => {
     if (user) {
@@ -463,20 +399,18 @@ export const ProfileView: React.FC = () => {
   };
 
   const renderCoverPhoto = () => (
-    <div 
-      className="profile-cover-photo-wrap"
-      style={{ 
-        position: 'relative', 
-        width: '100%', 
-        height: 260, 
-        backgroundColor: '#09090b',
-        backgroundImage: coverUrl ? `url("${sanitizeUrl(coverUrl)}")` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        borderTopLeftRadius: 'var(--radius-xl)',
-        borderTopRightRadius: 'var(--radius-xl)',
-        overflow: 'hidden'
-      }}>
+    <div style={{ 
+      position: 'relative', 
+      width: '100%', 
+      height: 260, 
+      backgroundColor: '#09090b',
+      backgroundImage: coverUrl ? `url("${sanitizeUrl(coverUrl)}")` : 'none',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      borderTopLeftRadius: 'var(--radius-xl)',
+      borderTopRightRadius: 'var(--radius-xl)',
+      overflow: 'hidden'
+    }}>
       {/* Solid dark base border */}
       <div style={{
         position: 'absolute',
@@ -563,20 +497,17 @@ export const ProfileView: React.FC = () => {
         >
           {renderCoverPhoto()}
 
-          <div className="profile-card-content" style={{ padding: '0 32px 32px', position: 'relative' }}>
+          <div style={{ padding: '0 32px 32px', position: 'relative' }}>
             {/* Identity Row: Overlapping Avatar and Action Row */}
-            <div 
-              className="profile-identity-header-row"
-              style={{ 
-                display: 'flex', 
-                alignItems: 'flex-end', 
-                justifyContent: 'space-between',
-                gap: 20, 
-                marginTop: -58, 
-                marginBottom: 20,
-                flexWrap: 'wrap'
-              }}
-            >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'flex-end', 
+              justifyContent: 'space-between',
+              gap: 20, 
+              marginTop: -58, 
+              marginBottom: 20,
+              flexWrap: 'wrap'
+            }}>
               <div style={{ position: 'relative' }}>
                 <div 
                   style={{ 
@@ -805,7 +736,7 @@ export const ProfileView: React.FC = () => {
             </div>
 
             {/* Modern Bento Grid for Details */}
-            <div className="profile-bento-grid">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16 }}>
               {/* Card 1: Contact Information */}
               <div style={{
                 background: 'rgba(255, 255, 255, 0.02)',
@@ -987,276 +918,6 @@ export const ProfileView: React.FC = () => {
                   </div>
                 )}
               </div>
-
-              {/* Card 4: CEOVA Orbit Mobile App (Android & iOS) & In-App Notifications */}
-              <div 
-                className="profile-mobile-app-card"
-                style={{
-                  gridColumn: '1 / -1',
-                  background: 'linear-gradient(135deg, rgba(22, 163, 74, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%)',
-                  border: '1px solid rgba(34, 197, 94, 0.35)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '22px 24px',
-                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
-                }}
-              >
-                {/* Header with Title and PWA Badge */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: '#16a34a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(22, 163, 74, 0.4)' }}>
-                      <Smartphone size={20} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: 15, fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.01em' }}>
-                        CEOVA Orbit Mobile App (Android &amp; iOS)
-                      </h3>
-                      <p style={{ margin: '2px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
-                        Install as a native app on your phone with in-app audio &amp; push notifications.
-                      </p>
-                    </div>
-                  </div>
-
-                  <span style={{
-                    padding: '5px 12px',
-                    borderRadius: 100,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    background: isAppInstalled ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.08)',
-                    border: `1px solid ${isAppInstalled ? '#16a34a' : 'rgba(255, 255, 255, 0.15)'}`,
-                    color: isAppInstalled ? '#4ade80' : '#cbd5e1',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6
-                  }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: isAppInstalled ? '#22c55e' : '#94a3b8' }} />
-                    {isAppInstalled ? 'Installed on This Device' : 'Ready to Install'}
-                  </span>
-                </div>
-
-                {/* Sub-grid: 3 Columns on desktop, 1 on mobile */}
-                <div className="profile-mobile-apps-grid" style={{ marginTop: 16 }}>
-                  
-                  {/* Column 1: Android App */}
-                  <div style={{
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: 12,
-                    padding: 16,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontSize: 20 }}>🤖</span>
-                        <strong style={{ fontSize: 13, color: '#ffffff' }}>Android App</strong>
-                      </div>
-                      <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 14px 0', lineHeight: 1.5 }}>
-                        Runs full-screen with native app performance and background notifications.
-                      </p>
-                    </div>
-
-                    <div>
-                      <button
-                        type="button"
-                        onClick={handleInstallPwa}
-                        style={{
-                          width: '100%',
-                          padding: '10px 14px',
-                          borderRadius: 8,
-                          background: '#16a34a',
-                          color: '#ffffff',
-                          border: 'none',
-                          fontWeight: 700,
-                          fontSize: 12.5,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
-                          boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Download size={14} /> Install on Android
-                      </button>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, textAlign: 'center' }}>
-                        Or tap Chrome ⋮ menu &rarr; "Install app"
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Column 2: iOS (iPhone & iPad) */}
-                  <div style={{
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: 12,
-                    padding: 16,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <span style={{ fontSize: 20 }}>🍏</span>
-                        <strong style={{ fontSize: 13, color: '#ffffff' }}>iOS (iPhone / iPad)</strong>
-                      </div>
-                      <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 14px 0', lineHeight: 1.5 }}>
-                        Add directly to your iPhone Home Screen via Safari with standalone icon.
-                      </p>
-                    </div>
-
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => setShowIosGuide(!showIosGuide)}
-                        style={{
-                          width: '100%',
-                          padding: '10px 14px',
-                          borderRadius: 8,
-                          background: 'rgba(255, 255, 255, 0.08)',
-                          color: '#ffffff',
-                          border: '1px solid rgba(255, 255, 255, 0.18)',
-                          fontWeight: 700,
-                          fontSize: 12.5,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 6,
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Share2 size={14} /> {showIosGuide ? 'Hide iOS Steps' : 'View iOS Instructions'}
-                      </button>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, textAlign: 'center' }}>
-                        Safari &rarr; Share button &rarr; "Add to Home Screen"
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Column 3: In-App & Push Notifications Controller */}
-                  <div style={{
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: 12,
-                    padding: 16,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between'
-                  }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <BellRing size={16} style={{ color: '#4ade80' }} />
-                        <strong style={{ fontSize: 13, color: '#ffffff' }}>In-App &amp; Push Alerts</strong>
-                      </div>
-                      <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 14px 0', lineHeight: 1.5 }}>
-                        Status:{' '}
-                        <span style={{ color: notificationPermission === 'granted' ? '#4ade80' : '#f59e0b', fontWeight: 600 }}>
-                          {notificationPermission === 'granted' ? 'Active & Enabled' : 'Permission Required'}
-                        </span>
-                      </p>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {notificationPermission !== 'granted' ? (
-                        <button
-                          type="button"
-                          onClick={handleEnableNotifications}
-                          style={{
-                            width: '100%',
-                            padding: '10px 14px',
-                            borderRadius: 8,
-                            background: '#16a34a',
-                            color: '#ffffff',
-                            border: 'none',
-                            fontWeight: 700,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6
-                          }}
-                        >
-                          <Bell size={13} /> Enable Notifications
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleTestNotification}
-                          style={{
-                            width: '100%',
-                            padding: '10px 14px',
-                            borderRadius: 8,
-                            background: 'rgba(34, 197, 94, 0.15)',
-                            color: '#4ade80',
-                            border: '1px solid rgba(34, 197, 94, 0.35)',
-                            fontWeight: 700,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6
-                          }}
-                        >
-                          {testNotifSent ? <Check size={13} /> : <Sparkles size={13} />}
-                          {testNotifSent ? 'Test Alert Dispatched!' : 'Send Test Notification'}
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText('https://portal.ceovaai.com');
-                          setCopiedMobileLink(true);
-                          setTimeout(() => setCopiedMobileLink(false), 2000);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: copiedMobileLink ? '#4ade80' : '#94a3b8',
-                          fontSize: 11,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 4
-                        }}
-                      >
-                        {copiedMobileLink ? <Check size={11} /> : <Copy size={11} />}
-                        {copiedMobileLink ? 'Mobile Link Copied!' : 'Copy Mobile Portal Link'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expandable iOS Step-by-Step Instructions */}
-                {showIosGuide && (
-                  <div style={{
-                    marginTop: 16,
-                    padding: '16px 18px',
-                    borderRadius: 12,
-                    background: 'rgba(0, 0, 0, 0.6)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    fontSize: 12.5,
-                    color: '#cbd5e1',
-                    lineHeight: 1.6
-                  }}>
-                    <strong style={{ color: '#ffffff', display: 'block', marginBottom: 6 }}>
-                      How to install on iPhone &amp; iPad:
-                    </strong>
-                    <div>1. Open <strong>Safari</strong> on your iPhone and visit <strong>https://portal.ceovaai.com</strong>.</div>
-                    <div>2. Tap the <strong>Share button</strong> at the bottom of the screen (the square icon with an arrow pointing up 📤).</div>
-                    <div>3. Scroll down the share menu and select <strong>"Add to Home Screen"</strong> (➕).</div>
-                    <div>4. Tap <strong>"Add"</strong> in the top-right corner.</div>
-                    <div style={{ marginTop: 6, color: '#4ade80' }}>
-                      &check; The CEOVA Orbit app icon is now on your home screen and operates as a native standalone app!
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -1322,14 +983,11 @@ export const ProfileView: React.FC = () => {
 
           {renderCoverPhoto()}
 
-          <div className="profile-card-content profile-edit-content" style={{ padding: '0 28px 28px', position: 'relative' }}>
-            <div 
-              className="profile-edit-avatar-row"
-              style={{ 
-                display: 'flex', alignItems: 'flex-end', gap: 20, 
-                marginTop: -50, marginBottom: 24 
-              }}
-            >
+          <div style={{ padding: '0 28px 28px', position: 'relative' }}>
+            <div style={{ 
+              display: 'flex', alignItems: 'flex-end', gap: 20, 
+              marginTop: -50, marginBottom: 24 
+            }}>
               <div 
                 style={{ position: 'relative', cursor: 'pointer' }}
                 onClick={() => fileInputRef.current?.click()}
@@ -1437,7 +1095,7 @@ export const ProfileView: React.FC = () => {
               </div>
             )}
 
-            <div className="profile-form-grid-row">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="form-group">
                 <label className="form-label">Full Name</label>
                 <input
@@ -1501,7 +1159,7 @@ export const ProfileView: React.FC = () => {
               />
             </div>
 
-            <div className="profile-form-grid-row" style={{ marginTop: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
               <div className="form-group">
                 <label className="form-label">LinkedIn (ID or URL)</label>
                 <input type="text" className="form-input" value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="e.g. janesmith or https://..." />

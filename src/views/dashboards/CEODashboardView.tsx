@@ -947,7 +947,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
           className="bento-card"
           style={{
             marginTop: 24,
-            padding: 24,
+            padding: 'clamp(14px, 3.5vw, 24px)',
             background: 'rgba(12, 16, 26, 0.55)',
             backdropFilter: 'blur(28px) saturate(170%)',
             WebkitBackdropFilter: 'blur(28px) saturate(170%)',
@@ -972,7 +972,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
               </div>
               <div>
                 <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
-                  Team Access & Security Control
+                  Team Access &amp; Security Control
                 </h3>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Pause or block member workspace access. Suspended users will immediately see a restriction notice with instructions to contact you.
@@ -1002,10 +1002,10 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
             </button>
           </div>
 
-          <div style={{
+          <div className="ceova-security-grid" style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: 16
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+            gap: 14
           }}>
             {members.map((m) => {
               const isSelf = user?.id === m.id || (user?.email && m.email && user.email.toLowerCase() === m.email.toLowerCase());
@@ -1073,14 +1073,15 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                       borderRadius: 6,
                       background: isBlocked ? '#450a0a' : isPaused ? '#451a03' : '#052e16',
                       color: isBlocked ? '#f87171' : isPaused ? '#fbbf24' : '#4ade80',
-                      border: isBlocked ? '1px solid #7f1d1d' : isPaused ? '1px solid #78350f' : '1px solid #14532d'
+                      border: isBlocked ? '1px solid #7f1d1d' : isPaused ? '1px solid #78350f' : '1px solid #14532d',
+                      flexShrink: 0
                     }}>
                       {m.status || 'Active'}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                    <span style={{ fontSize: 11, color: '#a1a1aa' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.06)', flexWrap: 'wrap', gap: 6 }}>
+                    <span style={{ fontSize: 11, color: '#a1a1aa', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.designation || 'Team Member'}
                     </span>
 
@@ -1103,7 +1104,8 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                           background: isSuspended ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
                           border: isSuspended ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
                           color: isSuspended ? '#4ade80' : '#f87171',
-                          transition: 'all 0.15s ease'
+                          transition: 'all 0.15s ease',
+                          flexShrink: 0
                         }}
                       >
                         {isSuspended ? (

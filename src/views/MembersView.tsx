@@ -336,7 +336,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="ceova-members-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* View Mode Switcher */}
           <div style={{
             display: 'flex',
@@ -514,7 +514,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
           {(['all', 'admin', 'member', 'intern'] as const).map((r) => (
             <button
               key={r}
@@ -530,7 +530,8 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                 fontWeight: 600,
                 textTransform: 'capitalize',
                 cursor: 'pointer',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap'
               }}
             >
               {r === 'all' ? 'All Roles' : r === 'admin' ? 'Admins' : r === 'member' ? 'Members' : 'Interns'}
@@ -575,10 +576,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         </div>
       ) : viewMode === 'cards' ? (
         /* CARDS GRID VIEW */
-        <div style={{
+        <div className="ceova-members-grid" style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-          gap: 22
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
+          gap: 18
         }}>
           {filteredMembers.map((member) => {
             const isOnline = isUserOnline(member.id);

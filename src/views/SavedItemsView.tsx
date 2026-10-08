@@ -538,7 +538,7 @@ export const SavedItemsView: React.FC<SavedItemsViewProps> = ({ onNavigate }) =>
           )}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
           {filteredSavedTasks.map(task => {
             const pBadge = getPriorityBadge(task.priority);
             const banner = task.attachments?.find(a => a.type === 'banner');

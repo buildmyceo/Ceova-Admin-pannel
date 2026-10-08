@@ -604,31 +604,33 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
             }}>
               <CalendarIcon size={19} />
             </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--text-main, #ffffff)' }}>
-              Calendar, Meetings & Deadlines
-            </h1>
-            <span style={{
-              background: '#14291f',
-              border: '1px solid #1e4631',
-              color: '#34d399',
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: 6,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4
-            }}>
-              <Video size={12} /> Google Meet Live
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: 'clamp(18px, 4.5vw, 22px)', fontWeight: 700, margin: 0, color: 'var(--text-main, #ffffff)' }}>
+                Calendar &amp; Meetings
+              </h1>
+              <span style={{
+                background: '#14291f',
+                border: '1px solid #1e4631',
+                color: '#34d399',
+                fontSize: 10.5,
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 6,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
+              }}>
+                <Video size={11} /> Google Meet Live
+              </span>
+            </div>
           </div>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted, #a1a1aa)' }}>
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-muted, #a1a1aa)' }}>
             Coordinate Google Meet syncs, track team tasks, and monitor upcoming deadlines and project timelines.
           </p>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => onNavigate?.('tasks')}
@@ -826,7 +828,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
           WebkitBackdropFilter: 'blur(45px) saturate(180%)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
           borderRadius: 20,
-          padding: 24,
+          padding: 'clamp(12px, 3.5vw, 24px)',
           boxShadow: '0 16px 36px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
           minWidth: 0,
           overflow: 'hidden',
@@ -937,15 +939,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
           }}>
             {/* Empty offset days */}
             {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-              <div key={`offset-${i}`} style={{
-                minHeight: 88,
-                borderRadius: 10,
-                background: 'rgba(255, 255, 255, 0.02)',
-                border: '1px dashed rgba(255, 255, 255, 0.08)',
-                opacity: 0.3,
-                minWidth: 0,
-                overflow: 'hidden'
-              }} />
+              <div 
+                key={`offset-${i}`} 
+                className="ceova-calendar-day-cell"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px dashed rgba(255, 255, 255, 0.08)',
+                  opacity: 0.3,
+                  minWidth: 0,
+                  overflow: 'hidden'
+                }} 
+              />
             ))}
 
             {/* Days in Month */}
@@ -971,9 +975,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                 <div
                   key={formattedDate}
                   onClick={() => handleSelectDate(formattedDate)}
+                  className="ceova-calendar-day-cell"
                   style={{
-                    minHeight: 92,
-                    borderRadius: 12,
                     minWidth: 0,
                     overflow: 'hidden',
                     background: isSelected 
@@ -986,12 +989,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                       : isToday 
                         ? '1px solid #3f3f46' 
                         : '1px solid #27272a',
-                    padding: '7px 7px',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
                     position: 'relative'
                   }}
                 >
@@ -1007,8 +1008,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                       fontSize: 12,
                       fontWeight: isToday ? 700 : (isSelected ? 700 : 500),
                       color: isToday ? '#ffffff' : (isSelected ? '#ffffff' : '#a1a1aa'),
-                      width: 22,
-                      height: 22,
+                      width: 20,
+                      height: 20,
                       borderRadius: '50%',
                       background: isToday 
                         ? '#27272a' 
@@ -1021,8 +1022,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                       {dayNum}
                     </span>
 
-                    {/* Count Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                    {/* Count Badges (Desktop) */}
+                    <div className="ceova-calendar-day-badges-text" style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
                       {dayMeetings.length > 0 && calendarFilter !== 'tasks' && (
                         <span title={`${dayMeetings.length} meeting(s)`} style={{
                           fontSize: 9.5,
@@ -1053,8 +1054,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                     </div>
                   </div>
 
-                  {/* Day Items Container */}
-                  <div style={{
+                  {/* Dot Indicators for Mobile View */}
+                  <div className="ceova-calendar-dot-indicators" style={{ alignItems: 'center', gap: 3, justifyContent: 'center', marginTop: 2 }}>
+                    {dayMeetings.length > 0 && calendarFilter !== 'tasks' && (
+                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#60a5fa', flexShrink: 0 }} />
+                    )}
+                    {dayTasks.length > 0 && calendarFilter !== 'meetings' && (
+                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fbbf24', flexShrink: 0 }} />
+                    )}
+                    {dayTimelines.length > 0 && calendarFilter !== 'meetings' && dayMeetings.length === 0 && dayTasks.length === 0 && (
+                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#a855f7', flexShrink: 0 }} />
+                    )}
+                  </div>
+
+                  {/* Day Items Container (Desktop Preview) */}
+                  <div className="ceova-calendar-day-preview" style={{
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'flex-end',

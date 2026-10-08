@@ -1714,7 +1714,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
       }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           {/* Status Tabs Segmented Control */}
-          <div style={{
+          <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{
             display: 'inline-flex',
             alignItems: 'center',
             background: '#121214',
@@ -1784,15 +1784,17 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
           </div>
 
           {/* Scope Toggle & Search */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%' }}>
+            <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{
               display: 'inline-flex',
               alignItems: 'center',
               background: '#121214',
               borderRadius: 8,
               padding: 3,
               border: '1px solid #222225',
-              gap: 2
+              gap: 2,
+              overflowX: 'auto',
+              maxWidth: '100%'
             }}>
               <button
                 type="button"
@@ -1809,7 +1811,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                   transition: 'all 0.15s ease',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6
+                  gap: 6,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 <span>Assigned to Me</span>
@@ -1840,7 +1843,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     transition: 'all 0.15s ease',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 6
+                    gap: 6,
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   <span>Given to Members</span>
@@ -1871,7 +1875,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                   transition: 'all 0.15s ease',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6
+                  gap: 6,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 <span>All Team</span>
@@ -2077,7 +2082,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
           )}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+        <div className="ceova-tasks-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
           {filteredTasks.map((task) => {
             const pBadge = getPriorityBadge(task.priority);
             const sBadge = getStatusBadge(task.status);

@@ -4284,6 +4284,73 @@ html, body, #root {
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;
   }
+
+  /* Calendar day cell mobile compactness */
+  .ceova-calendar-day-cell {
+    min-height: 48px !important;
+    max-height: 56px !important;
+    padding: 3px 4px !important;
+    border-radius: 8px !important;
+  }
+
+  .ceova-calendar-day-preview {
+    display: none !important;
+  }
+
+  .ceova-calendar-day-badges-text {
+    display: none !important;
+  }
+
+  .ceova-calendar-dot-indicators {
+    display: flex !important;
+  }
+
+  /* Grid single-column on mobile to prevent horizontal clipping */
+  .ceova-members-grid,
+  .ceova-tasks-grid,
+  .ceova-security-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .ceova-members-header-actions {
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+
+  .ceova-filter-scroll-row {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    max-width: 100% !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 2px !important;
+  }
+}
+
+/* Generic scrollbar hide utility */
+.ceova-hide-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.ceova-hide-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Default calendar desktop styles */
+.ceova-calendar-day-cell {
+  min-height: 92px;
+  border-radius: 12px;
+  padding: 7px;
+  transition: all 0.15s ease;
+}
+
+.ceova-calendar-dot-indicators {
+  display: none;
 }
 
 
