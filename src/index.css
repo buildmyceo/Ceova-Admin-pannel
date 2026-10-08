@@ -201,6 +201,7 @@ body {
 
 .login-gateway-container {
   min-height: 100vh;
+  min-height: 100dvh;
   background: transparent !important;
   position: relative;
   z-index: 1;
@@ -3633,6 +3634,274 @@ body {
   }
 }
 
+/* ==========================================================================
+   CEOVA ORBIT - RESPONSIVE LOGIN & ACTIVATION CARD MODAL
+   ========================================================================== */
+
+.ceova-login-viewport {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  min-height: 100dvh;
+  min-height: 100svh;
+  background-color: #07090e;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  z-index: 50;
+  box-sizing: border-box;
+}
+
+.ceova-login-card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 460px;
+  background: rgba(12, 16, 26, 0.65);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  padding: 34px 30px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-sizing: border-box;
+  margin: auto;
+  transition: padding 0.2s ease, border-radius 0.2s ease;
+}
+
+.ceova-login-header-logo-box {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 12px auto;
+  border-radius: 16px;
+  background: #161618;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+}
+
+.ceova-login-title {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px 0;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.ceova-login-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+.ceova-login-tabs-container {
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 20px;
+  gap: 4px;
+}
+
+.ceova-login-tab-btn {
+  flex: 1;
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ceova-login-tab-btn:active {
+  transform: scale(0.98);
+}
+
+.ceova-login-input {
+  width: 100%;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 13.5px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  -webkit-appearance: none;
+}
+
+.ceova-login-input:focus {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ceova-login-input-verified:focus {
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+.ceova-login-eye-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 42px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ceova-login-eye-btn:hover,
+.ceova-login-eye-btn:active {
+  color: #ffffff;
+}
+
+.ceova-login-btn-primary {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+.ceova-login-btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.ceova-login-otp-box {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid #16a34a;
+  color: #ffffff;
+  font-size: clamp(22px, 6.5vw, 28px);
+  font-weight: 800;
+  letter-spacing: clamp(6px, 2.4vw, 12px);
+  text-align: center;
+  outline: none;
+  box-sizing: border-box;
+  font-family: 'Courier New', Courier, monospace;
+  -webkit-appearance: none;
+}
+
+/* --------------------------------------------------------------------------
+   Mobile Optimizations (max-width: 640px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .ceova-login-viewport {
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top)) 12px max(24px, env(safe-area-inset-bottom)) 12px;
+  }
+
+  .ceova-login-card {
+    padding: 24px 18px;
+    border-radius: 20px;
+    margin-top: auto;
+    margin-bottom: auto;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .ceova-login-header-logo-box {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 8px;
+    border-radius: 14px;
+    padding: 8px;
+  }
+
+  .ceova-login-title {
+    font-size: 19px;
+  }
+
+  .ceova-login-subtitle {
+    font-size: 11px;
+  }
+
+  .ceova-login-tabs-container {
+    margin-bottom: 16px;
+  }
+
+  .ceova-login-tab-btn {
+    min-height: 42px;
+    font-size: 12.5px;
+    padding: 8px 10px;
+  }
+
+  /* Critical: Prevent iOS Safari auto-zoom on input focus by setting 16px */
+  .ceova-login-input {
+    font-size: 16px !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .ceova-login-btn-primary {
+    min-height: 48px;
+    font-size: 14px;
+  }
+}
+
+/* Extra small mobile devices (max-width: 380px, e.g. iPhone SE, Galaxy A) */
+@media (max-width: 380px) {
+  .ceova-login-card {
+    padding: 18px 14px;
+    border-radius: 16px;
+  }
+
+  .ceova-login-tab-btn {
+    font-size: 11.5px;
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .ceova-login-otp-box {
+    font-size: 20px;
+    letter-spacing: 5px;
+    padding: 10px 8px;
+  }
+}
+
 
 
 @media (prefers-color-scheme: dark) {
@@ -4016,97 +4285,5 @@ html, body, #root {
     scrollbar-width: none !important;
   }
 }
-
-/* ==============================================================================
-   PROFILE VIEW & MOBILE APP RESPONSIVE OPTIMIZATIONS
-   ============================================================================== */
-@keyframes slideInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.profile-bento-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-}
-
-.profile-mobile-apps-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 14px;
-}
-
-.profile-form-grid-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-@media (max-width: 768px) {
-  .page-header {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 12px !important;
-  }
-
-  .page-header .btn {
-    width: 100% !important;
-    justify-content: center !important;
-  }
-
-  .profile-cover-photo-wrap {
-    height: 180px !important;
-  }
-
-  .profile-card-content,
-  .profile-edit-content {
-    padding: 0 16px 20px !important;
-  }
-
-  .profile-identity-header-row {
-    margin-top: -42px !important;
-    gap: 12px !important;
-  }
-
-  .profile-bento-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-  }
-
-  .profile-mobile-apps-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-  }
-
-  .profile-mobile-app-card {
-    padding: 16px 14px !important;
-  }
-
-  .profile-edit-avatar-row {
-    margin-top: -42px !important;
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 12px !important;
-  }
-}
-
-@media (max-width: 640px) {
-  .profile-form-grid-row {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-  }
-
-  .profile-cover-photo-wrap {
-    height: 160px !important;
-  }
-}
-
 
 

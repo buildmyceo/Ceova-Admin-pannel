@@ -396,38 +396,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       />
 
       {/* 2. CENTERED CARD - GLASSMORPHISM */}
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 10,
-          width: '100%',
-          maxWidth: '460px',
-          background: 'rgba(12, 16, 26, 0.62)',
-          backdropFilter: 'blur(32px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(32px) saturate(180%)',
-          border: '1px solid rgba(255, 255, 255, 0.14)',
-          borderRadius: '24px',
-          padding: '34px 30px',
-          boxShadow: '0 28px 80px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.18)',
-        }}
-      >
+      <div className="ceova-login-card">
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div
-            style={{
-              width: 58,
-              height: 58,
-              margin: '0 auto 12px auto',
-              borderRadius: '16px',
-              background: '#161618',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 10,
-              boxShadow: '0 12px 35px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
-            }}
-          >
+          <div className="ceova-login-header-logo-box">
             <img
               src="/ceovaimage.png"
               alt="CEOVA Logo"
@@ -442,58 +414,26 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             />
           </div>
 
-          <h2
-            style={{
-              fontSize: '21px',
-              fontWeight: 800,
-              letterSpacing: '-0.02em',
-              margin: '0 0 4px 0',
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-            }}
-          >
+          <h2 className="ceova-login-title">
             CEOVA <span style={{ color: '#38bdf8', fontWeight: 700 }}>ORBIT</span>
           </h2>
-          <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8', letterSpacing: '0.02em' }}>
+          <p className="ceova-login-subtitle">
             Enterprise Workspace Operating System
           </p>
         </div>
 
         {/* 3. MODE SELECTOR TABS (Sign In vs Activate Account) */}
-        <div
-          style={{
-            display: 'flex',
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '12px',
-            padding: '4px',
-            marginBottom: 22,
-          }}
-        >
+        <div className="ceova-login-tabs-container">
           <button
             type="button"
+            className="ceova-login-tab-btn"
             onClick={() => {
               setActiveTab('signin');
               setSignInError('');
             }}
             style={{
-              flex: 1,
-              padding: '9px 12px',
-              borderRadius: '9px',
-              border: 'none',
               background: activeTab === 'signin' ? '#2563eb' : 'transparent',
               color: activeTab === 'signin' ? '#ffffff' : '#94a3b8',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              transition: 'all 0.2s ease',
               boxShadow: activeTab === 'signin' ? '0 4px 14px rgba(37, 99, 235, 0.4)' : 'none',
             }}
           >
@@ -503,25 +443,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
           <button
             type="button"
+            className="ceova-login-tab-btn"
             onClick={() => {
               setActiveTab('activate');
               setActivationError('');
             }}
             style={{
-              flex: 1,
-              padding: '9px 12px',
-              borderRadius: '9px',
-              border: 'none',
               background: activeTab === 'activate' ? '#16a34a' : 'transparent',
               color: activeTab === 'activate' ? '#ffffff' : '#94a3b8',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              transition: 'all 0.2s ease',
               boxShadow: activeTab === 'activate' ? '0 4px 14px rgba(22, 163, 74, 0.35)' : 'none',
             }}
           >
@@ -611,23 +540,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <div style={{ position: 'relative' }}>
                   <input
                     type="email"
+                    className="ceova-login-input"
                     placeholder="name@ceova.online"
                     value={signInEmail}
                     onChange={(e) => setSignInEmail(e.target.value)}
                     required
                     style={{
-                      width: '100%',
                       padding: '11px 12px 11px 36px',
-                      borderRadius: '9px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      color: '#ffffff',
-                      fontSize: '13.5px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
                     }}
                   />
-                  <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)' }} />
+                  <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)', pointerEvents: 'none' }} />
                 </div>
               </div>
 
@@ -657,39 +579,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showSignInPassword ? 'text' : 'password'}
+                    className="ceova-login-input"
                     placeholder="••••••••••••"
                     value={signInPassword}
                     onChange={(e) => setSignInPassword(e.target.value)}
                     required
                     style={{
-                      width: '100%',
-                      padding: '11px 38px 11px 36px',
-                      borderRadius: '9px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      color: '#ffffff',
-                      fontSize: '13.5px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
+                      padding: '11px 42px 11px 36px',
                     }}
                   />
-                  <Lock size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)' }} />
+                  <Lock size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255, 255, 255, 0.4)', pointerEvents: 'none' }} />
                   <button
                     type="button"
+                    className="ceova-login-eye-btn"
                     onClick={() => setShowSignInPassword(!showSignInPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: 12,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: 'rgba(255, 255, 255, 0.5)',
-                      cursor: 'pointer',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
+                    aria-label={showSignInPassword ? "Hide password" : "Show password"}
                   >
                     {showSignInPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -698,23 +602,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
               <button
                 type="submit"
+                className="ceova-login-btn-primary"
                 disabled={signInLoading}
                 style={{
-                  width: '100%',
-                  padding: '13px',
-                  borderRadius: '9px',
                   backgroundColor: '#2563eb',
                   color: '#ffffff',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: '14px',
-                  cursor: signInLoading ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
                   boxShadow: '0 4px 18px rgba(37, 99, 235, 0.45)',
-                  transition: 'all 0.15s ease',
                   opacity: signInLoading ? 0.7 : 1,
                 }}
               >
@@ -817,28 +710,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
+                      autoComplete="one-time-code"
                       maxLength={6}
                       autoFocus
                       placeholder="000000"
+                      className="ceova-login-otp-box"
                       value={otpCode}
                       onChange={(e) => {
                         const val = e.target.value.replace(/\D/g, '');
                         setOtpCode(val);
                         setActivationError('');
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '12px 16px',
-                        borderRadius: '10px',
-                        background: 'rgba(255, 255, 255, 0.06)',
-                        border: '2px solid #16a34a',
-                        color: '#ffffff',
-                        fontSize: '26px',
-                        fontWeight: 800,
-                        letterSpacing: '10px',
-                        textAlign: 'center',
-                        outline: 'none',
-                        boxSizing: 'border-box',
                       }}
                     />
                     <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: 8 }}>
@@ -848,24 +729,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
                   <button
                     type="submit"
+                    className="ceova-login-btn-primary"
                     disabled={isVerifyingOtp || otpCode.length !== 6}
                     style={{
-                      width: '100%',
-                      padding: '13px',
-                      borderRadius: '9px',
                       background: '#16a34a',
                       color: '#ffffff',
-                      border: 'none',
-                      fontWeight: 700,
-                      fontSize: '14px',
-                      cursor: (isVerifyingOtp || otpCode.length !== 6) ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
                       boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
                       opacity: (isVerifyingOtp || otpCode.length !== 6) ? 0.6 : 1,
-                      transition: 'all 0.15s ease',
                     }}
                   >
                     {isVerifyingOtp ? (
@@ -877,7 +747,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     )}
                   </button>
 
-                  <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <button
                       type="button"
                       disabled={otpCooldown > 0 || isSendingOtp}
@@ -889,7 +759,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         fontSize: '12px',
                         fontWeight: 600,
                         cursor: otpCooldown > 0 ? 'not-allowed' : 'pointer',
-                        padding: 0,
+                        padding: '8px 0',
+                        minHeight: 38,
+                        display: 'flex',
+                        alignItems: 'center',
                       }}
                     >
                       {otpCooldown > 0 ? `Resend code in ${otpCooldown}s` : 'Resend Code'}
@@ -904,7 +777,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         color: '#94a3b8',
                         fontSize: '12px',
                         cursor: 'pointer',
-                        padding: 0,
+                        padding: '8px 0',
+                        minHeight: 38,
+                        display: 'flex',
+                        alignItems: 'center',
                       }}
                     >
                       &larr; Back to edit password
@@ -1008,16 +884,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         setActivationError('');
                         setIsNotInvited(false);
                       }}
+                      className="ceova-login-input"
                       style={{
-                        width: '100%',
                         padding: '11px 12px 11px 36px',
-                        borderRadius: '9px',
                         background: invitationVerified ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.05)',
                         border: invitationVerified ? '1px solid rgba(34, 197, 94, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
                         color: '#ffffff',
-                        fontSize: '13.5px',
-                        outline: 'none',
-                        boxSizing: 'border-box',
                       }}
                     />
                     <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: invitationVerified ? '#4ade80' : 'rgba(255, 255, 255, 0.4)' }} />
@@ -1029,23 +901,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       type="button"
                       onClick={() => handleVerifyInvitation()}
                       disabled={isVerifyingInvitation || !activateEmail.trim()}
+                      className="ceova-login-btn-primary"
                       style={{
-                        width: '100%',
-                        marginTop: 10,
-                        padding: '11px',
-                        borderRadius: '8px',
+                        marginTop: 12,
                         background: '#16a34a',
                         color: '#ffffff',
-                        border: 'none',
-                        fontWeight: 700,
-                        fontSize: '13px',
-                        cursor: (isVerifyingInvitation || !activateEmail.trim()) ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
                         boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
                         opacity: (isVerifyingInvitation || !activateEmail.trim()) ? 0.6 : 1,
+                        cursor: (isVerifyingInvitation || !activateEmail.trim()) ? 'not-allowed' : 'pointer',
                       }}
                     >
                       {isVerifyingInvitation ? (
@@ -1112,32 +975,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                             onChange={(e) => setNewPassword(e.target.value)}
                             required
                             minLength={6}
+                            className="ceova-login-input"
                             style={{
-                              width: '100%',
-                              padding: '10px 36px 10px 12px',
-                              borderRadius: '8px',
-                              background: 'rgba(255, 255, 255, 0.06)',
-                              border: '1px solid rgba(255, 255, 255, 0.14)',
-                              color: '#ffffff',
-                              fontSize: '13px',
-                              outline: 'none',
-                              boxSizing: 'border-box',
+                              padding: '10px 42px 10px 12px',
                             }}
                           />
                           <button
                             type="button"
                             onClick={() => setShowNewPassword(!showNewPassword)}
-                            style={{
-                              position: 'absolute',
-                              right: 10,
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                              background: 'none',
-                              border: 'none',
-                              color: 'rgba(255, 255, 255, 0.5)',
-                              cursor: 'pointer',
-                              padding: 0,
-                            }}
+                            className="ceova-login-eye-btn"
+                            aria-label={showNewPassword ? 'Hide password' : 'Show password'}
                           >
                             {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                           </button>
@@ -1157,32 +1004,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             required
                             minLength={6}
+                            className="ceova-login-input"
                             style={{
-                              width: '100%',
-                              padding: '10px 36px 10px 12px',
-                              borderRadius: '8px',
-                              background: 'rgba(255, 255, 255, 0.06)',
-                              border: '1px solid rgba(255, 255, 255, 0.14)',
-                              color: '#ffffff',
-                              fontSize: '13px',
-                              outline: 'none',
-                              boxSizing: 'border-box',
+                              padding: '10px 42px 10px 12px',
                             }}
                           />
                           <button
                             type="button"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            style={{
-                              position: 'absolute',
-                              right: 10,
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                              background: 'none',
-                              border: 'none',
-                              color: 'rgba(255, 255, 255, 0.5)',
-                              cursor: 'pointer',
-                              padding: 0,
-                            }}
+                            className="ceova-login-eye-btn"
+                            aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                           >
                             {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                           </button>
@@ -1209,22 +1040,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     <button
                       type="submit"
                       disabled={isSendingOtp || !newPassword || newPassword !== confirmPassword || newPassword.length < 6}
+                      className="ceova-login-btn-primary"
                       style={{
-                        width: '100%',
-                        padding: '13px',
-                        borderRadius: '9px',
                         background: '#16a34a',
                         color: '#ffffff',
-                        border: 'none',
-                        fontWeight: 700,
-                        fontSize: '14px',
-                        cursor: (isSendingOtp || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 8,
                         boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
                         opacity: (isSendingOtp || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 0.6 : 1,
+                        cursor: (isSendingOtp || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 'not-allowed' : 'pointer',
                       }}
                     >
                       {isSendingOtp ? (
@@ -1246,13 +1068,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       background: 'none',
                       border: 'none',
                       color: '#94a3b8',
-                      fontSize: '12px',
+                      fontSize: '12.5px',
                       cursor: 'pointer',
-                      padding: 0,
+                      padding: '8px 12px',
+                      minHeight: 40,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     }}
                   >
                     Already have an active account?{' '}
-                    <strong style={{ color: '#60a5fa', textDecoration: 'underline' }}>Sign In here</strong>
+                    <strong style={{ color: '#60a5fa', textDecoration: 'underline', marginLeft: 4 }}>Sign In here</strong>
                   </button>
                 </div>
               </div>
