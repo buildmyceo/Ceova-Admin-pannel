@@ -775,11 +775,17 @@ serve(async (req) => {
       });
 
       const info = await transporter.sendMail({
-        from: `"CEOVA Team OS" <${smtpUser}>`,
+        from: `"CEOVA Orbit" <${smtpUser}>`,
         to: recipients.join(", "),
         subject: emailSubject,
         text: textContent,
         html: htmlContent,
+        priority: "high",
+        headers: {
+          "X-Priority": "1",
+          "X-MSMail-Priority": "High",
+          "Importance": "high",
+        },
       });
 
       return new Response(JSON.stringify({ 

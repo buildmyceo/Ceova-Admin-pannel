@@ -124,6 +124,53 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
     }
   };
 
+  // Resend invitation status tracking per email
+  const [resendStatusMap, setResendStatusMap] = useState<{ [email: string]: { loading: boolean; message: string; isError: boolean } }>({});
+
+  const handleResendInvitation = async (targetMember: Profile) => {
+    const cleanEmail = targetMember.email?.trim().toLowerCase();
+    if (!cleanEmail) return;
+
+    setResendStatusMap(prev => ({
+      ...prev,
+      [cleanEmail]: { loading: true, message: 'Dispatching invitation email...', isError: false }
+    }));
+
+    try {
+      const res = await sendInvitationEmail({
+        to: cleanEmail,
+        role: targetMember.role,
+        department: targetMember.department || 'General',
+        inviterName: currentUser?.full_name || 'CEOVA Administration',
+      });
+
+      if (res.success) {
+        setResendStatusMap(prev => ({
+          ...prev,
+          [cleanEmail]: { loading: false, message: '✓ Invitation email dispatched! Check Inbox, Updates, or Spam.', isError: false }
+        }));
+      } else {
+        setResendStatusMap(prev => ({
+          ...prev,
+          [cleanEmail]: { loading: false, message: res.error || 'Failed to send email.', isError: true }
+        }));
+      }
+    } catch (err: any) {
+      setResendStatusMap(prev => ({
+        ...prev,
+        [cleanEmail]: { loading: false, message: err?.message || 'Error sending invitation.', isError: true }
+      }));
+    }
+
+    setTimeout(() => {
+      setResendStatusMap(prev => {
+        const next = { ...prev };
+        delete next[cleanEmail];
+        return next;
+      });
+    }, 5000);
+  };
+
   // Send invitation
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,17 +222,25 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
       } catch (_) {}
 
       // 4. Send official workspace invitation email using improved template
+      let emailDispatched = false;
       try {
-        await sendInvitationEmail({
+        const emailRes = await sendInvitationEmail({
           to: cleanEmail,
           role,
           department: role === 'admin' ? 'Administration' : role === 'intern' ? 'Internship' : 'Development',
+          inviterName: currentUser?.full_name || 'CEOVA Administration',
         });
+        emailDispatched = emailRes.success;
       } catch (emailErr) {
         console.warn('Invitation email notice:', emailErr);
       }
 
-      setMessage(`Invitation sent! ${cleanEmail} has been invited to CEOVA Orbit to set their password.`);
+      if (emailDispatched) {
+        setMessage(`✓ Invitation dispatched! ${cleanEmail} has been sent an official workspace setup email.`);
+      } else {
+        setMessage(`Member added to directory! Note: You can resend their invitation email anytime from their profile card.`);
+      }
+
       setEmail('');
       setRole('member');
       setTimeout(() => {
@@ -980,6 +1035,55 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                       </button>
                     ) : (
                       <>
+                        {member.status === 'pending' && isAdmin && (
+                          <div style={{ marginBottom: 8 }}>
+                            <button
+                              type="button"
+                              onClick={() => handleResendInvitation(member)}
+                              disabled={resendStatusMap[member.email?.toLowerCase()]?.loading}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                padding: '8px 12px',
+                                borderRadius: 8,
+                                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(37, 99, 235, 0.2) 100%)',
+                                border: '1px solid rgba(16, 185, 129, 0.4)',
+                                color: '#34d399',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: resendStatusMap[member.email?.toLowerCase()]?.loading ? 'wait' : 'pointer',
+                                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.15)',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(37, 99, 235, 0.3) 100%)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(37, 99, 235, 0.2) 100%)'}
+                            >
+                              <Mail size={13} />
+                              <span>{resendStatusMap[member.email?.toLowerCase()]?.loading ? 'Dispatching Email...' : 'Resend Invitation Email'}</span>
+                            </button>
+
+                            {resendStatusMap[member.email?.toLowerCase()] && (
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  textAlign: 'center',
+                                  padding: '5px 8px',
+                                  borderRadius: 6,
+                                  background: resendStatusMap[member.email?.toLowerCase()].isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                  border: resendStatusMap[member.email?.toLowerCase()].isError ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+                                  color: resendStatusMap[member.email?.toLowerCase()].isError ? '#f87171' : '#34d399',
+                                  marginTop: 4,
+                                }}
+                              >
+                                {resendStatusMap[member.email?.toLowerCase()].message}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => handleNotifyMember(member.id)}
