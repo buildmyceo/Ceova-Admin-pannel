@@ -4017,4 +4017,96 @@ html, body, #root {
   }
 }
 
+/* ==============================================================================
+   PROFILE VIEW & MOBILE APP RESPONSIVE OPTIMIZATIONS
+   ============================================================================== */
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.profile-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.profile-mobile-apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.profile-form-grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .page-header .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .profile-cover-photo-wrap {
+    height: 180px !important;
+  }
+
+  .profile-card-content,
+  .profile-edit-content {
+    padding: 0 16px 20px !important;
+  }
+
+  .profile-identity-header-row {
+    margin-top: -42px !important;
+    gap: 12px !important;
+  }
+
+  .profile-bento-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .profile-mobile-apps-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .profile-mobile-app-card {
+    padding: 16px 14px !important;
+  }
+
+  .profile-edit-avatar-row {
+    margin-top: -42px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-form-grid-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .profile-cover-photo-wrap {
+    height: 160px !important;
+  }
+}
+
+
 

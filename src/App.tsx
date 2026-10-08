@@ -22,6 +22,7 @@ import { PortalBackground } from './components/PortalBackground';
 import { CompulsoryProfileSetupModal } from './components/CompulsoryProfileSetupModal';
 import { SetPasswordModal } from './components/SetPasswordModal';
 import { BlockedAccountView } from './components/BlockedAccountView';
+import { InAppNotificationBanner } from './components/InAppNotificationBanner';
 
 const PortalMain: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -248,6 +249,8 @@ const PortalMain: React.FC = () => {
           onClose={() => setIsPasswordRecovery(false)}
         />
       )}
+      {/* In-App Floating Notification Banner */}
+      <InAppNotificationBanner />
     </div>
   );
 };

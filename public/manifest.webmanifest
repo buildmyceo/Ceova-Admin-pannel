@@ -1,0 +1,26 @@
+{
+  "name": "CEOVA Orbit",
+  "short_name": "CEOVA",
+  "description": "Enterprise Workspace Operating System for CEOVA AI",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#07090e",
+  "theme_color": "#16a34a",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/ceovaimage.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/ceovaimage.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

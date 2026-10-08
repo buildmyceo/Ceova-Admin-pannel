@@ -1,5 +1,6 @@
 import { AppNotification, Profile, NotificationAttachment, UserRole } from '../types';
 import { dispatchNotificationEmails } from './emailService';
+import { dispatchInAppNotification } from './pushNotifications';
 
 const NOTIFICATIONS_STORAGE_KEY = 'ceova_notifications_v2';
 
@@ -97,6 +98,16 @@ export const addNotification = (notif: Omit<AppNotification, 'id' | 'created_at'
 
   const updated = [newNotif, ...current];
   saveNotifications(updated);
+
+  // Dispatch live in-app popup and device native push notification
+  try {
+    dispatchInAppNotification(newNotif.title, newNotif.message, {
+      avatar: newNotif.sender_avatar,
+      url: newNotif.link
+    });
+  } catch (err) {
+    console.warn('[In-App Notification] Notice:', err);
+  }
 
   // Automatically send notification to user email via Resend API
   dispatchNotificationEmails(newNotif).catch(err => {
