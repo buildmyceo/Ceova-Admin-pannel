@@ -6,12 +6,10 @@ import {
   LogIn, 
   ChevronDown,
   Menu,
-  UserPlus,
   Check,
   X,
   Bell
 } from 'lucide-react';
-import { AddAccountModal } from './AddAccountModal';
 import { getStoredNotifications } from '../lib/notificationsService';
 
 interface NavbarProps {
@@ -39,7 +37,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   } = useAuth();
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
@@ -221,8 +218,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Profile Dropdown Menu */}
             {showProfileMenu && (
               <div className="profile-menu-dropdown">
-                {/* 1. Multiple Accounts Section */}
-                <div style={{ padding: '8px 6px 4px', borderBottom: '1px solid var(--border-color)' }}>
+                {/* 1. Multiple Accounts Section (only shown when multiple accounts exist) */}
+                {savedAccounts.length > 1 && (
+                  <div style={{ padding: '8px 6px 4px', borderBottom: '1px solid var(--border-color)' }}>
                   <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -369,41 +367,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                       );
                     })}
                   </div>
-
-                  {/* Add another account action button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      setIsAddAccountOpen(true);
-                    }}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 7,
-                      padding: '8px 10px',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: '#ffffff',
-                      background: '#161618',
-                      border: '1px dashed #333338',
-                      borderRadius: 'var(--radius-sm)',
-                      cursor: 'pointer',
-                      marginTop: 6,
-                      marginBottom: 2,
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#222226')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = '#161618')}
-                  >
-                    <UserPlus size={14} />
-                    <span>Add another account</span>
-                  </button>
                 </div>
+              )}
 
-                {/* 3. Navigation & Actions */}
+                {/* 2. Navigation & Actions */}
                 <button
                   type="button"
                   className="nav-item"
@@ -456,12 +423,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       </header>
-
-      {/* Add Account Modal */}
-      <AddAccountModal 
-        isOpen={isAddAccountOpen} 
-        onClose={() => setIsAddAccountOpen(false)} 
-      />
     </>
   );
 };
