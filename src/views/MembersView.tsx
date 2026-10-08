@@ -1049,17 +1049,17 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                                 gap: 6,
                                 padding: '8px 12px',
                                 borderRadius: 8,
-                                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(37, 99, 235, 0.2) 100%)',
-                                border: '1px solid rgba(16, 185, 129, 0.4)',
-                                color: '#34d399',
+                                background: '#16a34a',
+                                border: 'none',
+                                color: '#ffffff',
                                 fontSize: 12,
                                 fontWeight: 700,
                                 cursor: resendStatusMap[member.email?.toLowerCase()]?.loading ? 'wait' : 'pointer',
-                                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.15)',
+                                boxShadow: '0 2px 10px rgba(22, 163, 74, 0.3)',
                                 transition: 'all 0.15s ease'
                               }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.3) 0%, rgba(37, 99, 235, 0.3) 100%)'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(37, 99, 235, 0.2) 100%)'}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#15803d'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = '#16a34a'}
                             >
                               <Mail size={13} />
                               <span>{resendStatusMap[member.email?.toLowerCase()]?.loading ? 'Dispatching Email...' : 'Resend Invitation Email'}</span>
@@ -1072,9 +1072,9 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                                   textAlign: 'center',
                                   padding: '5px 8px',
                                   borderRadius: 6,
-                                  background: resendStatusMap[member.email?.toLowerCase()].isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                  border: resendStatusMap[member.email?.toLowerCase()].isError ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
-                                  color: resendStatusMap[member.email?.toLowerCase()].isError ? '#f87171' : '#34d399',
+                                  background: resendStatusMap[member.email?.toLowerCase()].isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                  border: resendStatusMap[member.email?.toLowerCase()].isError ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
+                                  color: resendStatusMap[member.email?.toLowerCase()].isError ? '#f87171' : '#4ade80',
                                   marginTop: 4,
                                 }}
                               >

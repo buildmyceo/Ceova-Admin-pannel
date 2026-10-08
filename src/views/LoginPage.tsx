@@ -442,7 +442,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               padding: '9px 12px',
               borderRadius: '9px',
               border: 'none',
-              background: activeTab === 'activate' ? '#10b981' : 'transparent',
+              background: activeTab === 'activate' ? '#16a34a' : 'transparent',
               color: activeTab === 'activate' ? '#ffffff' : '#94a3b8',
               fontSize: '13px',
               fontWeight: 600,
@@ -452,7 +452,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               justifyContent: 'center',
               gap: 6,
               transition: 'all 0.2s ease',
-              boxShadow: activeTab === 'activate' ? '0 4px 14px rgba(16, 185, 129, 0.4)' : 'none',
+              boxShadow: activeTab === 'activate' ? '0 4px 14px rgba(22, 163, 74, 0.35)' : 'none',
             }}
           >
             <Sparkles size={14} />
@@ -670,7 +670,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#34d399',
+                    color: '#4ade80',
                     fontWeight: 700,
                     cursor: 'pointer',
                     padding: 0,
@@ -698,13 +698,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     height: 60,
                     margin: '0 auto 16px auto',
                     borderRadius: '50%',
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                    background: 'rgba(34, 197, 94, 0.15)',
+                    border: '1px solid rgba(34, 197, 94, 0.4)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#34d399',
-                    boxShadow: '0 0 25px rgba(16, 185, 129, 0.25)',
+                    color: '#4ade80',
+                    boxShadow: '0 0 25px rgba(34, 197, 94, 0.25)',
                   }}
                 >
                   <Mail size={28} />
@@ -717,7 +717,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 <p style={{ margin: '0 0 16px 0', fontSize: '13.5px', color: '#94a3b8', lineHeight: 1.55 }}>
                   We have dispatched a secure workspace activation link to:
                   <br />
-                  <strong style={{ color: '#38bdf8' }}>{activateEmail}</strong>
+                  <strong style={{ color: '#4ade80' }}>{activateEmail}</strong>
                 </p>
 
                 <div
@@ -733,7 +733,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     lineHeight: 1.6,
                   }}
                 >
-                  <div style={{ fontWeight: 700, color: '#34d399', marginBottom: 4 }}>
+                  <div style={{ fontWeight: 700, color: '#4ade80', marginBottom: 4 }}>
                     Next step to enter your workspace:
                   </div>
                   <div>1. Open your email inbox (or spam folder).</div>
@@ -867,15 +867,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         width: '100%',
                         padding: '11px 12px 11px 36px',
                         borderRadius: '9px',
-                        background: invitationVerified ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.05)',
-                        border: invitationVerified ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+                        background: invitationVerified ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.05)',
+                        border: invitationVerified ? '1px solid rgba(34, 197, 94, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
                         color: '#ffffff',
                         fontSize: '13.5px',
                         outline: 'none',
                         boxSizing: 'border-box',
                       }}
                     />
-                    <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: invitationVerified ? '#34d399' : 'rgba(255, 255, 255, 0.4)' }} />
+                    <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: invitationVerified ? '#4ade80' : 'rgba(255, 255, 255, 0.4)' }} />
                   </div>
 
                   {/* Verify Invitation Button (Only shown if NOT yet verified) */}
@@ -889,7 +889,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         marginTop: 10,
                         padding: '11px',
                         borderRadius: '8px',
-                        background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+                        background: '#16a34a',
                         color: '#ffffff',
                         border: 'none',
                         fontWeight: 700,
@@ -899,7 +899,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 8,
-                        boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                        boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
                         opacity: (isVerifyingInvitation || !activateEmail.trim()) ? 0.6 : 1,
                       }}
                     >
@@ -920,12 +920,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                     {/* Verified Banner */}
                     <div
                       style={{
-                        background: 'rgba(16, 185, 129, 0.12)',
-                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        background: 'rgba(34, 197, 94, 0.12)',
+                        border: '1px solid rgba(34, 197, 94, 0.35)',
                         borderRadius: '10px',
                         padding: '12px 14px',
                         marginBottom: 18,
-                        color: '#34d399',
+                        color: '#4ade80',
                         fontSize: '12.5px',
                         display: 'flex',
                         alignItems: 'center',
@@ -950,7 +950,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       }}
                     >
                       <div style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Lock size={15} style={{ color: '#38bdf8' }} />
+                        <Lock size={15} style={{ color: '#4ade80' }} />
                         Create Your Workspace Password
                       </div>
 
@@ -1068,7 +1068,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         width: '100%',
                         padding: '13px',
                         borderRadius: '9px',
-                        background: 'linear-gradient(135deg, #10b981 0%, #2563eb 100%)',
+                        background: '#16a34a',
                         color: '#ffffff',
                         border: 'none',
                         fontWeight: 700,
@@ -1078,7 +1078,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 8,
-                        boxShadow: '0 4px 18px rgba(16, 185, 129, 0.4)',
+                        boxShadow: '0 4px 14px rgba(22, 163, 74, 0.35)',
                         opacity: (isSubmittingActivation || !newPassword || newPassword !== confirmPassword || newPassword.length < 6) ? 0.6 : 1,
                       }}
                     >
