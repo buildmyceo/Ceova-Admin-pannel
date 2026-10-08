@@ -46,7 +46,249 @@ serve(async (req) => {
     let finalText = customText;
     let generatedActionLink: string | null = null;
 
-    // Handle first-time password setup for approved directory members
+    // 1. Action: Verify Invitation (Strict Check - Never creates any record)
+    if (action === 'verify-invitation') {
+      if (!serviceRoleKey) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
+      }
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+
+      // Check profiles table first
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, full_name, email, role, status, department')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      let invitation = null;
+      if (!profile) {
+        const { data: inv } = await supabaseAdmin
+          .from('invitations')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        invitation = inv;
+      }
+
+      if (!profile && !invitation) {
+        return new Response(JSON.stringify({ 
+          success: true, 
+          isInvited: false, 
+          error: "This email is not invited to CEOVA Orbit. Access is restricted to invited team members only." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        isInvited: true, 
+        name: profile?.full_name || invitation?.full_name || cleanEmail.split('@')[0].replace(/[._-]/g, ' '),
+        role: profile?.role || invitation?.role || 'member',
+        department: profile?.department || invitation?.department || '',
+        status: profile?.status || 'pending',
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    // 2. Action: Set Password & Dispatch Confirmation Email (Only for Invited Members!)
+    if (action === 'activate-account-with-password' || action === 'activate-and-send-confirmation') {
+      if (!serviceRoleKey) {
+        throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
+      }
+
+      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { autoRefreshToken: false, persistSession: false }
+      });
+
+      // STRICT GATE: Verify user is invited in public.profiles or invitations!
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      let invitation = null;
+      if (!profile) {
+        const { data: inv } = await supabaseAdmin
+          .from('invitations')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        invitation = inv;
+      }
+
+      // If NOT invited: REJECT IMMEDIATELY. DO NOT create ANY user or profile!
+      if (!profile && !invitation) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          isInvited: false, 
+          error: "Access Denied: This email is not invited to CEOVA Orbit. Account setup is restricted to invited members only." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (!setDirectPassword || setDirectPassword.length < 6) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: "Password must be at least 6 characters long." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // User IS invited: create or update auth user with the chosen password
+      const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+      let targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
+
+      if (!targetUser) {
+        const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email: cleanEmail,
+          password: setDirectPassword,
+          email_confirm: true,
+        });
+        if (createErr) throw new Error(`Failed to create auth user: ${createErr.message}`);
+        targetUser = created.user;
+      } else {
+        const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
+          password: setDirectPassword,
+          email_confirm: true,
+        });
+        if (updateErr) throw new Error(`Failed to update auth user: ${updateErr.message}`);
+      }
+
+      // Ensure profile ID matches auth ID and status is pending confirmation
+      if (profile && profile.id !== targetUser.id) {
+        try {
+          await supabaseAdmin
+            .from('profiles')
+            .update({ id: targetUser.id, status: 'pending', updated_at: new Date().toISOString() })
+            .ilike('email', cleanEmail);
+        } catch (_) {}
+      }
+
+      // Generate authentic confirmation magiclink action link
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
+        email: cleanEmail,
+        options: {
+          redirectTo: portalUrl,
+        }
+      });
+
+      if (linkErr) {
+        throw new Error(`Failed to generate confirmation link: ${linkErr.message}`);
+      }
+
+      generatedActionLink = linkData?.properties?.action_link || portalUrl;
+      if (generatedActionLink) {
+        try {
+          const parsedLink = new URL(generatedActionLink);
+          parsedLink.searchParams.set("redirect_to", portalUrl);
+          generatedActionLink = parsedLink.toString();
+        } catch (_) {}
+      }
+
+      const memberName = profile?.full_name || cleanEmail.split('@')[0];
+      const memberRole = (profile?.role || invitation?.role || 'Member').toUpperCase();
+
+      finalSubject = "[CEOVA Orbit] Confirm Your Account & Enter Workspace";
+      finalText = `Hello ${memberName},\n\nYour workspace password has been established. Click the confirmation link below to activate your account and enter CEOVA Orbit:\n\n${generatedActionLink}\n\nCEOVA Orbit • Enterprise Team OS`;
+
+      finalHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm Your Account & Enter CEOVA Orbit</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #07090e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #07090e; padding: 36px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #0f1422; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);">
+          <tr>
+            <td style="height: 4px; background: linear-gradient(90deg, #10b981 0%, #3b82f6 50%, #8b5cf6 100%); font-size: 0; line-height: 0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding: 34px 34px 22px; text-align: center; background-color: #111827; border-bottom: 1px solid #1e293b;">
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin: 0 auto 16px auto;">
+                <tr>
+                  <td style="vertical-align: middle; padding-right: 12px;">
+                    <img src="https://portal.ceovaai.com/ceovaimage.png" width="44" height="44" alt="CEOVA Orbit Logo" style="display: block; width: 44px; height: 44px; border-radius: 12px; background-color: #ffffff; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.3);" />
+                  </td>
+                  <td style="vertical-align: middle; text-align: left;">
+                    <div style="font-size: 20px; font-weight: 800; letter-spacing: 1.5px; color: #ffffff; line-height: 1.1;">CEOVA <span style="color: #38bdf8;">ORBIT</span></div>
+                    <div style="font-size: 9.5px; font-weight: 700; letter-spacing: 2.2px; text-transform: uppercase; color: #94a3b8; line-height: 1.1; margin-top: 2px;">Enterprise Team OS</div>
+                  </td>
+                </tr>
+              </table>
+              <div style="display: inline-block; padding: 6px 14px; background-color: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #34d399; text-transform: uppercase; margin-bottom: 10px;">
+                ACCOUNT ACTIVATION &bull; EMAIL CONFIRMATION
+              </div>
+              <h1 style="margin: 10px 0 6px 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em;">
+                Confirm Your Account
+              </h1>
+              <p style="margin: 0; font-size: 14.5px; line-height: 1.5; color: #94a3b8;">
+                Click below to complete activation and enter the workspace.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px 34px 32px;">
+              <p style="margin: 0 0 16px 0; font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
+                Hello <strong>${memberName}</strong>,
+              </p>
+              <p style="margin: 0 0 22px 0; font-size: 14.5px; line-height: 1.6; color: #cbd5e1;">
+                Your workspace password has been set. Click the button below to confirm your email and enter the private <strong>CEOVA Orbit</strong> workspace as <strong>${memberRole}</strong>.
+              </p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td align="center">
+                    <a href="${generatedActionLink}" target="_blank" style="display: block; width: 100%; box-sizing: border-box; text-align: center; padding: 15px 24px; background: linear-gradient(135deg, #10b981 0%, #2563eb 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); letter-spacing: 0.02em;">
+                      Confirm Email &amp; Enter CEOVA Orbit &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <div style="background-color: #090d16; border: 1px solid #1e293b; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 12.5px; color: #94a3b8; line-height: 1.5;">
+                <strong style="color: #cbd5e1;">Future Logins:</strong> On future visits, you can use the standard <strong>Sign In</strong> tab with your email and the password you just established.
+              </div>
+              <p style="margin: 0; font-size: 11.5px; line-height: 1.5; color: #64748b; text-align: center; word-break: break-all;">
+                Direct Confirmation Link: <a href="${generatedActionLink}" style="color: #38bdf8; text-decoration: underline;">${generatedActionLink}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 18px 34px; background-color: #090d16; border-top: 1px solid #1e293b; text-align: center;">
+              <p style="margin: 0 0 5px 0; font-size: 11px; color: #64748b; line-height: 1.4;">
+                This activation link was generated for <strong>${cleanEmail}</strong>.
+              </p>
+              <p style="margin: 0; font-size: 10.5px; color: #475569;">
+                CEOVA Orbit &bull; Enterprise Team OS &bull; <a href="https://portal.ceovaai.com" style="color: #64748b; text-decoration: none;">portal.ceovaai.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `;
+    }
+
+    // 3. Handle first-time password setup for approved directory members (Legacy/Compat)
     if (action === 'first-time-setup-or-verify') {
       if (!serviceRoleKey) {
         throw new Error("SUPABASE_SERVICE_ROLE_KEY is required.");
@@ -56,29 +298,38 @@ serve(async (req) => {
         auth: { autoRefreshToken: false, persistSession: false }
       });
 
-      // 1. Verify user exists in public.profiles table
+      // Strictly verify user exists in profiles or invitations!
       const { data: profile } = await supabaseAdmin
         .from('profiles')
         .select('*')
         .ilike('email', cleanEmail)
         .maybeSingle();
 
+      let invitation = null;
       if (!profile) {
+        const { data: inv } = await supabaseAdmin
+          .from('invitations')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        invitation = inv;
+      }
+
+      if (!profile && !invitation) {
         return new Response(JSON.stringify({ 
           success: false, 
           firstTimeActivated: false, 
-          error: "This email is not registered with CEOVA." 
+          error: "This email is not invited to CEOVA Orbit." 
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 400,
+          status: 200,
         });
       }
 
-      // 2. Find user in auth.users
+      // Find user in auth.users
       const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
       let targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
 
-      // A user is first-time if they have never signed in
       const isFirstTime = !targetUser || !targetUser.last_sign_in_at;
 
       if (isFirstTime && setDirectPassword && setDirectPassword.length >= 6) {
@@ -117,20 +368,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         success: false, 
         firstTimeActivated: false, 
-        debug: { 
-          hasUser: !!targetUser, 
-          lastSignIn: targetUser?.last_sign_in_at, 
-          emailConfirmed: targetUser?.email_confirmed_at,
-          identitiesCount: targetUser?.identities?.length
-        },
-        error: "Incorrect email or password. Please verify your credentials or click 'Forgot password?'." 
+        error: "Incorrect email or password. Please verify your credentials or activate your account." 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
     }
 
-    // Handle automated activation / recovery / invitation link generation via Supabase Admin
+    // 4. Handle automated activation / recovery / invitation link generation via Supabase Admin
     if (action === 'activate-user' || action === 'send-activation-email' || action === 'invite-member-orbit' || action === 'send-invitation') {
       if (!serviceRoleKey) {
         throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for admin user activation.");
@@ -140,7 +385,36 @@ serve(async (req) => {
         auth: { autoRefreshToken: false, persistSession: false }
       });
 
-      // 1. Find user in auth.users or create if missing
+      // STRICT GATE: Verify user is invited before creating or activating!
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      let invitation = null;
+      if (!profile) {
+        const { data: inv } = await supabaseAdmin
+          .from('invitations')
+          .select('*')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        invitation = inv;
+      }
+
+      // If neither exists AND this is not an explicit admin invitation action with role, deny!
+      if (!profile && !invitation && action !== 'invite-member-orbit' && action !== 'send-invitation') {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          isInvited: false, 
+          error: "This email is not invited to CEOVA Orbit." 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      // 1. Find user in auth.users or create if invited
       const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
       let targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
 

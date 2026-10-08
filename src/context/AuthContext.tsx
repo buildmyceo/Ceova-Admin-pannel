@@ -546,74 +546,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
 
-        // Check if this member is invited / registered in CEOVA directory
-        let existingProfile: any = null;
-        const { data: p } = await client
-          .from('profiles')
-          .select('*')
-          .ilike('email', cleanEmail)
-          .maybeSingle();
-        existingProfile = p;
-
-        if (!existingProfile) {
-          const { data: inv } = await client
-            .from('invitations')
-            .select('*')
-            .ilike('email', cleanEmail)
-            .maybeSingle();
-          if (inv) existingProfile = inv;
-        }
-
-        // If not registered in CEOVA directory: strictly restrict access
-        if (!existingProfile) {
-          return {
-            success: false,
-            error: 'Wrong email. This email is not registered with CEOVA. If you think this is a mistake, please contact support.'
-          };
-        }
-
-        // Member exists in CEOVA directory!
-        // If account is still pending activation, send activation link via Google SMTP
-        if (existingProfile.status === 'pending') {
-          try {
-            await sendAccountActivationEmail(cleanEmail);
-          } catch (_) {}
-          return {
-            success: false,
-            error: `Your account is pending activation. An activation link has been sent to ${cleanEmail}. Please check your email inbox to choose your password and activate your workspace.`
-          };
-        }
-
-        // Check if this approved member is logging in for the first time without an established password
-        if (rawPassword.trim().length >= 6) {
-          try {
-            const setupRes = await client.functions.invoke('send-notification-email', {
-              body: {
-                action: 'first-time-setup-or-verify',
-                to: [cleanEmail],
-                password: rawPassword.trim(),
-              }
-            });
-
-            if (setupRes.data?.firstTimeActivated) {
-              // Retry signInWithPassword with the newly activated password
-              authResult = await client.auth.signInWithPassword({
-                email: cleanEmail,
-                password: rawPassword.trim(),
-              });
-            }
-          } catch (setupErr) {
-            console.warn('First-time setup check:', setupErr);
-          }
-        }
-
-        // If authentication still has an error:
-        if (authResult.error) {
-          return {
-            success: false,
-            error: 'Incorrect email or password. If you haven\'t set your workspace password yet or forgot it, please click "Forgot password?" or "Reset My Password" below.'
-          };
-        }
+        return {
+          success: false,
+          error: 'Incorrect email or password. Please verify your credentials, or switch to "Activate Account" if you are a newly invited member.'
+        };
       }
 
       // Authentication succeeded
