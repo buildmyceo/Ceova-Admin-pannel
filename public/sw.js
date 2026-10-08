@@ -9,6 +9,26 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// In-App message trigger from frontend client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const title = event.data.title || 'CEOVA Orbit';
+    const options = {
+      body: event.data.message || 'New notification in your workspace.',
+      icon: event.data.avatar || '/ceovaimage.png',
+      badge: '/ceovaimage.png',
+      vibrate: [100, 50, 100],
+      data: {
+        url: event.data.url || '/'
+      },
+      actions: [
+        { action: 'open', title: 'Open' }
+      ]
+    };
+    event.waitUntil(self.registration.showNotification(title, options));
+  }
+});
+
 // Native Push Notification Handler
 self.addEventListener('push', (event) => {
   let payload = {

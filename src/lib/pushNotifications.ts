@@ -70,14 +70,47 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
   }
 };
 
+// Shared Web Audio Context instance
+let sharedAudioContext: AudioContext | null = null;
+
+const getSharedAudioContext = (): AudioContext | null => {
+  if (typeof window === 'undefined') return null;
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!sharedAudioContext) {
+    try {
+      sharedAudioContext = new AudioCtx();
+    } catch (_) {}
+  }
+  return sharedAudioContext;
+};
+
+// Unlock Audio on first user interaction so browsers allow playback
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getSharedAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+    window.removeEventListener('keydown', unlockAudio);
+  };
+  window.addEventListener('click', unlockAudio, { passive: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true });
+  window.addEventListener('keydown', unlockAudio, { passive: true });
+}
+
 // Synthesize pleasant in-app notification audio chime using Web Audio API
-export const playNotificationChime = () => {
+export const playNotificationChime = async () => {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
-    
-    // Smooth dual-tone chime (F#5 to B5)
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+      await ctx.resume().catch(() => {});
+    }
+
     const now = ctx.currentTime;
     const osc1 = ctx.createOscillator();
     const osc2 = ctx.createOscillator();
@@ -92,8 +125,8 @@ export const playNotificationChime = () => {
     osc2.frequency.exponentialRampToValueAtTime(493.88, now + 0.15);
 
     gainNode.gain.setValueAtTime(0.001, now);
-    gainNode.gain.linearRampToValueAtTime(0.2, now + 0.04);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    gainNode.gain.linearRampToValueAtTime(0.3, now + 0.04);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
 
     osc1.connect(gainNode);
     osc2.connect(gainNode);
@@ -101,10 +134,10 @@ export const playNotificationChime = () => {
 
     osc1.start(now);
     osc2.start(now);
-    osc1.stop(now + 0.45);
-    osc2.stop(now + 0.45);
-  } catch (_) {
-    // Ignore audio autoplay restrictions if user hasn't interacted yet
+    osc1.stop(now + 0.5);
+    osc2.stop(now + 0.5);
+  } catch (err) {
+    console.warn('[Audio Chime Notice]:', err);
   }
 };
 
@@ -129,15 +162,28 @@ export const dispatchInAppNotification = (title: string, message: string, option
     );
   }
 
-  // 3. Fire Native Device Notification if permission granted
+  // 3. Fire Native Device Push Notification if permission granted
   if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
     try {
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'SHOW_NOTIFICATION',
-          title,
-          message,
-          url: options?.url
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((reg: any) => {
+          reg.showNotification(title, {
+            body: message,
+            icon: options?.avatar || '/ceovaimage.png',
+            badge: '/ceovaimage.png',
+            vibrate: [100, 50, 100],
+            data: {
+              url: options?.url || '/'
+            }
+          });
+        }).catch(() => {
+          try {
+            new Notification(title, {
+              body: message,
+              icon: options?.avatar || '/ceovaimage.png',
+              badge: '/ceovaimage.png'
+            });
+          } catch (_) {}
         });
       } else {
         new Notification(title, {

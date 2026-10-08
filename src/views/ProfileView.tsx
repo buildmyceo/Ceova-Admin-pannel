@@ -33,7 +33,8 @@ import {
   triggerPwaInstall, 
   getNotificationPermission, 
   requestNotificationPermission, 
-  dispatchInAppNotification 
+  dispatchInAppNotification,
+  playNotificationChime 
 } from '../lib/pushNotifications';
 
 interface ImageEditorProps {
@@ -258,9 +259,12 @@ export const ProfileView: React.FC = () => {
 
   const handleTestNotification = () => {
     setTestNotifSent(true);
+    try {
+      playNotificationChime();
+    } catch (_) {}
     dispatchInAppNotification(
-      'CEOVA Orbit Notification',
-      `Hello ${user?.full_name || 'Team Member'}, in-app and mobile alerts are working!`,
+      'CEOVA Orbit In-App Alert',
+      `Hello ${user?.full_name || 'Team Member'}! In-app notifications and sound alerts are working properly.`,
       { avatar: user?.avatar_url }
     );
     setTimeout(() => setTestNotifSent(false), 2500);

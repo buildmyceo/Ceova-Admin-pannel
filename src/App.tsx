@@ -23,6 +23,7 @@ import { CompulsoryProfileSetupModal } from './components/CompulsoryProfileSetup
 import { SetPasswordModal } from './components/SetPasswordModal';
 import { BlockedAccountView } from './components/BlockedAccountView';
 import { InAppNotificationBanner } from './components/InAppNotificationBanner';
+import { initRealtimeNotifications } from './lib/notificationsService';
 
 const PortalMain: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
@@ -70,6 +71,11 @@ const PortalMain: React.FC = () => {
   };
 
   const { logout, user, isLoading, isPasswordRecovery, setIsPasswordRecovery } = useAuth();
+
+  // Listen to live realtime notifications across team members and devices
+  React.useEffect(() => {
+    initRealtimeNotifications(user);
+  }, [user]);
 
   // Compulsory onboarding setup gate: photo and phone number are strictly mandatory
   const isProfileIncomplete = Boolean(
@@ -249,8 +255,6 @@ const PortalMain: React.FC = () => {
           onClose={() => setIsPasswordRecovery(false)}
         />
       )}
-      {/* In-App Floating Notification Banner */}
-      <InAppNotificationBanner />
     </div>
   );
 };
@@ -262,6 +266,7 @@ export function App() {
         <PortalDataProvider>
           <PortalBackground />
           <PortalMain />
+          <InAppNotificationBanner />
         </PortalDataProvider>
       </AuthProvider>
     </ErrorBoundary>

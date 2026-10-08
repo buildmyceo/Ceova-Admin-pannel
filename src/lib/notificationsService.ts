@@ -1,5 +1,5 @@
 import { AppNotification, Profile, NotificationAttachment, UserRole } from '../types';
-import { dispatchNotificationEmails } from './emailService';
+import { getSupabaseClient } from './supabase';
 import { dispatchInAppNotification } from './pushNotifications';
 
 const NOTIFICATIONS_STORAGE_KEY = 'ceova_notifications_v2';
@@ -87,6 +87,60 @@ export const saveNotifications = (notifications: AppNotification[]) => {
   }
 };
 
+let realtimeChannel: any = null;
+
+export const initRealtimeNotifications = (currentUser?: Profile | null) => {
+  try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+
+    if (realtimeChannel) {
+      try {
+        supabase.removeChannel(realtimeChannel);
+      } catch (_) {}
+    }
+
+    realtimeChannel = supabase.channel('ceova_portal_live_notifications', {
+      config: {
+        broadcast: { self: false }
+      }
+    });
+
+    realtimeChannel
+      .on('broadcast', { event: 'new_notification' }, ({ payload }: { payload: AppNotification }) => {
+        if (!payload) return;
+
+        const myId = currentUser?.id;
+        const isRecipient =
+          payload.target_type === 'all' ||
+          payload.user_id === 'all' ||
+          (myId && payload.user_id === myId) ||
+          (myId && payload.recipient_ids && payload.recipient_ids.includes(myId));
+
+        if (isRecipient) {
+          const current = getAllStoredNotifications();
+          if (!current.some(n => n.id === payload.id)) {
+            const updated = [payload, ...current];
+            try {
+              localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
+              window.dispatchEvent(new CustomEvent('ceova_notifications_updated', { detail: updated }));
+            } catch (_) {}
+          }
+
+          dispatchInAppNotification(payload.title, payload.message, {
+            avatar: payload.sender_avatar,
+            url: payload.link
+          });
+        }
+      })
+      .subscribe((status: string) => {
+        console.log('[Realtime Notifications] Connected status:', status);
+      });
+  } catch (err) {
+    console.warn('[Realtime Notifications] Init notice:', err);
+  }
+};
+
 export const addNotification = (notif: Omit<AppNotification, 'id' | 'created_at' | 'read'>): AppNotification => {
   const current = getAllStoredNotifications();
   const newNotif: AppNotification = {
@@ -99,7 +153,7 @@ export const addNotification = (notif: Omit<AppNotification, 'id' | 'created_at'
   const updated = [newNotif, ...current];
   saveNotifications(updated);
 
-  // Dispatch live in-app popup and device native push notification
+  // 1. Dispatch live in-app popup and device native push notification for current client
   try {
     dispatchInAppNotification(newNotif.title, newNotif.message, {
       avatar: newNotif.sender_avatar,
@@ -109,10 +163,23 @@ export const addNotification = (notif: Omit<AppNotification, 'id' | 'created_at'
     console.warn('[In-App Notification] Notice:', err);
   }
 
-  // Automatically send notification to user email via Resend API
-  dispatchNotificationEmails(newNotif).catch(err => {
-    console.warn('[Resend Email] Dispatch background error:', err);
-  });
+  // 2. Broadcast across the network to all other devices & team members in real time via Supabase Realtime!
+  try {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      if (!realtimeChannel) {
+        realtimeChannel = supabase.channel('ceova_portal_live_notifications');
+        realtimeChannel.subscribe();
+      }
+      realtimeChannel.send({
+        type: 'broadcast',
+        event: 'new_notification',
+        payload: newNotif
+      });
+    }
+  } catch (err) {
+    console.warn('[Realtime Broadcast] Notice:', err);
+  }
 
   return newNotif;
 };
