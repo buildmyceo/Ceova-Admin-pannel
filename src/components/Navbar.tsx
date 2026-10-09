@@ -60,16 +60,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowProfileMenu(false);
       }
     };
     if (showProfileMenu) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [showProfileMenu]);
 
@@ -218,6 +220,46 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Profile Dropdown Menu */}
             {showProfileMenu && (
               <div className="profile-menu-dropdown">
+                {/* User quick identity header */}
+                <div style={{
+                  padding: '8px 10px 10px',
+                  marginBottom: 6,
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10
+                }}>
+                  <div style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 10,
+                    background: (user.role === 'admin' || user.role === 'ceo') ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    overflow: 'hidden',
+                    flexShrink: 0
+                  }}>
+                    {user.avatar_url ? (
+                      <img src={user.avatar_url} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      user.full_name.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.25 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user.full_name}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-muted, #a1a1aa)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user.email}
+                    </div>
+                  </div>
+                </div>
+
                 {/* 1. Multiple Accounts Section (only shown when multiple accounts exist) */}
                 {savedAccounts.length > 1 && (
                   <div style={{ padding: '8px 6px 4px', borderBottom: '1px solid var(--border-color)' }}>
@@ -374,27 +416,71 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   className="nav-item"
-                  style={{ padding: '8px 10px', fontSize: 13 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '9px 10px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#ffffff',
+                    borderRadius: 8
+                  }}
                   onClick={() => {
                     onNavigateToProfile();
                     setShowProfileMenu(false);
                   }}
                 >
-                  <User size={15} />
-                  My Profile
+                  <div style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 6,
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#60a5fa',
+                    flexShrink: 0
+                  }}>
+                    <User size={14} />
+                  </div>
+                  <span>My Profile</span>
                 </button>
 
                 <button
                   type="button"
                   className="nav-item"
-                  style={{ padding: '8px 10px', fontSize: 13, color: 'var(--danger)' }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '9px 10px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#f87171',
+                    borderRadius: 8
+                  }}
                   onClick={() => {
                     logout();
                     setShowProfileMenu(false);
                   }}
                 >
-                  <LogOut size={15} />
-                  Sign Out
+                  <div style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 6,
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#f87171',
+                    flexShrink: 0
+                  }}>
+                    <LogOut size={14} />
+                  </div>
+                  <span>Sign Out</span>
                 </button>
 
                 {savedAccounts.length > 1 && (
