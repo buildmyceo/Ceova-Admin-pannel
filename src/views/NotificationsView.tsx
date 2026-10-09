@@ -423,18 +423,11 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
   };
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
+    <div className="view-container ceova-notifications-container fade-in">
       {/* Top Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 16,
-        marginBottom: 24
-      }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+      <div className="ceova-notif-header">
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
             <div style={{
               width: 38,
               height: 38,
@@ -445,11 +438,12 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
               alignItems: 'center',
               justifyContent: 'center',
               color: '#60a5fa',
-              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)'
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)',
+              flexShrink: 0
             }}>
               <Bell size={20} />
             </div>
-            <h1 style={{ fontSize: 'clamp(19px, 4.5vw, 24px)', fontWeight: 700, margin: 0, color: 'var(--text-main, #ffffff)' }}>
+            <h1 style={{ fontSize: 'clamp(18px, 4.5vw, 24px)', fontWeight: 700, margin: 0, color: 'var(--text-main, #ffffff)', letterSpacing: '-0.02em' }}>
               Notifications &amp; Team Messaging
             </h1>
             {unreadCount > 0 && (
@@ -460,124 +454,112 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 12,
-                boxShadow: '0 0 8px rgba(239, 68, 68, 0.5)'
+                boxShadow: '0 0 10px rgba(239, 68, 68, 0.45)',
+                flexShrink: 0
               }}>
                 {unreadCount} new
               </span>
             )}
           </div>
-          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-muted, #a1a1aa)' }}>
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-muted, #a1a1aa)', lineHeight: 1.5 }}>
             Send messages, broadcast company alerts, and exchange photos, files, and links with team members.
           </p>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div className="ceova-notif-header-actions">
           <button
             type="button"
+            className="ceova-notif-btn-primary"
             onClick={() => handleOpenComposeModal()}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-              border: '1px solid #3b82f6',
-              color: '#ffffff',
-              padding: '9px 18px',
-              borderRadius: 10,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
-              transition: 'all 0.15s ease'
-            }}
           >
             <Send size={15} />
             <span>Send Notification</span>
           </button>
 
-          {unreadCount > 0 && (
-            <button
-              type="button"
-              onClick={handleMarkAllRead}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: 'rgba(22, 22, 26, 0.7)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: 'var(--text-main)',
-                padding: '8px 14px',
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              <CheckCheck size={14} />
-              Mark all read
-            </button>
-          )}
+          {(unreadCount > 0 || notifications.length > 0) && (
+            <div className="ceova-notif-btn-subgroup">
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllRead}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: 'rgba(22, 22, 26, 0.7)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    color: 'var(--text-main)',
+                    padding: '8px 14px',
+                    borderRadius: 9,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <CheckCheck size={14} />
+                  <span>Mark all read</span>
+                </button>
+              )}
 
-          {notifications.length > 0 && (
-            <button
-              type="button"
-              onClick={handleClearAll}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: 'rgba(22, 22, 26, 0.7)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                color: '#ef4444',
-                padding: '8px 14px',
-                borderRadius: 8,
-                fontSize: 12,
-                cursor: 'pointer'
-              }}
-            >
-              <Trash2 size={13} />
-              Clear all
-            </button>
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: 'rgba(22, 22, 26, 0.7)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    color: '#ef4444',
+                    padding: '8px 14px',
+                    borderRadius: 9,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Trash2 size={13} />
+                  <span>Clear all</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
 
       {/* Primary Category Switcher: Inbox vs Sent */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: 12,
-        marginBottom: 16,
-        paddingBottom: 14,
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
-      }}>
-        <div style={{
+      <div className="ceova-notif-switcher-wrap">
+        <div className="ceova-notif-category-switcher" style={{
           display: 'flex',
-          background: 'rgba(16, 16, 20, 0.65)',
+          background: 'rgba(16, 20, 32, 0.65)',
           backdropFilter: 'blur(30px)',
+          WebkitBackdropFilter: 'blur(30px)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: 10,
+          borderRadius: 12,
           padding: 3,
           gap: 4,
           width: '100%',
-          maxWidth: 420
+          maxWidth: 420,
+          boxSizing: 'border-box'
         }}>
           <button
             type="button"
+            className="ceova-notif-category-btn"
             onClick={() => setActiveCategory('inbox')}
             style={{
-              flex: 1,
+              flex: '1 1 0',
+              minWidth: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 7,
-              padding: '7px 14px',
-              borderRadius: 8,
+              padding: '7px 12px',
+              borderRadius: 9,
               border: 'none',
               background: activeCategory === 'inbox' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
               color: activeCategory === 'inbox' ? '#60a5fa' : 'var(--text-muted)',
@@ -588,14 +570,16 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
               whiteSpace: 'nowrap'
             }}
           >
-            <Bell size={14} />
-            <span>Inbox &amp; Received</span>
+            <Bell size={14} style={{ flexShrink: 0 }} />
+            <span className="ceova-notif-tab-full">Inbox &amp; Received</span>
+            <span className="ceova-notif-tab-short">Inbox</span>
             <span style={{
               background: activeCategory === 'inbox' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255, 255, 255, 0.06)',
               fontSize: 10.5,
               padding: '1px 6px',
               borderRadius: 8,
-              color: activeCategory === 'inbox' ? '#ffffff' : 'inherit'
+              color: activeCategory === 'inbox' ? '#ffffff' : 'inherit',
+              flexShrink: 0
             }}>
               {notifications.filter(n => n.sender_id !== user?.id).length}
             </span>
@@ -603,15 +587,17 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
 
           <button
             type="button"
+            className="ceova-notif-category-btn"
             onClick={() => setActiveCategory('sent')}
             style={{
-              flex: 1,
+              flex: '1 1 0',
+              minWidth: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 7,
-              padding: '7px 14px',
-              borderRadius: 8,
+              padding: '7px 12px',
+              borderRadius: 9,
               border: 'none',
               background: activeCategory === 'sent' ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
               color: activeCategory === 'sent' ? '#60a5fa' : 'var(--text-muted)',
@@ -622,14 +608,16 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
               whiteSpace: 'nowrap'
             }}
           >
-            <Send size={14} />
-            <span>Sent Messages</span>
+            <Send size={14} style={{ flexShrink: 0 }} />
+            <span className="ceova-notif-tab-full">Sent Messages</span>
+            <span className="ceova-notif-tab-short">Sent</span>
             <span style={{
               background: activeCategory === 'sent' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255, 255, 255, 0.06)',
               fontSize: 10.5,
               padding: '1px 6px',
               borderRadius: 8,
-              color: activeCategory === 'sent' ? '#ffffff' : 'inherit'
+              color: activeCategory === 'sent' ? '#ffffff' : 'inherit',
+              flexShrink: 0
             }}>
               {notifications.filter(n => n.sender_id === user?.id).length}
             </span>
@@ -637,18 +625,24 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
         </div>
 
         {/* Quick hint badge */}
-        <div style={{
+        <div className="ceova-notif-mode-badge" style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
-          fontSize: 12,
-          color: 'var(--text-muted)'
+          gap: 7,
+          fontSize: 11.5,
+          color: 'var(--text-muted)',
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.06)',
+          padding: '6px 10px',
+          borderRadius: 8
         }}>
           <span style={{
-            width: 8,
-            height: 8,
+            width: 7,
+            height: 7,
             borderRadius: '50%',
-            background: isAdmin ? '#10b981' : '#3b82f6'
+            background: isAdmin ? '#10b981' : '#3b82f6',
+            boxShadow: isAdmin ? '0 0 6px #10b981' : '0 0 6px #3b82f6',
+            flexShrink: 0
           }} />
           <span>
             {isAdmin 
@@ -666,7 +660,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
         marginBottom: 20,
         overflowX: 'auto',
         maxWidth: '100%',
-        paddingBottom: 4
+        paddingBottom: 6,
+        paddingLeft: 1,
+        paddingRight: 1
       }}>
         {[
           { id: 'all', label: 'All Alerts', count: categorizedNotifications.length },
@@ -696,7 +692,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                flexShrink: 0
               }}
             >
               <span>{tab.label}</span>
@@ -723,16 +720,30 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             WebkitBackdropFilter: 'blur(45px) saturate(170%)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
             borderRadius: 20,
-            padding: 48,
+            padding: 'clamp(32px, 6vw, 48px) 16px',
             textAlign: 'center',
             color: 'var(--text-muted)',
             boxShadow: '0 16px 36px -12px rgba(0, 0, 0, 0.7)'
           }}>
-            <Bell size={40} style={{ opacity: 0.25, marginBottom: 14, color: '#60a5fa' }} />
-            <h3 style={{ margin: '0 0 6px 0', fontSize: 16, color: 'var(--text-main)' }}>
+            <div style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              background: 'rgba(59, 130, 246, 0.1)',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              color: '#60a5fa',
+              boxShadow: '0 8px 20px -4px rgba(59, 130, 246, 0.25)'
+            }}>
+              <Bell size={24} />
+            </div>
+            <h3 style={{ margin: '0 0 6px 0', fontSize: 16, fontWeight: 700, color: 'var(--text-main, #ffffff)' }}>
               No notifications found
             </h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: 13 }}>
+            <p style={{ margin: '0 auto 18px', fontSize: 12.5, maxWidth: 380, lineHeight: 1.5 }}>
               {activeFilter === 'unread' 
                 ? "You're all caught up! No unread notifications." 
                 : activeCategory === 'sent'
@@ -745,19 +756,20 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
-                background: '#2563eb',
+                gap: 7,
+                background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
                 color: '#ffffff',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: 8,
-                fontSize: 12,
+                border: '1px solid #3b82f6',
+                padding: '9px 18px',
+                borderRadius: 9,
+                fontSize: 12.5,
                 fontWeight: 600,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)'
               }}
             >
               <Send size={13} />
-              Send a Notification
+              <span>Send a Notification</span>
             </button>
           </div>
         ) : (
@@ -770,6 +782,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             return (
               <div
                 key={item.id}
+                className="ceova-notif-card-container"
                 onClick={() => {
                   if (!isRead && !isSentByMe) {
                     markNotificationRead(item.id, user);
@@ -783,14 +796,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                   }
                 }}
                 style={{
-                  background: (isRead || isSentByMe) ? 'rgba(12, 16, 26, 0.52)' : 'rgba(16, 22, 38, 0.7)',
+                  background: (isRead || isSentByMe) ? 'rgba(12, 16, 26, 0.52)' : 'rgba(16, 22, 38, 0.72)',
                   backdropFilter: 'blur(45px) saturate(170%)',
                   WebkitBackdropFilter: 'blur(45px) saturate(170%)',
                   border: (isRead || isSentByMe)
                     ? '1px solid rgba(255, 255, 255, 0.08)' 
                     : '1px solid rgba(59, 130, 246, 0.35)',
                   borderRadius: 16,
-                  padding: 'clamp(14px, 3.5vw, 20px)',
+                  padding: 'clamp(13px, 3.5vw, 20px)',
                   display: 'flex',
                   alignItems: 'flex-start',
                   justifyContent: 'space-between',
@@ -810,14 +823,15 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                     left: 0,
                     top: 14,
                     bottom: 14,
-                    width: 3,
+                    width: 3.5,
                     background: '#3b82f6',
-                    borderRadius: '0 4px 4px 0'
+                    borderRadius: '0 4px 4px 0',
+                    boxShadow: '0 0 8px #3b82f6'
                   }} />
                 )}
 
                 {/* Left Content */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0, width: '100%' }}>
                   {/* Sender Avatar or Icon */}
                   {item.sender_avatar ? (
                     <img
@@ -851,7 +865,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     {/* Header Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <div className="ceova-notif-card-header">
                       <span style={{
                         fontSize: 10,
                         fontWeight: 700,
@@ -859,7 +873,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                         background: meta.bg,
                         border: `1px solid ${meta.border}`,
                         padding: '1px 6px',
-                        borderRadius: 4
+                        borderRadius: 4,
+                        flexShrink: 0
                       }}>
                         {meta.label}
                       </span>
@@ -872,7 +887,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                           color: '#ffffff',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 5
+                          gap: 5,
+                          flexShrink: 0
                         }}>
                           <span>{item.sender_name}</span>
                           {item.sender_role && (
@@ -900,7 +916,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                         borderRadius: 4,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 4
+                        gap: 4,
+                        flexShrink: 0
                       }}>
                         {item.target_type === 'all' ? (
                           <>
@@ -935,7 +952,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                             border: receipt.seenCount > 0 ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255, 255, 255, 0.1)',
                             color: receipt.seenCount > 0 ? '#34d399' : '#a1a1aa',
                             fontSize: 11,
-                            fontWeight: 700
+                            fontWeight: 700,
+                            flexShrink: 0
                           }}
                         >
                           {receipt.seenCount > 0 ? (
@@ -951,7 +969,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                         </span>
                       )}
 
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
                         <Clock size={11} />
                         {formatRelativeTime(item.created_at)}
                       </span>
@@ -991,6 +1009,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 7,
+                            maxWidth: '100%',
                             background: 'rgba(37, 99, 235, 0.15)',
                             border: '1px solid rgba(59, 130, 246, 0.35)',
                             color: '#60a5fa',
@@ -1002,9 +1021,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                             transition: 'all 0.15s ease'
                           }}
                         >
-                          <LinkIcon size={13} />
-                          <span>{item.link}</span>
-                          <ExternalLink size={12} />
+                          <LinkIcon size={13} style={{ flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.link}</span>
+                          <ExternalLink size={12} style={{ flexShrink: 0 }} />
                         </a>
                       </div>
                     )}
@@ -1027,8 +1046,8 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
 
                         <div style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                          gap: 10
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))',
+                          gap: 8
                         }}>
                           {item.photos.map((photo) => (
                             <div
@@ -1109,6 +1128,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 8,
+                                maxWidth: '100%',
                                 background: 'rgba(255, 255, 255, 0.05)',
                                 border: '1px solid rgba(255, 255, 255, 0.1)',
                                 borderRadius: 8,
@@ -1119,14 +1139,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                                 transition: 'all 0.15s ease'
                               }}
                             >
-                              <FileText size={14} style={{ color: '#60a5fa' }} />
-                              <span style={{ fontWeight: 600 }}>{file.name}</span>
+                              <FileText size={14} style={{ color: '#60a5fa', flexShrink: 0 }} />
+                              <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
                               {file.size && (
-                                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                                <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>
                                   ({formatFileSize(file.size)})
                                 </span>
                               )}
-                              <Download size={12} style={{ color: 'var(--text-muted)' }} />
+                              <Download size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                             </a>
                           ))}
                         </div>
@@ -1134,7 +1154,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                     )}
 
                     {/* Meeting or Task specific actions */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                       {item.type === 'meeting' && item.link && (
                         <a
                           href={sanitizeUrl(item.link)}
@@ -1288,7 +1308,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                 </div>
 
                 {/* Right Action Icons & Read Status */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <div className="ceova-notif-card-side-actions">
                   {isSentByMe && receipt && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       {receipt.seenCount > 0 ? (
@@ -1412,7 +1432,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
           zIndex: 1000,
           padding: 16
         }}>
-          <div style={{
+          <div className="ceova-notif-modal-card" style={{
             background: 'rgba(14, 18, 28, 0.88)',
             backdropFilter: 'blur(50px) saturate(180%)',
             WebkitBackdropFilter: 'blur(50px) saturate(180%)',
@@ -1427,7 +1447,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
           }}>
             {/* Modal Header */}
-            <div style={{
+            <div className="ceova-notif-modal-header" style={{
               padding: '20px 24px',
               borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
               display: 'flex',
@@ -1450,7 +1470,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#ffffff' }}>
-                    Send Notification & Message
+                    Send Notification &amp; Message
                   </h3>
                   <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
                     {isAdmin
@@ -1479,7 +1499,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             </div>
 
             {/* Modal Body (Scrollable) */}
-            <div style={{
+            <div className="ceova-notif-modal-body" style={{
               padding: '22px 24px',
               overflowY: 'auto',
               flex: 1,
@@ -1518,12 +1538,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
 
                 {isAdmin ? (
                   // Admin / CEO gets both options: All or Selected members
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 10,
-                    marginBottom: 12
-                  }}>
+                  <div className="ceova-notif-compose-target-grid">
                     <button
                       type="button"
                       onClick={() => setTargetType('all')}
@@ -2041,7 +2056,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             </div>
 
             {/* Modal Footer */}
-            <div style={{
+            <div className="ceova-notif-modal-footer" style={{
               padding: '16px 24px',
               borderTop: '1px solid rgba(255, 255, 255, 0.08)',
               display: 'flex',
@@ -2113,17 +2128,17 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1200,
-            padding: 24,
+            padding: 16,
             cursor: 'zoom-out'
           }}
         >
-          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+          <div style={{ position: 'relative', maxWidth: '94vw', maxHeight: '90vh' }}>
             <img
               src={activeLightboxPhoto}
               alt="Enlarged preview"
               style={{
                 maxWidth: '100%',
-                maxHeight: '90vh',
+                maxHeight: '86vh',
                 borderRadius: 12,
                 boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
                 border: '1px solid rgba(255, 255, 255, 0.2)'
@@ -2134,21 +2149,24 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
               onClick={() => setActiveLightboxPhoto(null)}
               style={{
                 position: 'absolute',
-                top: -14,
-                right: -14,
-                width: 32,
-                height: 32,
+                top: 8,
+                right: 8,
+                width: 34,
+                height: 34,
                 borderRadius: '50%',
-                background: '#18181b',
-                border: '1px solid #3f3f46',
+                background: 'rgba(0, 0, 0, 0.75)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
                 color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)'
               }}
             >
-              <X size={16} />
+              <X size={18} />
             </button>
           </div>
         </div>
