@@ -63,27 +63,6 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     return () => window.removeEventListener('resize', updateViewportSize);
   }, [updateViewportSize]);
 
-  // Load image
-  useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      imageRef.current = img;
-      // Reset defaults
-      setScale(1);
-      setRotation(0);
-      setOffsetX(0);
-      setOffsetY(0);
-      draw();
-    };
-    img.src = imageSrc;
-  }, [imageSrc]);
-
-  // Redraw when viewport or transform parameters change
-  useEffect(() => {
-    draw();
-  }, [scale, rotation, offsetX, offsetY, viewportSize]);
-
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const img = imageRef.current;
@@ -125,6 +104,34 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
     ctx.restore();
   }, [viewportSize, offsetX, offsetY, rotation, scale]);
+
+  // Load image
+  useEffect(() => {
+    const img = new Image();
+    if (!imageSrc.startsWith('data:') && !imageSrc.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => {
+      imageRef.current = img;
+      // Reset defaults
+      setScale(1);
+      setRotation(0);
+      setOffsetX(0);
+      setOffsetY(0);
+      draw();
+    };
+    img.onerror = (err) => {
+      console.warn('ImageCropModal: Failed to decode image for crop canvas, using direct image:', err);
+      // Fallback: If canvas decoding fails, allow user to proceed with original image
+      onConfirm(imageSrc);
+    };
+    img.src = imageSrc;
+  }, [imageSrc, draw, onConfirm]);
+
+  // Redraw when viewport or transform parameters change
+  useEffect(() => {
+    draw();
+  }, [draw]);
 
   // Mouse drag handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -251,8 +258,9 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 99999,
-        padding: 16
+        zIndex: 10000000,
+        padding: 16,
+        overflowY: 'auto'
       }}
     >
       <div 
@@ -580,8 +588,8 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
               </button>
             </div>
 
-            {/* Right buttons: Cancel & Apply */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Right buttons: Cancel, Use Full Photo, & Apply */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={onCancel}
@@ -589,7 +597,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                   background: 'transparent',
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                   color: '#e4e4e7',
-                  padding: '8px 16px',
+                  padding: '8px 14px',
                   borderRadius: 8,
                   fontSize: 13,
                   fontWeight: 600,
@@ -597,6 +605,25 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 }}
               >
                 Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onConfirm(imageSrc)}
+                disabled={isProcessing}
+                title="Use original full photo without cropping"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.16)',
+                  color: '#ffffff',
+                  padding: '8px 14px',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: isProcessing ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Use Full Photo
               </button>
 
               <button

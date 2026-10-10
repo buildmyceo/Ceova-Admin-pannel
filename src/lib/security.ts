@@ -41,10 +41,7 @@ export function sanitizeUrl(url?: string | null, fallback = ''): string {
     normalized.startsWith('mailto:') ||
     normalized.startsWith('tel:') ||
     normalized.startsWith('blob:') ||
-    normalized.startsWith('data:image/jpeg') ||
-    normalized.startsWith('data:image/png') ||
-    normalized.startsWith('data:image/webp') ||
-    normalized.startsWith('data:image/gif')
+    normalized.startsWith('data:image/')
   ) {
     return trimmed;
   }
@@ -118,7 +115,7 @@ const FORBIDDEN_EXTENSIONS = new Set([
 ]);
 
 const VALID_PHOTO_EXTENSIONS = new Set([
-  'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp'
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp', 'avif', 'jfif'
 ]);
 
 /**

@@ -75,19 +75,25 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
     }
   }, [user]);
 
-  // Handle image selection - opens crop modal
+  // Handle image selection - opens crop modal (supports any photo format: PNG, JPG, WebP, HEIC, etc.)
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      setErrorMessage('Please upload a valid image file (JPEG, PNG, or WEBP).');
+    const fileName = file.name || '';
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    const isImageMime = file.type ? file.type.startsWith('image/') : false;
+    const isKnownImageExt = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic', 'heif', 'avif', 'jfif', 'svg'].includes(ext);
+
+    // Only block if explicitly a known non-image format (e.g., pdf, exe, zip, txt, mp4)
+    if (!isImageMime && !isKnownImageExt && file.type && !file.type.includes('octet-stream')) {
+      setErrorMessage('Please select a valid image file (PNG, JPG, WebP, etc.).');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
-    if (file.size > 15 * 1024 * 1024) {
-      setErrorMessage('Image size exceeds 15MB limit. Please choose a smaller file.');
+    if (file.size > 30 * 1024 * 1024) {
+      setErrorMessage('Image size exceeds 30MB limit. Please choose a smaller file.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -95,7 +101,15 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
     setErrorMessage(null);
     const reader = new FileReader();
     reader.onload = (event) => {
-      setCropImageSrc(event.target?.result as string);
+      const result = event.target?.result as string;
+      if (result) {
+        setCropImageSrc(result);
+      } else {
+        setErrorMessage('Unable to preview the selected photo. Please try another image.');
+      }
+    };
+    reader.onerror = () => {
+      setErrorMessage('Failed to read image from device. Please try again.');
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -197,15 +211,6 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
 
   return (
     <>
-      {cropImageSrc && (
-        <ImageCropModal
-          imageSrc={cropImageSrc}
-          cropType="profile"
-          title="Crop Profile Photo (1:1)"
-          onConfirm={handleCropConfirm}
-          onCancel={() => setCropImageSrc(null)}
-        />
-      )}
       <div
         style={{
           position: 'fixed',
@@ -413,13 +418,13 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
               <p style={{ margin: '0 0 10px 0', fontSize: 12, color: '#71717a', lineHeight: 1.4 }}>
                 {avatarUrl 
                   ? 'Identity photo saved.' 
-                  : 'JPG, PNG, or WebP under 10MB.'}
+                  : 'Upload any photo (JPG, PNG, WebP, etc.).'}
               </p>
 
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/jpg"
+                accept="image/*, image/png, image/jpeg, image/webp, image/gif, image/heic, image/heif"
                 style={{ display: 'none' }}
                 onChange={handlePhotoSelect}
               />
@@ -636,6 +641,16 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
         </div>
       </div>
     </div>
+
+    {cropImageSrc && (
+      <ImageCropModal
+        imageSrc={cropImageSrc}
+        cropType="profile"
+        title="Crop Profile Photo (1:1)"
+        onConfirm={handleCropConfirm}
+        onCancel={() => setCropImageSrc(null)}
+      />
+    )}
     </>
   );
 };
