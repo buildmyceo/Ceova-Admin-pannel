@@ -12,6 +12,7 @@ import {
   LogOut, 
   User as UserIcon 
 } from 'lucide-react';
+import { ImageCropModal } from './ImageCropModal';
 
 const COUNTRY_CODES = [
   { code: '+1', country: 'US / Canada' },
@@ -36,6 +37,7 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
   const { user, updateCurrentProfile, logout } = useAuth();
 
   const [avatarUrl, setAvatarUrl] = useState<string>(() => user?.avatar_url || '');
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [countryCode, setCountryCode] = useState<string>(() => {
     if (user?.phone && user.phone.includes(' ')) {
       return user.phone.split(' ')[0];
@@ -72,97 +74,68 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
     }
   }, [user]);
 
-  // Handle image upload and optimization
-  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle image selection - opens crop modal
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
       setErrorMessage('Please upload a valid image file (JPEG, PNG, or WEBP).');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMessage('Image size exceeds 10MB limit. Please choose a smaller file.');
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMessage('Image size exceeds 15MB limit. Please choose a smaller file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
-    setIsUploading(true);
     setErrorMessage(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setCropImageSrc(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
+  const handleCropConfirm = async (croppedDataUrl: string) => {
+    setCropImageSrc(null);
+    setIsUploading(true);
     try {
-      // 1. Read file as image and compress via canvas
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const rawDataUrl = event.target?.result as string;
-        const img = new Image();
-        img.onload = async () => {
-          const canvas = document.createElement('canvas');
-          const maxDim = 512;
-          let width = img.width;
-          let height = img.height;
+      const client = getSupabaseClient();
+      if (client) {
+        try {
+          const res = await fetch(croppedDataUrl);
+          const blob = await res.blob();
+          const fileName = `avatars/user-${user?.id || 'new'}-${Date.now()}.jpg`;
 
-          if (width > height) {
-            if (width > maxDim) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            }
-          } else {
-            if (height > maxDim) {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
+          const { error: uploadErr } = await client.storage
+            .from('portal-assets')
+            .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
 
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, 0, 0, width, height);
-          }
+          if (!uploadErr) {
+            const { data: publicUrlData } = client.storage
+              .from('portal-assets')
+              .getPublicUrl(fileName);
 
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
-
-          // 2. Attempt upload to Supabase storage 'portal-assets' bucket
-          const client = getSupabaseClient();
-          if (client) {
-            try {
-              const res = await fetch(compressedDataUrl);
-              const blob = await res.blob();
-              const fileName = `avatars/user-${user?.id || 'new'}-${Date.now()}.jpg`;
-
-              const { error: uploadErr } = await client.storage
-                .from('portal-assets')
-                .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
-
-              if (!uploadErr) {
-                const { data: publicUrlData } = client.storage
-                  .from('portal-assets')
-                  .getPublicUrl(fileName);
-
-                if (publicUrlData?.publicUrl) {
-                  setAvatarUrl(publicUrlData.publicUrl);
-                  setIsUploading(false);
-                  return;
-                }
-              }
-            } catch (storageErr) {
-              console.warn('Supabase storage upload fallback to dataURL:', storageErr);
+            if (publicUrlData?.publicUrl) {
+              setAvatarUrl(publicUrlData.publicUrl);
+              setIsUploading(false);
+              return;
             }
           }
+        } catch (storageErr) {
+          console.warn('Supabase storage upload fallback to dataURL:', storageErr);
+        }
+      }
 
-          // Fallback: save optimized compressed data URL directly
-          setAvatarUrl(compressedDataUrl);
-          setIsUploading(false);
-        };
-        img.src = rawDataUrl;
-      };
-      reader.readAsDataURL(file);
+      setAvatarUrl(croppedDataUrl);
     } catch (err: any) {
-      console.error('Error handling avatar:', err);
+      console.error('Error handling cropped avatar:', err);
       setErrorMessage('Failed to process image. Please try again.');
+    } finally {
       setIsUploading(false);
     }
   };
@@ -214,21 +187,31 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 99999,
-        background: 'rgba(0, 0, 0, 0.75)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px 16px',
-        overflowY: 'auto'
-      }}
-    >
+    <>
+      {cropImageSrc && (
+        <ImageCropModal
+          imageSrc={cropImageSrc}
+          cropType="profile"
+          title="Crop Profile Photo (1:1)"
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropImageSrc(null)}
+        />
+      )}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99999,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px 16px',
+          overflowY: 'auto'
+        }}
+      >
       <div
         style={{
           width: '100%',
@@ -644,5 +627,6 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };

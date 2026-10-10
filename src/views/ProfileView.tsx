@@ -23,160 +23,8 @@ import {
   Plus
 } from 'lucide-react';
 import { UserStatus } from '../types';
+import { ImageCropModal } from '../components/ImageCropModal';
 
-interface ImageEditorProps {
-  imageSrc: string;
-  onSave: (dataUrl: string) => void;
-  onCancel: () => void;
-}
-
-const ImageEditor: React.FC<ImageEditorProps> = ({ imageSrc, onSave, onCancel }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [scale, setScale] = useState(1);
-  const [brightness, setBrightness] = useState(100);
-  const [sketchMode, setSketchMode] = useState(false);
-  const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-
-  const imageRef = useRef<HTMLImageElement | null>(null);
-
-  React.useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      imageRef.current = img;
-      draw();
-    };
-    img.src = imageSrc;
-  }, [imageSrc]);
-
-  React.useEffect(() => {
-    draw();
-  }, [scale, brightness, sketchMode, offsetX, offsetY]);
-
-  const draw = () => {
-    const canvas = canvasRef.current;
-    const img = imageRef.current;
-    if (!canvas || !img) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const size = 400;
-    canvas.width = size;
-    canvas.height = size;
-
-    ctx.clearRect(0, 0, size, size);
-
-    // Apply filters
-    let filter = `brightness(${brightness}%)`;
-    if (sketchMode) {
-      filter += ` grayscale(100%) contrast(150%)`;
-    }
-    ctx.filter = filter;
-
-    const minDim = Math.min(img.width, img.height);
-    const drawWidth = (img.width / minDim) * size * scale;
-    const drawHeight = (img.height / minDim) * size * scale;
-
-    const centerX = size / 2;
-    const centerY = size / 2;
-
-    const dx = centerX - drawWidth / 2 + offsetX;
-    const dy = centerY - drawHeight / 2 + offsetY;
-
-    ctx.drawImage(img, dx, dy, drawWidth, drawHeight);
-    ctx.filter = 'none';
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - offsetX, y: e.clientY - offsetY });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setOffsetX(e.clientX - dragStart.x);
-    setOffsetY(e.clientY - dragStart.y);
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleSaveClick = () => {
-    if (canvasRef.current) {
-      const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
-      onSave(dataUrl);
-    }
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20
-    }}>
-      <div className="glass-panel" style={{ padding: 24, width: '100%', maxWidth: 440 }}>
-        <h3 style={{ margin: '0 0 16px', color: '#fff', fontSize: 18 }}>Adjust Avatar</h3>
-        
-        <div style={{ width: '100%', aspectRatio: '1/1', background: '#000', borderRadius: 12, overflow: 'hidden', cursor: isDragging ? 'grabbing' : 'grab' }}>
-          <canvas 
-            ref={canvasRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            style={{ width: '100%', height: '100%', display: 'block' }} 
-          />
-        </div>
-        <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-subtle)', marginTop: 8 }}>
-          Drag to reposition image
-        </div>
-
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8, color: 'var(--text-muted)' }}>
-            <span>Zoom</span>
-            <span>{Math.round(scale * 100)}%</span>
-          </div>
-          <input 
-            type="range" min="0.5" max="3" step="0.1" value={scale} 
-            onChange={e => setScale(parseFloat(e.target.value))} 
-            style={{ width: '100%', accentColor: 'var(--accent-primary)' }} 
-          />
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8, color: 'var(--text-muted)' }}>
-            <span>Brightness</span>
-            <span>{brightness}%</span>
-          </div>
-          <input 
-            type="range" min="50" max="150" step="1" value={brightness} 
-            onChange={e => setBrightness(parseFloat(e.target.value))} 
-            style={{ width: '100%', accentColor: 'var(--accent-primary)' }} 
-          />
-        </div>
-
-        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input 
-            type="checkbox" id="sketch-mode" 
-            checked={sketchMode} onChange={e => setSketchMode(e.target.checked)} 
-            style={{ accentColor: 'var(--accent-primary)' }}
-          />
-          <label htmlFor="sketch-mode" style={{ fontSize: 13, color: 'var(--text-main)' }}>
-            Enable Sketch Filter
-          </label>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={handleSaveClick}>Apply & Save</button>
-        </div>
-      </div>
-    </div>
-  );
-};
 export const ProfileView: React.FC = () => {
   const { user, role, updateCurrentProfile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -213,7 +61,10 @@ export const ProfileView: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
   
-  const [editorImageSrc, setEditorImageSrc] = useState<string | null>(null);
+  const [cropModalConfig, setCropModalConfig] = useState<{
+    imageSrc: string;
+    cropType: 'profile' | 'cover';
+  } | null>(null);
 
   // Sync component state whenever user changes or updates
   useEffect(() => {
@@ -252,13 +103,16 @@ export const ProfileView: React.FC = () => {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      setEditorImageSrc(event.target?.result as string);
+      setCropModalConfig({
+        imageSrc: event.target?.result as string,
+        cropType: 'profile'
+      });
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleCoverSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -269,52 +123,31 @@ export const ProfileView: React.FC = () => {
       return;
     }
 
-    setIsUploading(true);
-    try {
-      const client = getSupabaseClient();
-      if (client) {
-        const fileExt = file.name.split('.').pop() || 'jpg';
-        const fileName = `cover-${user?.id || 'user'}-${Date.now()}.${fileExt}`;
-        const { error: uploadErr } = await client.storage
-          .from('portal-assets')
-          .upload(fileName, file, { upsert: true });
-
-        if (!uploadErr) {
-          const { data: publicUrlData } = client.storage
-            .from('portal-assets')
-            .getPublicUrl(fileName);
-          if (publicUrlData?.publicUrl) {
-            setCoverUrl(publicUrlData.publicUrl);
-            setIsUploading(false);
-            if (coverInputRef.current) coverInputRef.current.value = '';
-            return;
-          }
-        }
-      }
-
-      // Fallback to Data URL
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setCoverUrl(event.target?.result as string);
-        setIsUploading(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      console.error('Error uploading cover photo:', err);
-      setIsUploading(false);
-    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setCropModalConfig({
+        imageSrc: event.target?.result as string,
+        cropType: 'cover'
+      });
+    };
+    reader.readAsDataURL(file);
     if (coverInputRef.current) coverInputRef.current.value = '';
   };
 
-  const handleEditorSave = async (dataUrl: string) => {
-    setEditorImageSrc(null);
+  const handleCropSave = async (croppedDataUrl: string) => {
+    if (!cropModalConfig) return;
+    const isCoverCrop = cropModalConfig.cropType === 'cover';
+    setCropModalConfig(null);
     setIsUploading(true);
+
     try {
       const client = getSupabaseClient();
       if (client) {
-        const res = await fetch(dataUrl);
+        const res = await fetch(croppedDataUrl);
         const blob = await res.blob();
-        const fileName = `avatar-${user?.id || 'user'}-${Date.now()}.jpg`;
+        const prefix = isCoverCrop ? 'cover' : 'avatar';
+        const fileName = `${prefix}-${user?.id || 'user'}-${Date.now()}.jpg`;
+
         const { error: uploadErr } = await client.storage
           .from('portal-assets')
           .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
@@ -323,16 +156,32 @@ export const ProfileView: React.FC = () => {
           const { data: publicUrlData } = client.storage
             .from('portal-assets')
             .getPublicUrl(fileName);
+
           if (publicUrlData?.publicUrl) {
-            setAvatarUrl(publicUrlData.publicUrl);
+            if (isCoverCrop) {
+              setCoverUrl(publicUrlData.publicUrl);
+            } else {
+              setAvatarUrl(publicUrlData.publicUrl);
+            }
             setIsUploading(false);
             return;
           }
         }
       }
-      setAvatarUrl(dataUrl);
-    } catch {
-      setAvatarUrl(dataUrl);
+
+      // Fallback to dataURL
+      if (isCoverCrop) {
+        setCoverUrl(croppedDataUrl);
+      } else {
+        setAvatarUrl(croppedDataUrl);
+      }
+    } catch (err) {
+      console.error('Error saving cropped image:', err);
+      if (isCoverCrop) {
+        setCoverUrl(croppedDataUrl);
+      } else {
+        setAvatarUrl(croppedDataUrl);
+      }
     } finally {
       setIsUploading(false);
     }
@@ -432,7 +281,7 @@ export const ProfileView: React.FC = () => {
             onClick={() => coverInputRef.current?.click()}
             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, background: '#ffffff', color: '#000000', border: 'none', fontWeight: 600 }}
           >
-            <Camera size={14} /> {coverUrl ? 'Change Cover (1211x681)' : 'Upload Cover (1211x681)'}
+            <Camera size={14} /> {coverUrl ? 'Change Cover (16:9 • 1280x720)' : 'Upload Cover (16:9 • 1280x720)'}
           </button>
           {coverUrl && (
              <button 
@@ -947,11 +796,13 @@ export const ProfileView: React.FC = () => {
 
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', paddingBottom: 40 }}>
-      {editorImageSrc && (
-        <ImageEditor 
-          imageSrc={editorImageSrc} 
-          onSave={handleEditorSave} 
-          onCancel={() => setEditorImageSrc(null)} 
+      {cropModalConfig && (
+        <ImageCropModal 
+          imageSrc={cropModalConfig.imageSrc} 
+          cropType={cropModalConfig.cropType}
+          title={cropModalConfig.cropType === 'cover' ? 'Crop Cover Photo (16:9 • 1280 × 720)' : 'Crop Profile Photo (1:1)'}
+          onConfirm={handleCropSave} 
+          onCancel={() => setCropModalConfig(null)} 
         />
       )}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
