@@ -884,10 +884,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
                 }}
               >
-                {/* 1. Card Top Cover Banner - Solid Background */}
+                {/* 1. Card Top Cover Banner - 16:9 Aspect Ratio */}
                 <div style={{
-                  height: 84,
                   width: '100%',
+                  aspectRatio: '16 / 9',
                   position: 'relative',
                   backgroundColor: '#161618',
                   backgroundImage: member.cover_url ? `url(${member.cover_url})` : 'none',

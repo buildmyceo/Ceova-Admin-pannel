@@ -251,7 +251,7 @@ export const ProfileView: React.FC = () => {
     <div style={{ 
       position: 'relative', 
       width: '100%', 
-      height: 'clamp(120px, 30vw, 220px)', 
+      aspectRatio: '16 / 9', 
       backgroundColor: '#09090b',
       backgroundImage: coverUrl ? `url("${sanitizeUrl(coverUrl)}")` : 'none',
       backgroundSize: 'cover',
