@@ -146,48 +146,59 @@ export const ProfileView: React.FC = () => {
       const compressionRes = await compressImage(croppedDataUrl, {
         maxWidth: isCoverCrop ? 1280 : 500,
         maxHeight: isCoverCrop ? 720 : 500,
-        quality: 0.8,
+        quality: 0.82,
         mimeType: 'image/jpeg'
       });
 
+      let finalUrl = '';
       const client = getSupabaseClient();
       if (client) {
-        const prefix = isCoverCrop ? 'cover' : 'avatar';
-        const fileName = `${prefix}-${user?.id || 'user'}-${Date.now()}.jpg`;
+        try {
+          const prefix = isCoverCrop ? 'cover' : 'avatar';
+          const fileName = `${prefix}-${user?.id || 'user'}-${Date.now()}.jpg`;
 
-        const { error: uploadErr } = await client.storage
-          .from('portal-assets')
-          .upload(fileName, compressionRes.blob, { contentType: 'image/jpeg', upsert: true });
-
-        if (!uploadErr) {
-          const { data: publicUrlData } = client.storage
+          const { error: uploadErr } = await client.storage
             .from('portal-assets')
-            .getPublicUrl(fileName);
+            .upload(fileName, compressionRes.blob, { contentType: 'image/jpeg', upsert: true });
 
-          if (publicUrlData?.publicUrl) {
-            if (isCoverCrop) {
-              setCoverUrl(publicUrlData.publicUrl);
-            } else {
-              setAvatarUrl(publicUrlData.publicUrl);
+          if (!uploadErr) {
+            const { data: publicUrlData } = client.storage
+              .from('portal-assets')
+              .getPublicUrl(fileName);
+
+            if (publicUrlData?.publicUrl) {
+              finalUrl = publicUrlData.publicUrl;
             }
-            setIsUploading(false);
-            return;
+          } else {
+            console.warn('Supabase storage upload error:', uploadErr);
           }
+        } catch (storageErr) {
+          console.warn('Storage upload exception:', storageErr);
         }
       }
 
-      // Fallback to compressed dataURL (much smaller size)
+      // 2. Fallback to lightweight compressed dataURL if storage upload did not return URL
+      if (!finalUrl) {
+        finalUrl = compressionRes.dataUrl || croppedDataUrl;
+      }
+
+      // 3. Update view state AND immediately persist to Supabase & user state
       if (isCoverCrop) {
-        setCoverUrl(compressionRes.dataUrl || croppedDataUrl);
+        setCoverUrl(finalUrl);
+        await updateCurrentProfile({ cover_url: finalUrl });
       } else {
-        setAvatarUrl(compressionRes.dataUrl || croppedDataUrl);
+        setAvatarUrl(finalUrl);
+        await updateCurrentProfile({ avatar_url: finalUrl });
       }
     } catch (err) {
       console.error('Error saving cropped image:', err);
+      const fallbackUrl = croppedDataUrl;
       if (isCoverCrop) {
-        setCoverUrl(croppedDataUrl);
+        setCoverUrl(fallbackUrl);
+        await updateCurrentProfile({ cover_url: fallbackUrl });
       } else {
-        setAvatarUrl(croppedDataUrl);
+        setAvatarUrl(fallbackUrl);
+        await updateCurrentProfile({ avatar_url: fallbackUrl });
       }
     } finally {
       setIsUploading(false);
@@ -203,6 +214,7 @@ export const ProfileView: React.FC = () => {
     if (coverInputRef.current) {
       coverInputRef.current.value = '';
     }
+    await updateCurrentProfile({ cover_url: '' });
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -267,47 +279,117 @@ export const ProfileView: React.FC = () => {
       borderTopRightRadius: 'var(--radius-xl)',
       overflow: 'hidden'
     }}>
-      {/* Solid dark base border */}
+      {/* Subtle overlay */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        backgroundColor: coverUrl ? 'rgba(0,0,0,0.2)' : 'transparent',
+        backgroundColor: coverUrl ? 'rgba(0,0,0,0.22)' : 'transparent',
         pointerEvents: 'none'
       }} />
 
       {!coverUrl && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-subtle)' }}>
-          <Sparkles size={32} opacity={0.3} />
+        <div 
+          onClick={() => coverInputRef.current?.click()}
+          style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            height: '100%', 
+            color: 'var(--text-subtle)',
+            cursor: 'pointer'
+          }}
+          title="Click to upload cover photo (16:9 • 1280 × 720)"
+        >
+          <Camera size={34} opacity={0.4} style={{ color: '#ffffff' }} />
+          <span style={{ fontSize: 12, marginTop: 8, color: '#a1a1aa', fontWeight: 600 }}>
+            Click to upload cover photo (16:9 • 1280 × 720)
+          </span>
         </div>
       )}
-      {isEditing && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 2 }}>
+
+      {/* Floating cover buttons: always visible so user can easily upload/change */}
+      <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', alignItems: 'center', gap: 8, zIndex: 10 }}>
+        <button 
+          type="button" 
+          onClick={() => coverInputRef.current?.click()}
+          disabled={isUploading}
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6, 
+            fontSize: 12, 
+            background: 'rgba(0, 0, 0, 0.75)', 
+            backdropFilter: 'blur(10px)',
+            color: '#ffffff', 
+            border: '1px solid rgba(255, 255, 255, 0.22)', 
+            fontWeight: 600,
+            padding: '6px 14px',
+            borderRadius: 8,
+            cursor: 'pointer',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+            transition: 'all 0.15s ease'
+          }}
+          title="Upload or change cover photo (16:9 • 1280 × 720)"
+        >
+          <Camera size={13} /> <span>{coverUrl ? 'Change Cover (16:9)' : 'Upload Cover (16:9)'}</span>
+        </button>
+        {coverUrl && (
           <button 
             type="button" 
-            className="btn btn-primary" 
-            onClick={() => coverInputRef.current?.click()}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, background: '#ffffff', color: '#000000', border: 'none', fontWeight: 600 }}
+            onClick={handleRemoveCover}
+            disabled={isUploading}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 5, 
+              fontSize: 12, 
+              color: '#f87171', 
+              border: '1px solid rgba(239, 68, 68, 0.35)', 
+              background: 'rgba(0, 0, 0, 0.75)', 
+              backdropFilter: 'blur(10px)',
+              padding: '6px 10px',
+              borderRadius: 8,
+              cursor: 'pointer'
+            }}
+            title="Remove cover photo"
           >
-            <Camera size={14} /> {coverUrl ? 'Change Cover (16:9 • 1280x720)' : 'Upload Cover (16:9 • 1280x720)'}
+            <Trash2 size={13} />
           </button>
-          {coverUrl && (
-             <button 
-               type="button" 
-               className="btn btn-secondary" 
-               onClick={handleRemoveCover}
-               style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', background: 'rgba(0,0,0,0.6)' }}
-             >
-               <Trash2 size={14} /> Remove
-             </button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 
   if (!isEditing) {
     return (
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
+        {/* Universal File Inputs for Profile & Cover Photo */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept="image/*, image/png, image/jpeg, image/webp, image/gif"
+          style={{ display: 'none' }}
+          onChange={handlePhotoSelect}
+        />
+        <input
+          type="file"
+          ref={coverInputRef}
+          accept="image/*, image/png, image/jpeg, image/webp, image/gif"
+          style={{ display: 'none' }}
+          onChange={handleCoverSelect}
+        />
+
+        {cropModalConfig && (
+          <ImageCropModal 
+            imageSrc={cropModalConfig.imageSrc} 
+            cropType={cropModalConfig.cropType}
+            title={cropModalConfig.cropType === 'cover' ? 'Crop Cover Photo (16:9 • 1280 × 720)' : 'Crop Profile Photo (1:1)'}
+            onConfirm={handleCropSave} 
+            onCancel={() => setCropModalConfig(null)} 
+          />
+        )}
+
         <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div className="page-title-wrap" style={{ minWidth: 0, flex: 1, paddingLeft: 2 }}>
             <h2 className="neo-serif-title" style={{ margin: 0, fontSize: 'clamp(20px, 4.8vw, 24px)', fontWeight: 700, color: '#ffffff' }}>
@@ -364,8 +446,13 @@ export const ProfileView: React.FC = () => {
               marginBottom: 20,
               flexWrap: 'wrap'
             }}>
-              <div style={{ position: 'relative' }}>
+              <div 
+                style={{ position: 'relative', cursor: 'pointer' }}
+                onClick={() => fileInputRef.current?.click()}
+                title="Click to upload or change profile photo"
+              >
                 <div 
+                  className="user-avatar-wrap"
                   style={{ 
                     width: 'clamp(84px, 18vw, 114px)', 
                     height: 'clamp(84px, 18vw, 114px)', 
@@ -389,6 +476,35 @@ export const ProfileView: React.FC = () => {
                   )}
                 </div>
 
+                {/* Camera quick-action mini button on corner of avatar */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  title="Upload / Change Profile Photo"
+                  style={{
+                    position: 'absolute',
+                    bottom: 2,
+                    left: 2,
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    background: '#2563eb',
+                    border: '2px solid #0d0d0f',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                    zIndex: 5
+                  }}
+                >
+                  <Camera size={13} />
+                </button>
+
                 {/* Status indicator pulse */}
                 <div 
                   title="Status: Active"
@@ -400,7 +516,8 @@ export const ProfileView: React.FC = () => {
                     height: 18,
                     borderRadius: '50%',
                     background: '#22c55e',
-                    border: '3px solid #0d0d0f'
+                    border: '3px solid #0d0d0f',
+                    zIndex: 5
                   }}
                 />
               </div>
@@ -803,6 +920,22 @@ export const ProfileView: React.FC = () => {
 
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', paddingBottom: 40 }}>
+      {/* Universal File Inputs for Profile & Cover Photo */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*, image/png, image/jpeg, image/webp, image/gif"
+        style={{ display: 'none' }}
+        onChange={handlePhotoSelect}
+      />
+      <input
+        type="file"
+        ref={coverInputRef}
+        accept="image/*, image/png, image/jpeg, image/webp, image/gif"
+        style={{ display: 'none' }}
+        onChange={handleCoverSelect}
+      />
+
       {cropModalConfig && (
         <ImageCropModal 
           imageSrc={cropModalConfig.imageSrc} 
@@ -812,54 +945,39 @@ export const ProfileView: React.FC = () => {
           onCancel={() => setCropModalConfig(null)} 
         />
       )}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div className="page-title-wrap">
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>Edit Profile</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 0 0' }}>Update your personal credentials, contact info, and executive bio.</p>
-        </div>
-        <button 
-          className="btn btn-secondary" 
-          onClick={() => setIsEditing(false)}
-          style={{
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            color: '#e4e4e7',
-            padding: '8px 16px',
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 600
-          }}
-        >
-          Cancel Editing
-        </button>
-      </div>
+          <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div className="page-title-wrap">
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', margin: 0, letterSpacing: '-0.02em' }}>Edit Profile</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 0 0' }}>Update your personal credentials, contact info, and executive bio.</p>
+            </div>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setIsEditing(false)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#e4e4e7',
+                padding: '8px 16px',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600
+              }}
+            >
+              Cancel Editing
+            </button>
+          </div>
 
-      <div style={{
-        background: 'rgba(12, 16, 26, 0.52)',
-        backdropFilter: 'blur(28px) saturate(170%)',
-        WebkitBackdropFilter: 'blur(28px) saturate(170%)',
-        border: '1px solid rgba(255, 255, 255, 0.11)',
-        borderRadius: 20,
-        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
-        overflow: 'hidden'
-      }}>
-        <form onSubmit={handleSave}>
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept="image/png, image/jpeg, image/webp, image/gif"
-            style={{ display: 'none' }}
-            onChange={handlePhotoSelect}
-          />
-          <input
-            type="file"
-            ref={coverInputRef}
-            accept="image/png, image/jpeg, image/webp, image/gif"
-            style={{ display: 'none' }}
-            onChange={handleCoverSelect}
-          />
-
-          {renderCoverPhoto()}
+          <div style={{
+            background: 'rgba(12, 16, 26, 0.52)',
+            backdropFilter: 'blur(28px) saturate(170%)',
+            WebkitBackdropFilter: 'blur(28px) saturate(170%)',
+            border: '1px solid rgba(255, 255, 255, 0.11)',
+            borderRadius: 20,
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+            overflow: 'hidden'
+          }}>
+            <form onSubmit={handleSave}>
+              {renderCoverPhoto()}
 
           <div style={{ padding: '0 28px 28px', position: 'relative' }}>
             <div style={{ 

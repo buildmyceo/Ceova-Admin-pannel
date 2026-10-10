@@ -956,29 +956,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             payload.phone = dbUpdates.phone;
             payload.phone_number = dbUpdates.phone;
           }
-          if (user.email) {
-            await client
-              .from('profiles')
-              .update(payload)
-              .ilike('email', user.email.trim().toLowerCase());
-          } else {
-            await client
-              .from('profiles')
-              .update(payload)
-              .eq('id', user.id);
+          try {
+            if (user.email) {
+              const { error: updateErr } = await client
+                .from('profiles')
+                .update(payload)
+                .ilike('email', user.email.trim().toLowerCase());
+              if (updateErr) {
+                console.warn('Error updating profiles with full payload, retrying core fields:', updateErr.message);
+                const { cover_url, ...corePayload } = payload;
+                await client
+                  .from('profiles')
+                  .update(corePayload)
+                  .ilike('email', user.email.trim().toLowerCase());
+              }
+            } else {
+              const { error: updateErr } = await client
+                .from('profiles')
+                .update(payload)
+                .eq('id', user.id);
+              if (updateErr) {
+                console.warn('Error updating profiles by ID, retrying core fields:', updateErr.message);
+                const { cover_url, ...corePayload } = payload;
+                await client
+                  .from('profiles')
+                  .update(corePayload)
+                  .eq('id', user.id);
+              }
+            }
+          } catch (dbErr) {
+            console.warn('Profiles table update catch:', dbErr);
           }
         }
 
-        // 2. Also keep user_metadata synced in Supabase Auth (safe metadata only, skip large base64)
+        // 2. Also keep user_metadata synced in Supabase Auth (safe metadata only, compressed dataUrl under 250KB allowed)
         try {
           const metaUpdates: any = {};
           if (updates.full_name) metaUpdates.full_name = updates.full_name;
           if (updates.social_links) metaUpdates.social_links = updates.social_links;
           if (apps !== undefined) metaUpdates.apps = apps;
-          if (updates.cover_url && !updates.cover_url.startsWith('data:')) {
+          if (updates.cover_url && (!updates.cover_url.startsWith('data:') || updates.cover_url.length < 250000)) {
             metaUpdates.cover_url = updates.cover_url;
           }
-          if (updates.avatar_url && !updates.avatar_url.startsWith('data:')) {
+          if (updates.avatar_url && (!updates.avatar_url.startsWith('data:') || updates.avatar_url.length < 250000)) {
             metaUpdates.avatar_url = updates.avatar_url;
           }
 

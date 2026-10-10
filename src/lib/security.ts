@@ -109,12 +109,16 @@ export function sanitizeSocialLink(platform: string, rawValue?: string | null): 
 /**
  * Maximum file size limits
  */
-export const MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
-export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
+export const MAX_PHOTO_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB (compressed client-side before upload)
+export const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024; // 30 MB
 
 // Dangerous extensions that must never be uploaded as attachments
 const FORBIDDEN_EXTENSIONS = new Set([
   'exe', 'bat', 'cmd', 'sh', 'php', 'phtml', 'html', 'htm', 'js', 'vbs', 'scr', 'msi', 'jar'
+]);
+
+const VALID_PHOTO_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif', 'bmp'
 ]);
 
 /**
@@ -135,7 +139,10 @@ export function validateAttachmentFile(
   }
 
   if (allowedCategory === 'photo') {
-    if (!file.type.startsWith('image/') || ext === 'svg') {
+    const isImageMime = file.type.startsWith('image/');
+    const isImageExt = VALID_PHOTO_EXTENSIONS.has(ext);
+
+    if ((!isImageMime && !isImageExt) || ext === 'svg') {
       return { 
         valid: false, 
         error: 'Only standard photo files (JPG, PNG, WebP, GIF) are allowed.' 
@@ -144,7 +151,7 @@ export function validateAttachmentFile(
     if (file.size > MAX_PHOTO_SIZE_BYTES) {
       return { 
         valid: false, 
-        error: 'Photo file size exceeds the 5 MB limit.' 
+        error: 'Photo file size exceeds the 25 MB limit.' 
       };
     }
   } else {
