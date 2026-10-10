@@ -188,22 +188,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
     }, 1800);
   };
 
-  // Direct manual activation of pending member
-  const handleActivateMember = async (targetMember: Profile) => {
-    try {
-      setActionLoadingMemberId(targetMember.id);
-      const res = await updateMemberStatus(targetMember.id, 'active');
-      if (res.success) {
-        await refreshData();
-      } else {
-        alert(res.error || 'Failed to activate member account.');
-      }
-    } catch (err: any) {
-      alert(err?.message || 'Error activating member.');
-    } finally {
-      setActionLoadingMemberId(null);
-    }
-  };
+
 
   // Revoke / Cancel pending invitation
   const handleRevokeInvite = async (targetMember: Profile) => {
@@ -1370,59 +1355,31 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                         )}
 
                         {isAdmin && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                            {/* Activate Account Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleActivateMember(member)}
-                              disabled={actionLoadingMemberId === member.id}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 5,
-                                padding: '7px 8px',
-                                borderRadius: 8,
-                                background: 'rgba(37, 99, 235, 0.18)',
-                                border: '1px solid rgba(59, 130, 246, 0.35)',
-                                color: '#60a5fa',
-                                fontSize: 11.5,
-                                fontWeight: 700,
-                                cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Manually activate this account so they appear in Active Directory immediately"
-                            >
-                              <CheckCircle2 size={12} />
-                              <span>{actionLoadingMemberId === member.id ? 'Activating...' : 'Activate Now'}</span>
-                            </button>
-
-                            {/* Revoke Invitation Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleRevokeInvite(member)}
-                              disabled={actionLoadingMemberId === member.id}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 5,
-                                padding: '7px 8px',
-                                borderRadius: 8,
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: '1px solid rgba(239, 68, 68, 0.25)',
-                                color: '#f87171',
-                                fontSize: 11.5,
-                                fontWeight: 600,
-                                cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Cancel this invitation and remove this user from pending list"
-                            >
-                              <Trash2 size={12} />
-                              <span>Revoke</span>
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRevokeInvite(member)}
+                            disabled={actionLoadingMemberId === member.id}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 5,
+                              padding: '7px 8px',
+                              borderRadius: 8,
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: '1px solid rgba(239, 68, 68, 0.25)',
+                              color: '#f87171',
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title="Cancel this invitation and remove this user from pending list"
+                          >
+                            <Trash2 size={12} />
+                            <span>Revoke</span>
+                          </button>
                         )}
 
                         <button
@@ -1762,53 +1719,28 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                               </button>
 
                               {isAdmin && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleActivateMember(member)}
-                                    disabled={actionLoadingMemberId === member.id}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 5,
-                                      background: 'rgba(37, 99, 235, 0.18)',
-                                      border: '1px solid rgba(59, 130, 246, 0.35)',
-                                      color: '#60a5fa',
-                                      padding: '6px 12px',
-                                      borderRadius: 6,
-                                      fontSize: 11.5,
-                                      fontWeight: 700,
-                                      cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer'
-                                    }}
-                                    title="Activate account now so they move to Active Directory"
-                                  >
-                                    <CheckCircle2 size={12} />
-                                    <span>{actionLoadingMemberId === member.id ? 'Activating...' : 'Activate'}</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRevokeInvite(member)}
-                                    disabled={actionLoadingMemberId === member.id}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 5,
-                                      background: 'rgba(239, 68, 68, 0.1)',
-                                      border: '1px solid rgba(239, 68, 68, 0.25)',
-                                      color: '#f87171',
-                                      padding: '6px 12px',
-                                      borderRadius: 6,
-                                      fontSize: 11.5,
-                                      fontWeight: 600,
-                                      cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer'
-                                    }}
-                                    title="Revoke invitation"
-                                  >
-                                    <Trash2 size={12} />
-                                    <span>Revoke</span>
-                                  </button>
-                                </>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRevokeInvite(member)}
+                                  disabled={actionLoadingMemberId === member.id}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    color: '#f87171',
+                                    padding: '6px 12px',
+                                    borderRadius: 6,
+                                    fontSize: 11.5,
+                                    fontWeight: 600,
+                                    cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer'
+                                  }}
+                                  title="Revoke invitation"
+                                >
+                                  <Trash2 size={12} />
+                                  <span>Revoke</span>
+                                </button>
                               )}
                             </div>
                           ) : isCurrent ? (
