@@ -41,10 +41,13 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const touchDistanceRef = useRef<number | null>(null);
 
   // Compute responsive viewport display dimensions
   const [viewportSize, setViewportSize] = useState({ width: 480, height: isCover ? 270 : 480 });
@@ -63,9 +66,37 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
     return () => window.removeEventListener('resize', updateViewportSize);
   }, [updateViewportSize]);
 
+  // Load image once per imageSrc (never re-load on scale/offset/draw changes)
+  useEffect(() => {
+    let active = true;
+    const img = new Image();
+    if (!imageSrc.startsWith('data:') && !imageSrc.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => {
+      if (!active) return;
+      imageRef.current = img;
+      setLoadedImage(img);
+      setScale(1);
+      setRotation(0);
+      setOffsetX(0);
+      setOffsetY(0);
+    };
+    img.onerror = (err) => {
+      if (!active) return;
+      console.warn('ImageCropModal: Failed to decode image for crop canvas, using direct image:', err);
+      onConfirm(imageSrc);
+    };
+    img.src = imageSrc;
+    return () => {
+      active = false;
+    };
+  }, [imageSrc, onConfirm]);
+
+  // Draw image on canvas whenever transform or image changes
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const img = imageRef.current;
+    const img = imageRef.current || loadedImage;
     if (!canvas || !img) return;
 
     const ctx = canvas.getContext('2d');
@@ -81,8 +112,6 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
     // Save state
     ctx.save();
-
-    // Enable high quality interpolation
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
@@ -93,88 +122,94 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
     // Determine dimensions to cover viewport at scale 1
     const isRotated90or270 = rotation % 180 !== 0;
-    const effImgW = isRotated90or270 ? img.naturalHeight : img.naturalWidth;
-    const effImgH = isRotated90or270 ? img.naturalWidth : img.naturalHeight;
+    const effImgW = isRotated90or270 ? (img.naturalHeight || img.height || 1) : (img.naturalWidth || img.width || 1);
+    const effImgH = isRotated90or270 ? (img.naturalWidth || img.width || 1) : (img.naturalHeight || img.height || 1);
 
     const baseScale = Math.max(vw / effImgW, vh / effImgH);
-    const drawW = img.naturalWidth * baseScale;
-    const drawH = img.naturalHeight * baseScale;
+    const drawW = (img.naturalWidth || img.width) * baseScale;
+    const drawH = (img.naturalHeight || img.height) * baseScale;
 
     ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
 
     ctx.restore();
-  }, [viewportSize, offsetX, offsetY, rotation, scale]);
-
-  // Load image
-  useEffect(() => {
-    const img = new Image();
-    if (!imageSrc.startsWith('data:') && !imageSrc.startsWith('blob:')) {
-      img.crossOrigin = 'anonymous';
-    }
-    img.onload = () => {
-      imageRef.current = img;
-      // Reset defaults
-      setScale(1);
-      setRotation(0);
-      setOffsetX(0);
-      setOffsetY(0);
-      draw();
-    };
-    img.onerror = (err) => {
-      console.warn('ImageCropModal: Failed to decode image for crop canvas, using direct image:', err);
-      // Fallback: If canvas decoding fails, allow user to proceed with original image
-      onConfirm(imageSrc);
-    };
-    img.src = imageSrc;
-  }, [imageSrc, draw, onConfirm]);
+  }, [loadedImage, viewportSize, offsetX, offsetY, rotation, scale]);
 
   // Redraw when viewport or transform parameters change
   useEffect(() => {
     draw();
   }, [draw]);
 
-  // Mouse drag handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
+  // Pointer drag handlers (desktop mouse + mobile touch) with pointer capture
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
     setIsDragging(true);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (_) {}
     setDragStart({ x: e.clientX - offsetX, y: e.clientY - offsetY });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDragging) return;
     setOffsetX(e.clientX - dragStart.x);
     setOffsetY(e.clientY - dragStart.y);
   };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      setIsDragging(false);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+    }
   };
 
-  // Touch drag handlers
+  // Pinch-to-zoom for touch screens
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      setIsDragging(true);
-      const touch = e.touches[0];
-      setDragStart({ x: touch.clientX - offsetX, y: touch.clientY - offsetY });
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      touchDistanceRef.current = Math.hypot(dx, dy);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    setOffsetX(touch.clientX - dragStart.x);
-    setOffsetY(touch.clientY - dragStart.y);
+    if (e.touches.length === 2 && touchDistanceRef.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const factor = newDist / touchDistanceRef.current;
+      touchDistanceRef.current = newDist;
+      setScale(prev => Math.min(4, Math.max(0.5, Number((prev * factor).toFixed(2)))));
+    }
   };
 
-  const handleTouchEnd = () => {
-    setIsDragging(false);
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      touchDistanceRef.current = null;
+    }
   };
 
-  // Wheel zoom
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomDelta = e.deltaY < 0 ? 0.08 : -0.08;
-    setScale(prev => Math.min(3.5, Math.max(0.6, prev + zoomDelta)));
+  // Wheel zoom via native non-passive listener
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const zoomDelta = e.deltaY < 0 ? 0.08 : -0.08;
+      setScale(prev => Math.min(4, Math.max(0.5, Number((prev + zoomDelta).toFixed(2)))));
+    };
+    el.addEventListener('wheel', onWheelNative, { passive: false });
+    return () => el.removeEventListener('wheel', onWheelNative);
+  }, []);
+
+  const handleZoomIn = () => {
+    setScale(prev => Math.min(4, Number((prev + 0.15).toFixed(2))));
+  };
+
+  const handleZoomOut = () => {
+    setScale(prev => Math.max(0.5, Number((prev - 0.15).toFixed(2))));
   };
 
   const handleRotate = () => {
@@ -189,8 +224,11 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   };
 
   const handleConfirm = () => {
-    const img = imageRef.current;
-    if (!img) return;
+    const img = imageRef.current || loadedImage;
+    if (!img) {
+      onConfirm(imageSrc);
+      return;
+    }
 
     setIsProcessing(true);
 
@@ -203,16 +241,21 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
 
       const ctx = exportCanvas.getContext('2d');
       if (!ctx) {
-        setIsProcessing(false);
+        onConfirm(imageSrc);
         return;
       }
 
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Fill background
-      ctx.fillStyle = '#09090b';
-      ctx.fillRect(0, 0, targetWidth, targetHeight);
+      // Background fill
+      if (isCover) {
+        ctx.fillStyle = '#18181b';
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+      }
 
       // Scale factor from preview viewport to export canvas
       const exportRatio = targetWidth / viewportSize.width;
@@ -225,21 +268,30 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
       ctx.scale(scale, scale);
 
       const isRotated90or270 = rotation % 180 !== 0;
-      const effImgW = isRotated90or270 ? img.naturalHeight : img.naturalWidth;
-      const effImgH = isRotated90or270 ? img.naturalWidth : img.naturalHeight;
+      const effImgW = isRotated90or270 ? (img.naturalHeight || img.height || 1) : (img.naturalWidth || img.width || 1);
+      const effImgH = isRotated90or270 ? (img.naturalWidth || img.width || 1) : (img.naturalHeight || img.height || 1);
 
       const baseScale = Math.max(viewportSize.width / effImgW, viewportSize.height / effImgH);
-      const drawW = img.naturalWidth * baseScale * exportRatio;
-      const drawH = img.naturalHeight * baseScale * exportRatio;
+      const drawW = (img.naturalWidth || img.width) * baseScale * exportRatio;
+      const drawH = (img.naturalHeight || img.height) * baseScale * exportRatio;
 
       ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
 
-      // Optimized quality (0.82) saves 60-75% file size while maintaining pristine visual fidelity
-      const outputDataUrl = exportCanvas.toDataURL('image/jpeg', 0.82);
+      // Export optimized high fidelity JPEG
+      const outputDataUrl = exportCanvas.toDataURL('image/jpeg', 0.85);
       onConfirm(outputDataUrl);
     } catch (err) {
-      console.error('Failed to export cropped image:', err);
-      alert('Failed to crop image. Please try again.');
+      console.warn('High-res canvas export failed, attempting preview canvas fallback:', err);
+      try {
+        if (canvasRef.current) {
+          const previewData = canvasRef.current.toDataURL('image/jpeg', 0.85);
+          onConfirm(previewData);
+          return;
+        }
+      } catch (cErr) {
+        console.warn('Canvas export failed completely:', cErr);
+      }
+      onConfirm(imageSrc);
     } finally {
       setIsProcessing(false);
     }
@@ -350,6 +402,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
           background: '#09090b'
         }}>
           <div 
+            ref={viewportRef}
             style={{
               width: viewportSize.width,
               height: viewportSize.height,
@@ -361,14 +414,13 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
               userSelect: 'none',
               touchAction: 'none'
             }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            onWheel={handleWheel}
           >
             <canvas 
               ref={canvasRef}
@@ -446,7 +498,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             <button
               type="button"
               title="Zoom out"
-              onClick={() => setScale(prev => Math.max(0.6, prev - 0.1))}
+              onClick={handleZoomOut}
               style={{
                 background: 'rgba(255, 255, 255, 0.06)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -467,8 +519,8 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
               <input 
                 type="range"
-                min="0.6"
-                max="3.5"
+                min="0.5"
+                max="4"
                 step="0.05"
                 value={scale}
                 onChange={e => setScale(parseFloat(e.target.value))}
@@ -482,7 +534,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
                 fontSize: 12,
                 fontWeight: 600,
                 color: '#e4e4e7',
-                minWidth: 42,
+                minWidth: 46,
                 textAlign: 'right'
               }}>
                 {Math.round(scale * 100)}%
@@ -492,7 +544,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
             <button
               type="button"
               title="Zoom in"
-              onClick={() => setScale(prev => Math.min(3.5, prev + 0.1))}
+              onClick={handleZoomIn}
               style={{
                 background: 'rgba(255, 255, 255, 0.06)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
