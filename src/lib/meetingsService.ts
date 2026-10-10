@@ -73,6 +73,11 @@ export const createMeeting = (
     message: `${newMeeting.created_by_name} scheduled a Google Meet for ${newMeeting.date} at ${newMeeting.start_time} (${audienceText}).`,
     type: 'meeting',
     link: newMeeting.meet_link,
+    sender_id: newMeeting.created_by_id,
+    sender_name: newMeeting.created_by_name,
+    target_type: newMeeting.target_type === 'all' ? 'all' : 'members',
+    recipient_ids: newMeeting.target_type === 'all' ? [] : (newMeeting.attendee_ids || []),
+    recipient_names: newMeeting.target_type === 'all' ? ['Everyone'] : (newMeeting.attendee_names || []),
     user_id: newMeeting.target_type === 'all' ? 'all' : (newMeeting.attendee_ids?.[0] || 'all'),
     meeting_id: newMeeting.id,
     meta: {

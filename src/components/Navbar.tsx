@@ -10,7 +10,12 @@ import {
   X,
   Bell
 } from 'lucide-react';
-import { getStoredNotifications } from '../lib/notificationsService';
+import { 
+  getStoredNotifications,
+  fetchNotificationsFromSupabase,
+  subscribeToNotificationsRealtime,
+  isNotificationReadByUser
+} from '../lib/notificationsService';
 
 interface NavbarProps {
   onOpenAuth: () => void;
@@ -42,10 +47,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
 
   useEffect(() => {
+    // Subscribe to realtime channel for instantaneous cross-user notification delivery
+    const unsubscribeRealtime = subscribeToNotificationsRealtime(undefined, user);
+
+    // Initial fetch from Supabase
+    fetchNotificationsFromSupabase(user).catch(console.error);
+
     const updateUnread = () => {
       try {
-        const notifs = getStoredNotifications();
-        const unread = notifs.filter(n => !n.read).length;
+        const notifs = getStoredNotifications(user);
+        const unread = notifs.filter(n => !isNotificationReadByUser(n, user) && n.sender_id !== user?.id).length;
         setUnreadNotifCount(unread);
       } catch (err) {
         console.error(err);
@@ -56,8 +67,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.addEventListener('ceova_notifications_updated', updateUnread);
     return () => {
       window.removeEventListener('ceova_notifications_updated', updateUnread);
+      unsubscribeRealtime();
     };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {

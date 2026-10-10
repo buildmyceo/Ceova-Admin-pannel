@@ -1,30 +1,74 @@
 import { AppNotification, Profile, NotificationAttachment, UserRole } from '../types';
 import { dispatchNotificationEmails } from './emailService';
+import { getSupabaseClient } from './supabase';
 
 const NOTIFICATIONS_STORAGE_KEY = 'ceova_notifications_v2';
 
-const SEED_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: 'notif_welcome',
-    user_id: 'all',
-    target_type: 'all',
-    title: 'Welcome to Ceova Enterprise Portal',
-    message: 'Your executive dashboard, team deliverable pipelines, and live Google Meet calendar are active.',
-    type: 'system',
-    read: false,
-    created_at: new Date(Date.now() - 3600000 * 4).toISOString()
-  },
-  {
-    id: 'notif_deliverable_req',
-    user_id: 'all',
-    target_type: 'all',
-    title: 'Deliverable Guideline Notice',
-    message: 'All tasks marked with Deliverable Requirement require file proof or written completion summary before submission.',
-    type: 'task',
-    read: true,
-    created_at: new Date(Date.now() - 3600000 * 24).toISOString()
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch {}
   }
-];
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function mapDbRowToNotification(row: any): AppNotification {
+  return {
+    id: row.id,
+    user_id: row.user_id || (row.target_type === 'all' ? 'all' : (Array.isArray(row.recipient_ids) && row.recipient_ids.length === 1 ? row.recipient_ids[0] : null)),
+    title: row.title || '',
+    message: row.message || '',
+    type: row.type || 'message',
+    link: row.link || undefined,
+    read: Boolean(row.read),
+    read_by_ids: Array.isArray(row.read_by_ids) ? row.read_by_ids : [],
+    read_by_names: Array.isArray(row.read_by_names) ? row.read_by_names : [],
+    created_at: row.created_at || new Date().toISOString(),
+    meeting_id: row.meeting_id || undefined,
+    task_id: row.task_id || undefined,
+    sender_id: row.sender_id || undefined,
+    sender_name: row.sender_name || undefined,
+    sender_role: row.sender_role || undefined,
+    sender_avatar: row.sender_avatar || undefined,
+    target_type: row.target_type || (row.user_id === 'all' ? 'all' : 'members'),
+    recipient_ids: Array.isArray(row.recipient_ids) ? row.recipient_ids : [],
+    recipient_names: Array.isArray(row.recipient_names) ? row.recipient_names : [],
+    photos: Array.isArray(row.photos) ? row.photos : undefined,
+    files: Array.isArray(row.files) ? row.files : undefined,
+    meta: row.meta || undefined
+  };
+}
+
+function mapNotificationToDbRow(notif: Partial<AppNotification>) {
+  return {
+    ...(notif.id ? { id: notif.id } : {}),
+    title: notif.title || '',
+    message: notif.message || '',
+    type: notif.type || 'message',
+    link: notif.link || null,
+    user_id: notif.user_id || null,
+    target_type: notif.target_type || 'members',
+    sender_id: notif.sender_id || null,
+    sender_name: notif.sender_name || null,
+    sender_role: notif.sender_role || null,
+    sender_avatar: notif.sender_avatar || null,
+    recipient_ids: notif.recipient_ids || [],
+    recipient_names: notif.recipient_names || [],
+    photos: notif.photos || [],
+    files: notif.files || [],
+    read: Boolean(notif.read),
+    read_by_ids: notif.read_by_ids || [],
+    read_by_names: notif.read_by_names || [],
+    meeting_id: notif.meeting_id || null,
+    task_id: notif.task_id || null,
+    meta: notif.meta || {}
+  };
+}
 
 export const getAllStoredNotifications = (): AppNotification[] => {
   try {
@@ -32,49 +76,47 @@ export const getAllStoredNotifications = (): AppNotification[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const cleaned = parsed.filter(n => n.id !== 'notif_meet_sync');
-        if (cleaned.length !== parsed.length) {
-          localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(cleaned));
-        }
-        return cleaned;
+        return parsed;
       }
     }
   } catch (err) {
     console.error('Failed reading notifications from storage:', err);
   }
-  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(SEED_NOTIFICATIONS));
-  return SEED_NOTIFICATIONS;
+  return [];
+};
+
+export const filterNotificationForUser = (n: AppNotification, currentUser?: Profile | null): boolean => {
+  if (!currentUser) return true;
+
+  const isAdmin = currentUser.role === 'admin' || currentUser.role === 'ceo';
+
+  // Broadcast notifications are visible to everyone
+  if (n.target_type === 'all' || n.user_id === 'all') return true;
+
+  // Notifications with no specific recipients default to broadcast/public
+  if (!n.recipient_ids || n.recipient_ids.length === 0) {
+    if (!n.user_id || n.user_id === 'all') return true;
+  }
+
+  // Direct match by user_id
+  if (n.user_id && n.user_id === currentUser.id) return true;
+
+  // Recipient list includes current user
+  if (n.recipient_ids && n.recipient_ids.includes(currentUser.id)) return true;
+
+  // Sender can always see what they sent
+  if (n.sender_id && n.sender_id === currentUser.id) return true;
+
+  // Admin can see notifications across the team for oversight
+  if (isAdmin) return true;
+
+  return false;
 };
 
 export const getStoredNotifications = (currentUser?: Profile | null): AppNotification[] => {
   const all = getAllStoredNotifications();
   if (!currentUser) return all;
-
-  const isAdmin = currentUser.role === 'admin' || currentUser.role === 'ceo';
-
-  return all.filter(n => {
-    // Broadcast notifications are visible to everyone
-    if (n.target_type === 'all' || n.user_id === 'all') return true;
-
-    // Notifications with no specific recipients default to public
-    if (!n.recipient_ids || n.recipient_ids.length === 0) {
-      if (!n.user_id || n.user_id === 'all') return true;
-    }
-
-    // Direct match by user_id
-    if (n.user_id && n.user_id === currentUser.id) return true;
-
-    // Recipient list includes current user
-    if (n.recipient_ids && n.recipient_ids.includes(currentUser.id)) return true;
-
-    // Sender can always see what they sent
-    if (n.sender_id && n.sender_id === currentUser.id) return true;
-
-    // Admin can see notifications across the team for oversight
-    if (isAdmin) return true;
-
-    return false;
-  });
+  return all.filter(n => filterNotificationForUser(n, currentUser));
 };
 
 export const saveNotifications = (notifications: AppNotification[]) => {
@@ -86,17 +128,154 @@ export const saveNotifications = (notifications: AppNotification[]) => {
   }
 };
 
-export const addNotification = (notif: Omit<AppNotification, 'id' | 'created_at' | 'read'>): AppNotification => {
+/**
+ * Fetch latest notifications from Supabase and sync with local storage cache
+ */
+export const fetchNotificationsFromSupabase = async (
+  currentUser?: Profile | null
+): Promise<AppNotification[]> => {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return getStoredNotifications(currentUser);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      console.warn('Error fetching notifications from Supabase:', error.message);
+      return getStoredNotifications(currentUser);
+    }
+
+    if (data && Array.isArray(data)) {
+      const mapped = data.map(mapDbRowToNotification);
+      saveNotifications(mapped);
+      return currentUser ? mapped.filter(n => filterNotificationForUser(n, currentUser)) : mapped;
+    }
+  } catch (err) {
+    console.error('Failed fetching notifications from Supabase:', err);
+  }
+
+  return getStoredNotifications(currentUser);
+};
+
+let activeRealtimeChannel: any = null;
+let realtimeRefCount = 0;
+
+/**
+ * Subscribes to Supabase Realtime events on public.notifications table.
+ * When any user inserts, updates, or deletes a notification, all connected
+ * devices receive the event and update their local cache and badge immediately.
+ */
+export const subscribeToNotificationsRealtime = (
+  onUpdate?: (notifications: AppNotification[]) => void,
+  currentUser?: Profile | null
+): (() => void) => {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return () => {};
+  }
+
+  realtimeRefCount++;
+
+  if (!activeRealtimeChannel) {
+    activeRealtimeChannel = supabase
+      .channel('ceova-notifications-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications' },
+        (payload) => {
+          handleRealtimeEvent(payload, onUpdate, currentUser);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Refresh on successful connection to catch any missed updates
+          fetchNotificationsFromSupabase(currentUser).catch(console.error);
+        }
+      });
+  }
+
+  return () => {
+    realtimeRefCount = Math.max(0, realtimeRefCount - 1);
+    if (realtimeRefCount === 0 && activeRealtimeChannel) {
+      supabase.removeChannel(activeRealtimeChannel);
+      activeRealtimeChannel = null;
+    }
+  };
+};
+
+function handleRealtimeEvent(
+  payload: any,
+  onUpdate?: (notifications: AppNotification[]) => void,
+  currentUser?: Profile | null
+) {
   const current = getAllStoredNotifications();
+  let updatedList = [...current];
+
+  if (payload.eventType === 'INSERT' && payload.new) {
+    const newNotif = mapDbRowToNotification(payload.new);
+    if (!updatedList.some(n => n.id === newNotif.id)) {
+      updatedList = [newNotif, ...updatedList];
+    }
+  } else if (payload.eventType === 'UPDATE' && payload.new) {
+    const updatedNotif = mapDbRowToNotification(payload.new);
+    updatedList = updatedList.map(n => (n.id === updatedNotif.id ? updatedNotif : n));
+  } else if (payload.eventType === 'DELETE' && payload.old) {
+    const deletedId = payload.old.id;
+    updatedList = updatedList.filter(n => n.id !== deletedId);
+  }
+
+  saveNotifications(updatedList);
+
+  if (onUpdate) {
+    const filtered = currentUser ? updatedList.filter(n => filterNotificationForUser(n, currentUser)) : updatedList;
+    onUpdate(filtered);
+  }
+}
+
+export const addNotification = async (
+  notif: Omit<AppNotification, 'id' | 'created_at' | 'read'>
+): Promise<AppNotification> => {
   const newNotif: AppNotification = {
-    id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+    id: generateUUID(),
     ...notif,
     read: false,
     created_at: new Date().toISOString()
   };
 
-  const updated = [newNotif, ...current];
+  // Optimistic local update for instant UI feedback
+  const current = getAllStoredNotifications();
+  const updated = [newNotif, ...current.filter(n => n.id !== newNotif.id)];
   saveNotifications(updated);
+
+  // Persist to Supabase database for cross-device, cross-user realtime delivery
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      const dbRow = mapNotificationToDbRow(newNotif);
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert([dbRow])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Failed inserting notification to Supabase:', error.message);
+      } else if (data) {
+        const persistedNotif = mapDbRowToNotification(data);
+        const latest = getAllStoredNotifications();
+        const merged = latest.map(n => (n.id === newNotif.id ? persistedNotif : n));
+        saveNotifications(merged);
+      }
+    } catch (dbErr) {
+      console.error('Error inserting notification to Supabase:', dbErr);
+    }
+  }
 
   // Automatically send notification to user email via Resend API
   dispatchNotificationEmails(newNotif).catch(err => {
@@ -119,7 +298,9 @@ export interface SendMemberNotificationParams {
   files?: NotificationAttachment[];
 }
 
-export const sendMemberNotification = (params: SendMemberNotificationParams): AppNotification => {
+export const sendMemberNotification = async (
+  params: SendMemberNotificationParams
+): Promise<AppNotification> => {
   const { sender, target_type, recipient_ids, recipient_names, recipient_emails, title, message, link, photos, files } = params;
 
   const isAdmin = sender.role === 'admin' || sender.role === 'ceo';
@@ -154,7 +335,7 @@ export const sendMemberNotification = (params: SendMemberNotificationParams): Ap
     user_id: target_type === 'all' ? 'all' : (recipient_ids.length === 1 ? recipient_ids[0] : null)
   };
 
-  return addNotification(newNotification);
+  return await addNotification(newNotification);
 };
 
 export const isNotificationReadByUser = (n: AppNotification, user?: Profile | null): boolean => {
@@ -220,9 +401,11 @@ export const getNotificationReadReceipt = (
   };
 };
 
-export const markNotificationRead = (id: string, reader?: Profile | null) => {
+export const markNotificationRead = async (id: string, reader?: Profile | null) => {
   const current = getAllStoredNotifications();
   let changed = false;
+  let targetNotif: AppNotification | null = null;
+
   const updated = current.map(n => {
     if (n.id !== id) return n;
 
@@ -244,24 +427,45 @@ export const markNotificationRead = (id: string, reader?: Profile | null) => {
       changed = true;
     }
 
-    return {
+    const modified = {
       ...n,
       read: true,
       read_by_ids: readByIds,
       read_by_names: readByNames
     };
+    targetNotif = modified;
+    return modified;
   });
 
   if (changed) {
     saveNotifications(updated);
   }
+
+  // Sync read status to Supabase
+  const supabase = getSupabaseClient();
+  if (supabase && targetNotif) {
+    try {
+      await supabase
+        .from('notifications')
+        .update({
+          read: true,
+          read_by_ids: (targetNotif as AppNotification).read_by_ids || [],
+          read_by_names: (targetNotif as AppNotification).read_by_names || [],
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+    } catch (err) {
+      console.warn('Failed syncing read status to Supabase:', err);
+    }
+  }
 };
 
-export const markMultipleNotificationsRead = (ids: string[], reader?: Profile | null) => {
+export const markMultipleNotificationsRead = async (ids: string[], reader?: Profile | null) => {
   if (ids.length === 0) return;
   const current = getAllStoredNotifications();
   let changed = false;
   const idSet = new Set(ids);
+  const updatedNotifs: AppNotification[] = [];
 
   const updated = current.map(n => {
     if (!idSet.has(n.id)) return n;
@@ -284,49 +488,84 @@ export const markMultipleNotificationsRead = (ids: string[], reader?: Profile | 
       changed = true;
     }
 
-    return {
+    const modified = {
       ...n,
       read: true,
       read_by_ids: readByIds,
       read_by_names: readByNames
     };
+    updatedNotifs.push(modified);
+    return modified;
   });
 
   if (changed) {
     saveNotifications(updated);
   }
-};
 
-export const markAllNotificationsRead = (reader?: Profile | null) => {
-  const current = getAllStoredNotifications();
-  const updated = current.map(n => {
-    const readByIds = n.read_by_ids ? [...n.read_by_ids] : [];
-    const readByNames = n.read_by_names ? [...n.read_by_names] : [];
-
-    if (reader && reader.id && !readByIds.includes(reader.id)) {
-      readByIds.push(reader.id);
-      const name = reader.full_name || 'Member';
-      if (!readByNames.includes(name)) {
-        readByNames.push(name);
-      }
+  // Sync to Supabase
+  const supabase = getSupabaseClient();
+  if (supabase && updatedNotifs.length > 0) {
+    try {
+      await Promise.all(
+        updatedNotifs.map(n =>
+          supabase
+            .from('notifications')
+            .update({
+              read: true,
+              read_by_ids: n.read_by_ids || [],
+              read_by_names: n.read_by_names || [],
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', n.id)
+        )
+      );
+    } catch (err) {
+      console.warn('Failed syncing multiple read status to Supabase:', err);
     }
-
-    return {
-      ...n,
-      read: true,
-      read_by_ids: readByIds,
-      read_by_names: readByNames
-    };
-  });
-  saveNotifications(updated);
+  }
 };
 
-export const deleteNotification = (id: string) => {
+export const markAllNotificationsRead = async (reader?: Profile | null) => {
+  const current = getAllStoredNotifications();
+  const visible = current.filter(n => filterNotificationForUser(n, reader));
+  const unreadVisibleIds = visible
+    .filter(n => !isNotificationReadByUser(n, reader))
+    .map(n => n.id);
+
+  if (unreadVisibleIds.length > 0) {
+    await markMultipleNotificationsRead(unreadVisibleIds, reader);
+  }
+};
+
+export const deleteNotification = async (id: string) => {
   const current = getAllStoredNotifications();
   const updated = current.filter(n => n.id !== id);
   saveNotifications(updated);
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from('notifications').delete().eq('id', id);
+    } catch (err) {
+      console.error('Failed deleting notification from Supabase:', err);
+    }
+  }
 };
 
-export const clearAllNotifications = () => {
-  saveNotifications([]);
+export const clearAllNotifications = async (currentUser?: Profile | null) => {
+  const current = getAllStoredNotifications();
+  const toDelete = currentUser ? current.filter(n => filterNotificationForUser(n, currentUser)) : current;
+  const remaining = currentUser ? current.filter(n => !filterNotificationForUser(n, currentUser)) : [];
+
+  saveNotifications(remaining);
+
+  const supabase = getSupabaseClient();
+  if (supabase && toDelete.length > 0) {
+    try {
+      const ids = toDelete.map(n => n.id);
+      await supabase.from('notifications').delete().in('id', ids);
+    } catch (err) {
+      console.error('Failed clearing notifications from Supabase:', err);
+    }
+  }
 };

@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { usePortalData } from '../context/PortalDataContext';
 import {
   getStoredNotifications,
+  fetchNotificationsFromSupabase,
+  subscribeToNotificationsRealtime,
   markNotificationRead,
   markAllNotificationsRead,
   markMultipleNotificationsRead,
@@ -87,6 +89,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
   useEffect(() => {
     reloadNotifications();
 
+    // Initial fetch from Supabase
+    fetchNotificationsFromSupabase(user)
+      .then((fresh) => setNotifications(fresh))
+      .catch(console.error);
+
+    // Subscribe to realtime channel for instant cross-device updates
+    const unsubscribeRealtime = subscribeToNotificationsRealtime(undefined, user);
+
     const handleUpdate = () => {
       reloadNotifications();
     };
@@ -114,6 +124,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
     return () => {
       window.removeEventListener('ceova_notifications_updated', handleUpdate);
       window.removeEventListener('ceova_open_compose_notification', handleOpenCompose);
+      unsubscribeRealtime();
     };
   }, [user]);
 
@@ -238,7 +249,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
   };
 
   // Submit send notification
-  const handleSendNotification = (e: React.FormEvent) => {
+  const handleSendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -278,7 +289,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
 
     setIsSending(true);
     try {
-      sendMemberNotification({
+      await sendMemberNotification({
         sender: user,
         target_type: finalTargetType,
         recipient_ids: selectedRecipientIds,
