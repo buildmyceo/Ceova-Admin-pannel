@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
+import { usePortalData } from '../context/PortalDataContext';
 import { 
   LayoutDashboard, 
   UserCircle,
@@ -29,7 +30,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile
 }) => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const { members } = usePortalData();
+  const pendingCount = members.filter(m => m.status === 'pending').length;
 
   const handleNavClick = (tab: NavTab) => {
     onSelectTab(tab);
@@ -89,6 +92,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Users size={17} />
             <span>Members</span>
+            {isAdmin && pendingCount > 0 && (
+              <span 
+                title={`${pendingCount} pending invitations awaiting activation`}
+                style={{
+                  marginLeft: 'auto',
+                  background: 'rgba(245, 158, 11, 0.18)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: '#fbbf24',
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 8
+                }}
+              >
+                {pendingCount}
+              </span>
+            )}
           </button>
 
           <button

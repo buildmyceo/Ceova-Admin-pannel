@@ -28,7 +28,11 @@ import {
   Bell,
   User,
   ShieldAlert,
-  PauseCircle
+  PauseCircle,
+  Trash2,
+  UserCheck,
+  Link as LinkIcon,
+  ArrowRight
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
 import { Profile } from '../types';
@@ -40,13 +44,16 @@ interface MembersViewProps {
 
 export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
   const { user: currentUser, isAdmin, savedAccounts } = useAuth();
-  const { members, refreshData, isUserOnline, isLoadingData } = usePortalData();
+  const { members, refreshData, isUserOnline, isLoadingData, updateMemberStatus } = usePortalData();
 
   // View state
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [membersTab, setMembersTab] = useState<'active' | 'pending'>('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'member' | 'intern'>('all');
   const [copiedEmailMap, setCopiedEmailMap] = useState<{ [id: string]: boolean }>({});
+  const [copiedInviteLinkMap, setCopiedInviteLinkMap] = useState<{ [id: string]: boolean }>({});
+  const [actionLoadingMemberId, setActionLoadingMemberId] = useState<string | null>(null);
 
   // Invite modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -171,6 +178,55 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
     }, 5000);
   };
 
+  // One-click copy invitation / portal link
+  const handleCopyPortalLink = (id: string) => {
+    const portalUrl = typeof window !== 'undefined' ? window.location.origin : 'https://portal.ceovaai.com';
+    navigator.clipboard.writeText(portalUrl);
+    setCopiedInviteLinkMap(prev => ({ ...prev, [id]: true }));
+    setTimeout(() => {
+      setCopiedInviteLinkMap(prev => ({ ...prev, [id]: false }));
+    }, 1800);
+  };
+
+  // Direct manual activation of pending member
+  const handleActivateMember = async (targetMember: Profile) => {
+    try {
+      setActionLoadingMemberId(targetMember.id);
+      const res = await updateMemberStatus(targetMember.id, 'active');
+      if (res.success) {
+        await refreshData();
+      } else {
+        alert(res.error || 'Failed to activate member account.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Error activating member.');
+    } finally {
+      setActionLoadingMemberId(null);
+    }
+  };
+
+  // Revoke / Cancel pending invitation
+  const handleRevokeInvite = async (targetMember: Profile) => {
+    const confirmMsg = `Are you sure you want to revoke the invitation for ${targetMember.full_name || targetMember.email}? This will cancel their invitation and remove them from the system.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setActionLoadingMemberId(targetMember.id);
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('profiles').delete().eq('id', targetMember.id);
+        if (targetMember.email) {
+          await supabase.from('invitations').delete().ilike('email', targetMember.email.trim());
+        }
+      }
+      await refreshData();
+    } catch (err: any) {
+      alert(err?.message || 'Failed to revoke invitation.');
+    } finally {
+      setActionLoadingMemberId(null);
+    }
+  };
+
   // Send invitation
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,6 +312,15 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
     }
   };
 
+  // Pre-calculated counts
+  const activeMembersCount = useMemo(() => {
+    return members.filter(m => m.status !== 'pending' && (isAdmin || (m.status !== 'blocked' && m.status !== 'paused'))).length;
+  }, [members, isAdmin]);
+
+  const pendingMembersCount = useMemo(() => {
+    return members.filter(m => m.status === 'pending').length;
+  }, [members]);
+
   // Filtered members list with all rich profile attributes merged
   const filteredMembers = useMemo(() => {
     return members.map((rawMember) => {
@@ -276,6 +341,15 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         return false;
       }
 
+      // CRITICAL: Filter by Tab!
+      // In 'active' tab: pending accounts are NEVER shown!
+      // In 'pending' tab: ONLY unactivated / pending accounts are shown!
+      if (membersTab === 'active') {
+        if (m.status === 'pending') return false;
+      } else {
+        if (m.status !== 'pending') return false;
+      }
+
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = 
         !q || 
@@ -292,13 +366,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
 
       return matchesSearch && matchesRole;
     });
-  }, [members, currentUser, savedAccounts, searchQuery, roleFilter, isAdmin]);
+  }, [members, currentUser, savedAccounts, searchQuery, roleFilter, isAdmin, membersTab]);
 
   // Real-time presence counts (Instant sync)
   const presenceCounts = useMemo(() => {
     let online = 0;
     let offline = 0;
-    const activePool = isAdmin ? members : members.filter(m => m.status !== 'blocked' && m.status !== 'paused');
+    const activePool = members.filter(m => m.status !== 'pending' && (isAdmin || (m.status !== 'blocked' && m.status !== 'paused')));
     activePool.forEach((m) => {
       if (isUserOnline(m.id)) {
         online++;
@@ -306,8 +380,8 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         offline++;
       }
     });
-    return { online, offline, total: activePool.length };
-  }, [members, isUserOnline, isAdmin]);
+    return { online, offline, total: activePool.length, pending: pendingMembersCount };
+  }, [members, isUserOnline, isAdmin, pendingMembersCount]);
 
   return (
     <div className="view-container fade-in" style={{ paddingBottom: 48 }}>
@@ -439,6 +513,83 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         </div>
       </div>
 
+      {/* Sub-Tabs Navigation: Active Directory vs Pending Invitations */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 18,
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        paddingBottom: 14,
+        overflowX: 'auto'
+      }}>
+        <button
+          type="button"
+          onClick={() => setMembersTab('active')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 16px',
+            borderRadius: 8,
+            border: membersTab === 'active' ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.08)',
+            background: membersTab === 'active' ? '#ffffff' : 'rgba(255, 255, 255, 0.04)',
+            color: membersTab === 'active' ? '#000000' : 'var(--text-muted)',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <Users size={15} />
+          <span>Active Directory</span>
+          <span style={{
+            padding: '2px 7px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            background: membersTab === 'active' ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.08)',
+            color: membersTab === 'active' ? '#000000' : 'var(--text-subtle)'
+          }}>
+            {activeMembersCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMembersTab('pending')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 16px',
+            borderRadius: 8,
+            border: membersTab === 'pending' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+            background: membersTab === 'pending' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+            color: membersTab === 'pending' ? '#fbbf24' : 'var(--text-muted)',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <Mail size={15} />
+          <span>Pending Invitations & Unactivated</span>
+          <span style={{
+            padding: '2px 7px',
+            borderRadius: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            background: membersTab === 'pending' ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)',
+            color: membersTab === 'pending' ? '#000000' : '#fbbf24'
+          }}>
+            {pendingMembersCount}
+          </span>
+        </button>
+      </div>
+
       {/* Real-time Live Presence Summary Bar (Solid Colors) */}
       <div style={{
         background: '#0d0d0f',
@@ -479,7 +630,97 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
             {presenceCounts.offline} Offline
           </span>
         </div>
+
+        {pendingMembersCount > 0 && (
+          <>
+            <div style={{ width: 1, height: 16, background: '#27272a' }} />
+            <button
+              type="button"
+              onClick={() => setMembersTab('pending')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                background: membersTab === 'pending' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                border: 'none',
+                padding: '4px 8px',
+                borderRadius: 6,
+                cursor: 'pointer',
+                color: '#fbbf24',
+                fontSize: 12.5,
+                fontWeight: 600
+              }}
+            >
+              <Clock size={13} />
+              <span>{pendingMembersCount} Pending Setup & Invitations</span>
+              <span style={{ fontSize: 11, color: '#f59e0b', textDecoration: 'underline' }}>
+                {membersTab === 'pending' ? '• Currently Viewing' : 'View Tab →'}
+              </span>
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Banner for Pending Invitations Tab */}
+      {membersTab === 'pending' && (
+        <div style={{
+          background: 'rgba(245, 158, 11, 0.08)',
+          border: '1px solid rgba(245, 158, 11, 0.25)',
+          borderRadius: 14,
+          padding: '14px 18px',
+          marginBottom: 18,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: 'rgba(245, 158, 11, 0.15)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fbbf24',
+              flexShrink: 0
+            }}>
+              <Mail size={18} />
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                Pending Member Invitations & Unactivated Accounts ({pendingMembersCount})
+              </div>
+              <div style={{ fontSize: 12, color: '#a1a1aa', marginTop: 2 }}>
+                These invited members have not activated their account or completed setup yet. They are isolated from the active team directory until activated.
+              </div>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setIsInviteModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 14px',
+                fontSize: 12.5,
+                fontWeight: 600,
+                borderRadius: 8
+              }}
+            >
+              <UserPlus size={14} />
+              <span>Invite Member</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div style={{
@@ -568,11 +809,46 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           color: 'var(--text-muted)',
           boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)'
         }}>
-          <Users size={32} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#ffffff' }}>No team members found</p>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-subtle)' }}>
-            Try adjusting your search query or role filter.
-          </p>
+          {membersTab === 'pending' ? (
+            <>
+              <Mail size={36} style={{ margin: '0 auto 12px', color: '#fbbf24', opacity: 0.8 }} />
+              <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
+                {searchQuery ? 'No matching pending invitations found' : 'No pending invitations'}
+              </p>
+              <p style={{ margin: '6px 0 16px', fontSize: 13, color: 'var(--text-subtle)' }}>
+                {searchQuery 
+                  ? 'Try adjusting your search query or role filter.' 
+                  : 'All team members currently have active and activated portal access.'}
+              </p>
+              {isAdmin && !searchQuery && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '8px 16px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    borderRadius: 8
+                  }}
+                >
+                  <UserPlus size={15} />
+                  <span>Invite New Member</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <Users size={32} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#ffffff' }}>No team members found</p>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-subtle)' }}>
+                Try adjusting your search query or role filter.
+              </p>
+            </>
+          )}
         </div>
       ) : viewMode === 'cards' ? (
         /* CARDS GRID VIEW */
@@ -1008,9 +1284,171 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                     </div>
                   )}
 
-                  {/* Action Button: Current user sees 'Edit My Profile', teammates see 'Send Notification' */}
+                  {/* Action Buttons */}
                   <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                    {isCurrent ? (
+                    {member.status === 'pending' ? (
+                      /* Dedicated Actions for Pending Invitations */
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {/* Copy Portal Access Link Bar */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: '#121214',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: 8,
+                          padding: '6px 10px',
+                          fontSize: 11.5
+                        }}>
+                          <span style={{ color: '#a1a1aa', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <LinkIcon size={12} color="#60a5fa" />
+                            <span>portal.ceovaai.com</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPortalLink(member.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: copiedInviteLinkMap[member.id] ? '#4ade80' : '#60a5fa',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}
+                          >
+                            {copiedInviteLinkMap[member.id] ? <Check size={11} /> : <Copy size={11} />}
+                            <span>{copiedInviteLinkMap[member.id] ? 'Copied' : 'Copy Link'}</span>
+                          </button>
+                        </div>
+
+                        {/* Resend Invitation Email */}
+                        <button
+                          type="button"
+                          onClick={() => handleResendInvitation(member)}
+                          disabled={resendStatusMap[member.email?.toLowerCase()]?.loading}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            background: '#16a34a',
+                            border: 'none',
+                            color: '#ffffff',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: resendStatusMap[member.email?.toLowerCase()]?.loading ? 'wait' : 'pointer',
+                            boxShadow: '0 2px 10px rgba(22, 163, 74, 0.3)',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#15803d'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = '#16a34a'}
+                        >
+                          <Mail size={13} />
+                          <span>{resendStatusMap[member.email?.toLowerCase()]?.loading ? 'Dispatching Email...' : 'Resend Invitation Email'}</span>
+                        </button>
+
+                        {resendStatusMap[member.email?.toLowerCase()] && (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              textAlign: 'center',
+                              padding: '5px 8px',
+                              borderRadius: 6,
+                              background: resendStatusMap[member.email?.toLowerCase()].isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                              border: resendStatusMap[member.email?.toLowerCase()].isError ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
+                              color: resendStatusMap[member.email?.toLowerCase()].isError ? '#f87171' : '#4ade80',
+                            }}
+                          >
+                            {resendStatusMap[member.email?.toLowerCase()].message}
+                          </div>
+                        )}
+
+                        {isAdmin && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                            {/* Activate Account Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleActivateMember(member)}
+                              disabled={actionLoadingMemberId === member.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 5,
+                                padding: '7px 8px',
+                                borderRadius: 8,
+                                background: 'rgba(37, 99, 235, 0.18)',
+                                border: '1px solid rgba(59, 130, 246, 0.35)',
+                                color: '#60a5fa',
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Manually activate this account so they appear in Active Directory immediately"
+                            >
+                              <CheckCircle2 size={12} />
+                              <span>{actionLoadingMemberId === member.id ? 'Activating...' : 'Activate Now'}</span>
+                            </button>
+
+                            {/* Revoke Invitation Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeInvite(member)}
+                              disabled={actionLoadingMemberId === member.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 5,
+                                padding: '7px 8px',
+                                borderRadius: 8,
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                color: '#f87171',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Cancel this invitation and remove this user from pending list"
+                            >
+                              <Trash2 size={12} />
+                              <span>Revoke</span>
+                            </button>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleNotifyMember(member.id)}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: '#a1a1aa',
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Bell size={12} />
+                          <span>Send Direct Notification</span>
+                        </button>
+                      </div>
+                    ) : isCurrent ? (
                       <button
                         type="button"
                         onClick={() => onNavigate && onNavigate('profile')}
@@ -1038,55 +1476,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                       </button>
                     ) : (
                       <>
-                        {member.status === 'pending' && isAdmin && (
-                          <div style={{ marginBottom: 8 }}>
-                            <button
-                              type="button"
-                              onClick={() => handleResendInvitation(member)}
-                              disabled={resendStatusMap[member.email?.toLowerCase()]?.loading}
-                              style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 6,
-                                padding: '8px 12px',
-                                borderRadius: 8,
-                                background: '#16a34a',
-                                border: 'none',
-                                color: '#ffffff',
-                                fontSize: 12,
-                                fontWeight: 700,
-                                cursor: resendStatusMap[member.email?.toLowerCase()]?.loading ? 'wait' : 'pointer',
-                                boxShadow: '0 2px 10px rgba(22, 163, 74, 0.3)',
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.background = '#15803d'}
-                              onMouseLeave={(e) => e.currentTarget.style.background = '#16a34a'}
-                            >
-                              <Mail size={13} />
-                              <span>{resendStatusMap[member.email?.toLowerCase()]?.loading ? 'Dispatching Email...' : 'Resend Invitation Email'}</span>
-                            </button>
-
-                            {resendStatusMap[member.email?.toLowerCase()] && (
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  textAlign: 'center',
-                                  padding: '5px 8px',
-                                  borderRadius: 6,
-                                  background: resendStatusMap[member.email?.toLowerCase()].isError ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                                  border: resendStatusMap[member.email?.toLowerCase()].isError ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
-                                  color: resendStatusMap[member.email?.toLowerCase()].isError ? '#f87171' : '#4ade80',
-                                  marginTop: 4,
-                                }}
-                              >
-                                {resendStatusMap[member.email?.toLowerCase()].message}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
                         <button
                           type="button"
                           onClick={() => handleNotifyMember(member.id)}
@@ -1170,7 +1559,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Member</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role & Dept</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                  <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Online Time</th>
+                  <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{membersTab === 'pending' ? 'Portal Setup Link' : 'Last Online Time'}</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact & Links</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Action</th>
                 </tr>
@@ -1201,7 +1590,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                             height: 38,
                             borderRadius: '50%',
                             background: '#161618',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            border: member.status === 'pending' ? '1.5px solid #f59e0b' : '1px solid rgba(255, 255, 255, 0.1)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1262,12 +1651,30 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                           color: member.status === 'pending' ? '#fbbf24' : isOnline ? '#ffffff' : '#71717a'
                         }}>
                           <span style={{ width: 6, height: 6, borderRadius: '50%', background: member.status === 'pending' ? '#f59e0b' : isOnline ? '#22c55e' : '#71717a' }} />
-                          {member.status === 'pending' ? 'Pending Confirmation' : isOnline ? 'Active • In Portal' : 'Offline'}
+                          {member.status === 'pending' ? 'Pending Activation' : isOnline ? 'Active • In Portal' : 'Offline'}
                         </span>
                       </td>
 
                       <td style={{ padding: '14px 20px' }}>
-                        {isOnline ? (
+                        {member.status === 'pending' ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#161618', border: '1px solid #27272a', padding: '4px 10px', borderRadius: 6 }}>
+                            <LinkIcon size={12} color="#60a5fa" />
+                            <span style={{ fontSize: 11.5, color: '#e4e4e7' }}>portal.ceovaai.com</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyPortalLink(member.id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: copiedInviteLinkMap[member.id] ? '#10b981' : 'var(--text-subtle)',
+                                cursor: 'pointer',
+                                padding: 2
+                              }}
+                            >
+                              {copiedInviteLinkMap[member.id] ? <Check size={12} /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                        ) : isOnline ? (
                           <span style={{ fontSize: 12, color: '#e4e4e7', fontWeight: 600 }}>Active now</span>
                         ) : (
                           <div style={{ fontSize: 12, color: '#e4e4e7' }}>
@@ -1329,8 +1736,82 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                       </td>
 
                       <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                          {isCurrent ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {member.status === 'pending' ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => handleResendInvitation(member)}
+                                disabled={resendStatusMap[member.email?.toLowerCase()]?.loading}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  background: '#16a34a',
+                                  border: 'none',
+                                  color: '#ffffff',
+                                  padding: '6px 12px',
+                                  borderRadius: 6,
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  cursor: resendStatusMap[member.email?.toLowerCase()]?.loading ? 'wait' : 'pointer'
+                                }}
+                              >
+                                <Mail size={12} />
+                                <span>{resendStatusMap[member.email?.toLowerCase()]?.loading ? 'Sending...' : 'Resend Email'}</span>
+                              </button>
+
+                              {isAdmin && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleActivateMember(member)}
+                                    disabled={actionLoadingMemberId === member.id}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      background: 'rgba(37, 99, 235, 0.18)',
+                                      border: '1px solid rgba(59, 130, 246, 0.35)',
+                                      color: '#60a5fa',
+                                      padding: '6px 12px',
+                                      borderRadius: 6,
+                                      fontSize: 11.5,
+                                      fontWeight: 700,
+                                      cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer'
+                                    }}
+                                    title="Activate account now so they move to Active Directory"
+                                  >
+                                    <CheckCircle2 size={12} />
+                                    <span>{actionLoadingMemberId === member.id ? 'Activating...' : 'Activate'}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevokeInvite(member)}
+                                    disabled={actionLoadingMemberId === member.id}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 5,
+                                      background: 'rgba(239, 68, 68, 0.1)',
+                                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                                      color: '#f87171',
+                                      padding: '6px 12px',
+                                      borderRadius: 6,
+                                      fontSize: 11.5,
+                                      fontWeight: 600,
+                                      cursor: actionLoadingMemberId === member.id ? 'wait' : 'pointer'
+                                    }}
+                                    title="Revoke invitation"
+                                  >
+                                    <Trash2 size={12} />
+                                    <span>Revoke</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          ) : isCurrent ? (
                             <button
                               type="button"
                               onClick={() => onNavigate && onNavigate('profile')}
