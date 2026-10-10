@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { UserStatus } from '../types';
 import { ImageCropModal } from '../components/ImageCropModal';
+import { compressImage } from '../lib/compression';
 
 export const ProfileView: React.FC = () => {
   const { user, role, updateCurrentProfile } = useAuth();
@@ -141,16 +142,22 @@ export const ProfileView: React.FC = () => {
     setIsUploading(true);
 
     try {
+      // 1. High-efficiency client-side compression before uploading to Supabase
+      const compressionRes = await compressImage(croppedDataUrl, {
+        maxWidth: isCoverCrop ? 1280 : 500,
+        maxHeight: isCoverCrop ? 720 : 500,
+        quality: 0.8,
+        mimeType: 'image/jpeg'
+      });
+
       const client = getSupabaseClient();
       if (client) {
-        const res = await fetch(croppedDataUrl);
-        const blob = await res.blob();
         const prefix = isCoverCrop ? 'cover' : 'avatar';
         const fileName = `${prefix}-${user?.id || 'user'}-${Date.now()}.jpg`;
 
         const { error: uploadErr } = await client.storage
           .from('portal-assets')
-          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
+          .upload(fileName, compressionRes.blob, { contentType: 'image/jpeg', upsert: true });
 
         if (!uploadErr) {
           const { data: publicUrlData } = client.storage
@@ -169,11 +176,11 @@ export const ProfileView: React.FC = () => {
         }
       }
 
-      // Fallback to dataURL
+      // Fallback to compressed dataURL (much smaller size)
       if (isCoverCrop) {
-        setCoverUrl(croppedDataUrl);
+        setCoverUrl(compressionRes.dataUrl || croppedDataUrl);
       } else {
-        setAvatarUrl(croppedDataUrl);
+        setAvatarUrl(compressionRes.dataUrl || croppedDataUrl);
       }
     } catch (err) {
       console.error('Error saving cropped image:', err);

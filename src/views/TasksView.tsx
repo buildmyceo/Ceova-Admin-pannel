@@ -44,13 +44,15 @@ import {
 import { downloadDeliverableFile } from './SavedItemsView';
 import { sanitizeUrl, isSafeHttpUrl, validateAttachmentFile } from '../lib/security';
 import { addNotification } from '../lib/notificationsService';
+import { compressFileForUpload, compressImage } from '../lib/compression';
 
-export const readFileAsDataUrl = (file: File): Promise<string> => {
+export const readFileAsDataUrl = async (file: File): Promise<string> => {
+  const fileToRead = await compressFileForUpload(file);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = (err) => reject(err);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(fileToRead);
   });
 };
 
@@ -640,21 +642,38 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
     });
   };
 
-  const handleBannerFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       setFormError('Please select a valid image file (.png, .jpg, .webp, .svg) for the task banner.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setBannerPreview(reader.result as string);
-      setBannerFile(file);
-      setBannerPresetId(null);
-      setFormError('');
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Compress banner to standard 1280x720 / 16:9 banner resolution with ~80% quality
+      const compressed = await compressFileForUpload(file, {
+        maxWidth: 1280,
+        maxHeight: 720,
+        quality: 0.82
+      });
+      const reader = new FileReader();
+      reader.onload = () => {
+        setBannerPreview(reader.result as string);
+        setBannerFile(compressed);
+        setBannerPresetId(null);
+        setFormError('');
+      };
+      reader.readAsDataURL(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setBannerPreview(reader.result as string);
+        setBannerFile(file);
+        setBannerPresetId(null);
+        setFormError('');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSelectPresetBanner = (preset: typeof BANNER_PRESETS[0]) => {
@@ -689,10 +708,19 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
     reader.readAsDataURL(file);
   };
 
-  const handleBriefingFilesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBriefingFilesUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    setBriefingFiles(prev => [...prev, ...files]);
+    try {
+      const processed: File[] = [];
+      for (const f of files) {
+        const compressed = await compressFileForUpload(f);
+        processed.push(compressed);
+      }
+      setBriefingFiles(prev => [...prev, ...processed]);
+    } catch {
+      setBriefingFiles(prev => [...prev, ...files]);
+    }
   };
 
   const handleRemoveBriefingFile = (index: number) => {
@@ -1077,16 +1105,19 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
     setUploadingTaskId(task.id);
 
     try {
+      // Compress deliverable if it is an image or compressible document
+      const fileToUpload = await compressFileForUpload(file);
+
       const supabase = getSupabaseClient();
       let fileUrl = '';
 
       if (supabase) {
-        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const sanitizedName = fileToUpload.name.replace(/[^a-zA-Z0-9.-]/g, '_');
         const storagePath = `task_deliverables/${task.id}/${Date.now()}_${sanitizedName}`;
 
         const { error: uploadError } = await supabase.storage
           .from('portal-assets')
-          .upload(storagePath, file, { upsert: true });
+          .upload(storagePath, fileToUpload, { upsert: true, contentType: fileToUpload.type || undefined });
 
         if (uploadError) {
           throw uploadError;
@@ -1098,14 +1129,14 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
 
         fileUrl = publicUrlData.publicUrl;
       } else {
-        fileUrl = URL.createObjectURL(file);
+        fileUrl = URL.createObjectURL(fileToUpload);
       }
 
       const newAttachment: TaskAttachment = {
-        name: file.name,
+        name: fileToUpload.name,
         url: fileUrl,
-        size: file.size,
-        type: file.type || 'file',
+        size: fileToUpload.size,
+        type: fileToUpload.type || 'file',
         uploaded_by: user?.full_name || 'Team Member',
         uploaded_at: new Date().toISOString()
       };
@@ -1273,14 +1304,17 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
           return;
         }
 
+        // Compress deliverable submission file before uploading to Supabase Storage
+        const fileToUpload = await compressFileForUpload(submissionFile);
+
         let fileUrl = '';
         if (supabase) {
-          const sanitizedName = submissionFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const sanitizedName = fileToUpload.name.replace(/[^a-zA-Z0-9.-]/g, '_');
           const storagePath = `task_deliverables/${submittingTask.id}/${Date.now()}_${sanitizedName}`;
 
           const { error: uploadError } = await supabase.storage
             .from('portal-assets')
-            .upload(storagePath, submissionFile, { upsert: true });
+            .upload(storagePath, fileToUpload, { upsert: true, contentType: fileToUpload.type || undefined });
 
           if (uploadError) throw uploadError;
 
@@ -1290,14 +1324,14 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
 
           fileUrl = publicUrlData.publicUrl;
         } else {
-          fileUrl = URL.createObjectURL(submissionFile);
+          fileUrl = URL.createObjectURL(fileToUpload);
         }
 
         updatedAttachments.push({
-          name: submissionFile.name,
+          name: fileToUpload.name,
           url: fileUrl,
-          size: submissionFile.size,
-          type: submissionFile.type || 'file',
+          size: fileToUpload.size,
+          type: fileToUpload.type || 'file',
           uploaded_by: user?.full_name || 'Team Member',
           uploaded_at: new Date().toISOString()
         });

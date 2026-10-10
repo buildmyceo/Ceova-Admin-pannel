@@ -13,6 +13,7 @@ import {
   User as UserIcon 
 } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
+import { compressImage } from '../lib/compression';
 
 const COUNTRY_CODES = [
   { code: '+1', country: 'US / Canada' },
@@ -104,16 +105,24 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
     setCropImageSrc(null);
     setIsUploading(true);
     try {
+      // Compress avatar to high quality but lightweight payload (under ~50KB)
+      const compressed = await compressImage(croppedDataUrl, {
+        maxWidth: 500,
+        maxHeight: 500,
+        quality: 0.8,
+        mimeType: 'image/jpeg'
+      });
+      const uploadBlob = compressed.blob;
+      const optimizedDataUrl = compressed.dataUrl;
+
       const client = getSupabaseClient();
       if (client) {
         try {
-          const res = await fetch(croppedDataUrl);
-          const blob = await res.blob();
           const fileName = `avatars/user-${user?.id || 'new'}-${Date.now()}.jpg`;
 
           const { error: uploadErr } = await client.storage
             .from('portal-assets')
-            .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
+            .upload(fileName, uploadBlob, { contentType: 'image/jpeg', upsert: true });
 
           if (!uploadErr) {
             const { data: publicUrlData } = client.storage
@@ -131,7 +140,7 @@ export const CompulsoryProfileSetupModal: React.FC = () => {
         }
       }
 
-      setAvatarUrl(croppedDataUrl);
+      setAvatarUrl(optimizedDataUrl);
     } catch (err: any) {
       console.error('Error handling cropped avatar:', err);
       setErrorMessage('Failed to process image. Please try again.');

@@ -17,6 +17,7 @@ import {
   sendMemberNotification
 } from '../lib/notificationsService';
 import { sanitizeUrl, isSafeHttpUrl, validateAttachmentFile } from '../lib/security';
+import { compressFileForUpload } from '../lib/compression';
 import {
   Bell,
   Send,
@@ -177,7 +178,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
   };
 
   // Photo file upload handler
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -188,28 +189,52 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = (loadEvent) => {
-        const result = loadEvent.target?.result as string;
-        if (result) {
-          const newPhoto: NotificationAttachment = {
-            id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-            name: file.name,
-            url: result,
-            type: 'photo',
-            size: file.size
-          };
-          setPhotosList(prev => [...prev, newPhoto]);
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressFileForUpload(file, {
+          maxWidth: 1280,
+          maxHeight: 1280,
+          quality: 0.8
+        });
+
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+          const result = loadEvent.target?.result as string;
+          if (result) {
+            const newPhoto: NotificationAttachment = {
+              id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: compressed.name,
+              url: result,
+              type: 'photo',
+              size: compressed.size
+            };
+            setPhotosList(prev => [...prev, newPhoto]);
+          }
+        };
+        reader.readAsDataURL(compressed);
+      } catch {
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+          const result = loadEvent.target?.result as string;
+          if (result) {
+            const newPhoto: NotificationAttachment = {
+              id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: file.name,
+              url: result,
+              type: 'photo',
+              size: file.size
+            };
+            setPhotosList(prev => [...prev, newPhoto]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
     }
 
     if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
   // Document/file upload handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -220,21 +245,40 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = (loadEvent) => {
-        const result = loadEvent.target?.result as string;
-        if (result) {
-          const newFile: NotificationAttachment = {
-            id: 'file_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-            name: file.name,
-            url: result,
-            type: 'file',
-            size: file.size
-          };
-          setFilesList(prev => [...prev, newFile]);
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const processed = await compressFileForUpload(file);
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+          const result = loadEvent.target?.result as string;
+          if (result) {
+            const newFile: NotificationAttachment = {
+              id: 'file_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: processed.name,
+              url: result,
+              type: 'file',
+              size: processed.size
+            };
+            setFilesList(prev => [...prev, newFile]);
+          }
+        };
+        reader.readAsDataURL(processed);
+      } catch {
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+          const result = loadEvent.target?.result as string;
+          if (result) {
+            const newFile: NotificationAttachment = {
+              id: 'file_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: file.name,
+              url: result,
+              type: 'file',
+              size: file.size
+            };
+            setFilesList(prev => [...prev, newFile]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
     }
 
     if (fileInputRef.current) fileInputRef.current.value = '';
