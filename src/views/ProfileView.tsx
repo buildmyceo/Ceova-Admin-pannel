@@ -591,12 +591,24 @@ export const ProfileView: React.FC = () => {
                   letterSpacing: '0.06em',
                   padding: '3px 10px',
                   borderRadius: 6,
-                  background: user?.role === 'ceo' ? 'rgba(56, 189, 248, 0.12)' : '#18181b',
-                  border: user?.role === 'ceo' ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid #27272a',
-                  color: user?.role === 'ceo' ? '#38bdf8' : '#ffffff',
+                  background: user?.role === 'ceo' 
+                    ? 'rgba(56, 189, 248, 0.15)' 
+                    : user?.role === 'intern' 
+                      ? 'rgba(245, 158, 11, 0.15)' 
+                      : '#18181b',
+                  border: user?.role === 'ceo' 
+                    ? '1px solid rgba(56, 189, 248, 0.35)' 
+                    : user?.role === 'intern' 
+                      ? '1px solid rgba(245, 158, 11, 0.3)' 
+                      : '1px solid #27272a',
+                  color: user?.role === 'ceo' 
+                    ? '#38bdf8' 
+                    : user?.role === 'intern' 
+                      ? '#fbbf24' 
+                      : '#ffffff',
                   textTransform: 'uppercase'
                 }}>
-                  <Shield size={11} style={{ color: user?.role === 'ceo' ? '#38bdf8' : undefined }} />
+                  <Shield size={11} style={{ color: user?.role === 'ceo' ? '#38bdf8' : user?.role === 'intern' ? '#fbbf24' : undefined }} />
                   {user?.role === 'ceo' ? 'CEO' : user?.role === 'admin' ? 'ADMIN' : user?.role === 'intern' ? 'INTERN' : 'MEMBER'}
                 </span>
               </div>
@@ -604,10 +616,18 @@ export const ProfileView: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Briefcase size={14} style={{ color: 'var(--text-subtle)' }} />
-                  <span style={{ color: '#e4e4e7', fontWeight: 500 }}>{user?.designation || (user?.role === 'ceo' ? 'Chief Executive Officer' : user?.role === 'admin' ? 'Administrator' : 'Team Member')}</span>
+                  <span style={{ color: '#e4e4e7', fontWeight: 500 }}>
+                    {user?.role === 'intern' 
+                      ? (user?.designation && user.designation !== 'Team Member' ? user.designation : 'Intern') 
+                      : (user?.designation || (user?.role === 'ceo' ? 'Chief Executive Officer' : user?.role === 'admin' ? 'Administrator' : 'Team Member'))}
+                  </span>
                 </div>
                 <span style={{ color: 'var(--text-subtle)' }}>•</span>
-                <span style={{ color: 'var(--text-muted)' }}>{user?.department || (user?.role === 'ceo' ? 'Executive' : user?.role === 'admin' ? 'Administration' : 'General')}</span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  {user?.role === 'intern' && (!user?.department || user.department === 'General') 
+                    ? 'Internship' 
+                    : (user?.department || (user?.role === 'ceo' ? 'Executive' : user?.role === 'admin' ? 'Administration' : 'General'))}
+                </span>
               </div>
 
               {/* Social Channels Row */}

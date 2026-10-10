@@ -639,14 +639,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                       background: isAdminRole 
                         ? '#27272a' 
                         : isInternRole 
-                          ? '#202024' 
+                          ? 'rgba(245, 158, 11, 0.15)' 
                           : '#1c1c1f',
                       border: isAdminRole 
                         ? '1px solid #3f3f46' 
                         : isInternRole 
-                          ? '1px solid #2e2e33' 
+                          ? '1px solid rgba(245, 158, 11, 0.3)' 
                           : '1px solid #2e2e33',
-                      color: isAdminRole ? '#ffffff' : isInternRole ? '#a1a1aa' : '#e4e4e7',
+                      color: isAdminRole ? '#ffffff' : isInternRole ? '#fbbf24' : '#e4e4e7',
                       textTransform: 'uppercase'
                     }}>
                       <Shield size={10} />
@@ -731,7 +731,9 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
                       <Briefcase size={12} style={{ color: 'var(--text-subtle)', flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {member.designation || 'Team Member'} • {member.department || 'General'}
+                        {member.role === 'intern' 
+                          ? (member.designation && member.designation !== 'Team Member' ? member.designation : 'Intern') 
+                          : (member.designation || 'Team Member')} • {member.role === 'intern' && (!member.department || member.department === 'General') ? 'Internship' : (member.department || 'General')}
                       </span>
                     </div>
                   </div>
@@ -1234,15 +1236,15 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                           fontWeight: 700,
                           padding: '3px 8px',
                           borderRadius: 6,
-                          background: isAdminRole ? '#27272a' : isInternRole ? '#202024' : '#1c1c1f',
-                          border: isAdminRole ? '1px solid #3f3f46' : isInternRole ? '1px solid #2e2e33' : '1px solid #2e2e33',
-                          color: isAdminRole ? '#ffffff' : isInternRole ? '#a1a1aa' : '#e4e4e7',
+                          background: isAdminRole ? '#27272a' : isInternRole ? 'rgba(245, 158, 11, 0.15)' : '#1c1c1f',
+                          border: isAdminRole ? '1px solid #3f3f46' : isInternRole ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid #2e2e33',
+                          color: isAdminRole ? '#ffffff' : isInternRole ? '#fbbf24' : '#e4e4e7',
                           textTransform: 'uppercase'
                         }}>
                           {isAdminRole ? 'ADMIN' : isInternRole ? 'INTERN' : 'MEMBER'}
                         </span>
                         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>
-                          {member.department}
+                          {member.role === 'intern' && (!member.department || member.department === 'General') ? 'Internship' : (member.department || 'General')}
                         </div>
                       </td>
 

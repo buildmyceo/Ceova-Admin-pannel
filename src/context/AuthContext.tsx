@@ -85,12 +85,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const sanitizeProfile = (p: any): Profile | null => {
     if (!p) return null;
     const role = sanitizeRole(p.role);
+
+    let designation = p.designation;
+    if (role === 'intern' && (!designation || designation === 'Team Member' || designation === 'Member')) {
+      designation = 'Intern';
+    } else if (role === 'ceo' && (!designation || designation === 'Team Member' || designation === 'Member')) {
+      designation = 'Chief Executive Officer';
+    } else if (role === 'admin' && (!designation || designation === 'Team Member' || designation === 'Member')) {
+      designation = 'Administrator';
+    } else if (!designation) {
+      designation = 'Team Member';
+    }
+
+    let department = p.department;
+    if (role === 'intern' && (!department || department === 'General')) {
+      department = 'Internship';
+    } else if (role === 'ceo' && (!department || department === 'General')) {
+      department = 'Executive';
+    } else if (role === 'admin' && (!department || department === 'General')) {
+      department = 'Administration';
+    } else if (!department) {
+      department = 'Development';
+    }
+
     return {
       ...p,
       role,
       phone: p.phone || p.phone_number || undefined,
-      designation: p.designation || (role === 'ceo' ? 'Chief Executive Officer' : role === 'admin' ? 'Administrator' : role === 'intern' ? 'Intern' : 'Member'),
-      department: p.department || (role === 'ceo' ? 'Executive' : role === 'admin' ? 'Administration' : 'General'),
+      designation,
+      department,
       status: p.status || 'active',
       cover_url: p.cover_url || undefined,
       social_links: p.social_links || {},

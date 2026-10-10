@@ -360,6 +360,24 @@ serve(async (req) => {
         });
       }
 
+      // Determine role, designation, and department accurately
+      const resolvedRole = (invitation?.role || profile?.role || 'intern').toLowerCase();
+      const resolvedName = profile?.full_name || invitation?.full_name || cleanEmail.split('@')[0];
+      const resolvedDesignation = resolvedRole === 'intern' 
+        ? 'Intern' 
+        : resolvedRole === 'admin' 
+          ? 'Administrator' 
+          : resolvedRole === 'ceo' 
+            ? 'Chief Executive Officer' 
+            : 'Team Member';
+      const resolvedDepartment = resolvedRole === 'intern' 
+        ? 'Internship' 
+        : resolvedRole === 'admin' 
+          ? 'Administration' 
+          : resolvedRole === 'ceo' 
+            ? 'Executive' 
+            : (invitation?.department || profile?.department || 'Development');
+
       // Create or update auth user with the chosen password
       const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
       let targetUser = userList?.users?.find(u => u.email?.toLowerCase() === cleanEmail);
@@ -369,6 +387,12 @@ serve(async (req) => {
           email: cleanEmail,
           password: setDirectPassword,
           email_confirm: true,
+          user_metadata: {
+            full_name: resolvedName,
+            role: resolvedRole,
+            designation: resolvedDesignation,
+            department: resolvedDepartment,
+          }
         });
         if (createErr) throw new Error(`Failed to activate account: ${createErr.message}`);
         targetUser = created.user;
@@ -376,16 +400,25 @@ serve(async (req) => {
         const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
           password: setDirectPassword,
           email_confirm: true,
+          user_metadata: {
+            full_name: resolvedName,
+            role: resolvedRole,
+            designation: resolvedDesignation,
+            department: resolvedDepartment,
+          }
         });
         if (updateErr) throw new Error(`Failed to activate account: ${updateErr.message}`);
       }
 
-      // Activate profile!
+      // Activate profile with exact role and designation
       if (profile) {
         await supabaseAdmin
           .from('profiles')
           .update({
             id: targetUser.id,
+            role: resolvedRole,
+            designation: profile.designation && profile.designation !== 'Team Member' ? profile.designation : resolvedDesignation,
+            department: profile.department && profile.department !== 'General' ? profile.department : resolvedDepartment,
             status: 'active',
             updated_at: new Date().toISOString()
           })
@@ -396,18 +429,17 @@ serve(async (req) => {
           .insert({
             id: targetUser.id,
             email: cleanEmail,
-            full_name: invitation.full_name || cleanEmail.split('@')[0],
-            role: invitation.role || 'member',
-            department: invitation.department || 'General',
+            full_name: resolvedName,
+            role: resolvedRole,
+            designation: resolvedDesignation,
+            department: resolvedDepartment,
             status: 'active',
             updated_at: new Date().toISOString()
           });
       }
 
       // Remove invitation if exists
-      if (invitation) {
-        await supabaseAdmin.from('invitations').delete().ilike('email', cleanEmail);
-      }
+      await supabaseAdmin.from('invitations').delete().ilike('email', cleanEmail);
 
       return new Response(JSON.stringify({ 
         success: true, 

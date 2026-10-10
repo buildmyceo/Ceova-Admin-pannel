@@ -148,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="user-meta">
               <div className="name">{user.full_name}</div>
               <div className="user-sub-label">
-                {user.role === 'ceo' ? 'CEO' : user.role === 'admin' ? 'ADMIN' : user.role === 'intern' ? 'INTERN' : 'MEMBER'} • {user.department || (user.role === 'ceo' ? 'Executive' : user.role === 'admin' ? 'Administration' : 'General')}
+                {user.role === 'ceo' ? 'CEO' : user.role === 'admin' ? 'ADMIN' : user.role === 'intern' ? 'INTERN' : 'MEMBER'} • {user.role === 'intern' && (!user.department || user.department === 'General') ? 'Internship' : (user.department || (user.role === 'ceo' ? 'Executive' : user.role === 'admin' ? 'Administration' : 'General'))}
               </div>
             </div>
           </div>

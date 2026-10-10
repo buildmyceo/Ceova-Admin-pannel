@@ -207,10 +207,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                     fontSize: 10, 
                     fontWeight: 700, 
                     textTransform: 'uppercase',
-                    color: 'var(--accent-primary)'
+                    color: user.role === 'intern' ? '#fbbf24' : 'var(--accent-primary)'
                   }}
                 >
-                  {(user.role === 'ceo') ? 'CEO' : (user.role === 'admin') ? 'ADMIN' : user.role === 'intern' ? 'INTERN' : 'MEMBER'} • {user.department || (user.role === 'ceo' ? 'Executive' : user.role === 'admin' ? 'Administration' : 'General')}
+                  {(user.role === 'ceo') ? 'CEO' : (user.role === 'admin') ? 'ADMIN' : user.role === 'intern' ? 'INTERN' : 'MEMBER'} • {user.role === 'intern' && (!user.department || user.department === 'General') ? 'Internship' : (user.department || (user.role === 'ceo' ? 'Executive' : user.role === 'admin' ? 'Administration' : 'General'))}
                 </div>
               </div>
 
@@ -233,8 +233,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                     width: 34,
                     height: 34,
                     borderRadius: 10,
-                    background: (user.role === 'admin' || user.role === 'ceo') ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    background: (user.role === 'admin' || user.role === 'ceo') 
+                      ? 'rgba(59, 130, 246, 0.2)' 
+                      : user.role === 'intern' 
+                        ? 'rgba(245, 158, 11, 0.2)' 
+                        : 'rgba(255, 255, 255, 0.1)',
+                    border: user.role === 'intern' ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(255, 255, 255, 0.15)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -251,8 +255,34 @@ export const Navbar: React.FC<NavbarProps> = ({
                     )}
                   </div>
                   <div style={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.25 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {user.full_name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {user.full_name}
+                      </span>
+                      <span style={{
+                        fontSize: 8.5,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        background: user.role === 'ceo' 
+                          ? 'rgba(56, 189, 248, 0.15)' 
+                          : user.role === 'admin' 
+                            ? 'rgba(255, 255, 255, 0.12)' 
+                            : user.role === 'intern' 
+                              ? 'rgba(245, 158, 11, 0.18)' 
+                              : 'rgba(59, 130, 246, 0.12)',
+                        color: user.role === 'ceo' 
+                          ? '#38bdf8' 
+                          : user.role === 'admin' 
+                            ? '#ffffff' 
+                            : user.role === 'intern' 
+                              ? '#fbbf24' 
+                              : '#60a5fa',
+                        border: user.role === 'intern' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)'
+                      }}>
+                        {user.role}
+                      </span>
                     </div>
                     <div style={{ fontSize: 10.5, color: 'var(--text-muted, #a1a1aa)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {user.email}

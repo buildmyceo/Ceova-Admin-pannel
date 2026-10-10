@@ -275,9 +275,27 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                   letterSpacing: '0.06em',
                   padding: '3px 8px',
                   borderRadius: 6,
-                  background: isAdmin ? 'rgba(255, 255, 255, 0.12)' : 'rgba(59, 130, 246, 0.15)',
-                  border: isAdmin ? '1px solid rgba(255, 255, 255, 0.22)' : '1px solid rgba(59, 130, 246, 0.3)',
-                  color: isAdmin ? '#ffffff' : '#60a5fa',
+                  background: role === 'ceo' 
+                    ? 'rgba(56, 189, 248, 0.15)' 
+                    : role === 'admin' 
+                      ? 'rgba(255, 255, 255, 0.12)' 
+                      : role === 'intern' 
+                        ? 'rgba(245, 158, 11, 0.15)' 
+                        : 'rgba(59, 130, 246, 0.15)',
+                  border: role === 'ceo' 
+                    ? '1px solid rgba(56, 189, 248, 0.3)' 
+                    : role === 'admin' 
+                      ? '1px solid rgba(255, 255, 255, 0.22)' 
+                      : role === 'intern' 
+                        ? '1px solid rgba(245, 158, 11, 0.3)' 
+                        : '1px solid rgba(59, 130, 246, 0.3)',
+                  color: role === 'ceo' 
+                    ? '#38bdf8' 
+                    : role === 'admin' 
+                      ? '#ffffff' 
+                      : role === 'intern' 
+                        ? '#fbbf24' 
+                        : '#60a5fa',
                   textTransform: 'uppercase'
                 }}>
                   <ShieldCheck size={11} />
@@ -292,14 +310,18 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                   color: 'var(--text-muted)'
                 }}>
-                  {user?.department || 'General'}
+                  {user?.role === 'intern' && (!user?.department || user.department === 'General') ? 'Internship' : (user?.department || 'General')}
                 </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, color: 'var(--text-muted)', fontSize: 13, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Briefcase size={14} style={{ color: 'var(--text-subtle)' }} />
-                  <span style={{ color: '#e4e4e7' }}>{user?.designation || 'Member'}</span>
+                  <span style={{ color: '#e4e4e7' }}>
+                    {user?.role === 'intern' 
+                      ? (user?.designation && user.designation !== 'Team Member' ? user.designation : 'Intern') 
+                      : (user?.designation || 'Member')}
+                  </span>
                 </div>
                 <span>•</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1054,6 +1076,30 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                         <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {m.full_name}
                         </span>
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          padding: '1px 5px',
+                          borderRadius: 4,
+                          background: m.role === 'ceo' 
+                            ? 'rgba(56, 189, 248, 0.15)' 
+                            : m.role === 'admin' 
+                              ? 'rgba(255, 255, 255, 0.12)' 
+                              : m.role === 'intern' 
+                                ? 'rgba(245, 158, 11, 0.18)' 
+                                : 'rgba(59, 130, 246, 0.12)',
+                          color: m.role === 'ceo' 
+                            ? '#38bdf8' 
+                            : m.role === 'admin' 
+                              ? '#ffffff' 
+                              : m.role === 'intern' 
+                                ? '#fbbf24' 
+                                : '#60a5fa',
+                          border: m.role === 'intern' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          {m.role || 'member'}
+                        </span>
                         {isSelf && (
                           <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: '#27272a', color: '#a1a1aa' }}>
                             You
@@ -1082,7 +1128,9 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.06)', flexWrap: 'wrap', gap: 6 }}>
                     <span style={{ fontSize: 11, color: '#a1a1aa', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {m.designation || 'Team Member'}
+                      {m.role === 'intern' 
+                        ? (m.designation && m.designation !== 'Team Member' ? m.designation : 'Intern') 
+                        : (m.designation || 'Team Member')} • {m.role === 'intern' && (!m.department || m.department === 'General') ? 'Internship' : (m.department || 'General')}
                     </span>
 
                     {!isSelf ? (
