@@ -33,7 +33,9 @@ import {
   UserCheck,
   Link as LinkIcon,
   ArrowRight,
-  Lock
+  Lock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
 import { Profile } from '../types';
@@ -61,6 +63,18 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
   const [copiedEmailMap, setCopiedEmailMap] = useState<{ [id: string]: boolean }>({});
   const [copiedInviteLinkMap, setCopiedInviteLinkMap] = useState<{ [id: string]: boolean }>({});
   const [actionLoadingMemberId, setActionLoadingMemberId] = useState<string | null>(null);
+
+  // Bio and Skills expand/collapse toggles
+  const [expandedBios, setExpandedBios] = useState<{ [id: string]: boolean }>({});
+  const [expandedSkills, setExpandedSkills] = useState<{ [id: string]: boolean }>({});
+
+  const toggleBio = (memberId: string) => {
+    setExpandedBios(prev => ({ ...prev, [memberId]: !prev[memberId] }));
+  };
+
+  const toggleSkills = (memberId: string) => {
+    setExpandedSkills(prev => ({ ...prev, [memberId]: !prev[memberId] }));
+  };
 
   // Invite modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -1265,55 +1279,197 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   )}
 
                   {/* 6. Bio & Overview Snippet (Shown if added!) */}
-                  {member.bio && (
-                    <div style={{
-                      padding: '8px 10px',
-                      borderRadius: 6,
-                      background: 'rgba(0, 0, 0, 0.3)',
-                      borderLeft: '2px solid rgba(255, 255, 255, 0.2)',
-                      fontSize: 11.5,
-                      color: '#d4d4d8',
-                      lineHeight: 1.5,
-                      marginBottom: 10
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
-                        <FileText size={10} />
-                        <span>Bio</span>
+                  {member.bio && (() => {
+                    const isBioExpanded = Boolean(expandedBios[member.id]);
+                    const isBioLong = member.bio.trim().length > 80 || member.bio.includes('\n');
+                    return (
+                      <div style={{
+                        padding: '8px 10px',
+                        borderRadius: 6,
+                        background: 'rgba(0, 0, 0, 0.3)',
+                        borderLeft: '2px solid rgba(255, 255, 255, 0.2)',
+                        fontSize: 11.5,
+                        color: '#d4d4d8',
+                        lineHeight: 1.5,
+                        marginBottom: 10
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <FileText size={10} />
+                            <span>Bio</span>
+                          </div>
+                          {isBioLong && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleBio(member.id);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#60a5fa',
+                                fontSize: 10,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                padding: '0 2px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                transition: 'color 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
+                              title={isBioExpanded ? 'Collapse Bio' : 'Expand Bio'}
+                            >
+                              <span>{isBioExpanded ? 'Show less' : 'Show more'}</span>
+                              {isBioExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                            </button>
+                          )}
+                        </div>
+                        <div style={{
+                          overflow: isBioExpanded ? 'visible' : 'hidden',
+                          textOverflow: isBioExpanded ? 'clip' : 'ellipsis',
+                          display: isBioExpanded ? 'block' : '-webkit-box',
+                          WebkitLineClamp: isBioExpanded ? 'unset' : 2,
+                          WebkitBoxOrient: 'vertical',
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-line'
+                        }}>
+                          {member.bio}
+                        </div>
+                        {isBioLong && (
+                          <div style={{ marginTop: 4, display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleBio(member.id);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#60a5fa',
+                                fontSize: 10.5,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                padding: '1px 0',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                transition: 'color 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
+                            >
+                              <span>{isBioExpanded ? 'Show less' : 'Show more'}</span>
+                              {isBioExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                        {member.bio}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* 7. Skills & Specializations Chips (Shown if added!) */}
-                  {member.skills && Array.isArray(member.skills) && member.skills.length > 0 && (
-                    <div style={{ marginTop: 'auto', paddingTop: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
-                        <Sparkles size={10} />
-                        <span>Skills</span>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                        {member.skills.map((skill: string, idx: number) => (
-                          <span
-                            key={idx}
-                            style={{
-                              fontSize: 10.5,
-                              padding: '2px 8px',
-                              background: 'rgba(255, 255, 255, 0.04)',
-                              border: '1px solid rgba(255, 255, 255, 0.08)',
-                              borderRadius: 100,
-                              color: '#d4d4d8'
-                            }}
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {member.skills && Array.isArray(member.skills) && member.skills.length > 0 && (() => {
+                    const isSkillsExpanded = Boolean(expandedSkills[member.id]);
+                    const SKILLS_LIMIT = 4;
+                    const hasMoreSkills = member.skills.length > SKILLS_LIMIT;
+                    const displayedSkills = isSkillsExpanded ? member.skills : member.skills.slice(0, SKILLS_LIMIT);
 
-                  {/* Action Buttons */}
+                    return (
+                      <div style={{ marginTop: 'auto', paddingTop: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>
+                            <Sparkles size={10} />
+                            <span>Skills</span>
+                            <span style={{ fontSize: 9.5, opacity: 0.65, fontWeight: 500 }}>({member.skills.length})</span>
+                          </div>
+                          {hasMoreSkills && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSkills(member.id);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#60a5fa',
+                                fontSize: 10,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                padding: '0 2px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                transition: 'color 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
+                              title={isSkillsExpanded ? 'Collapse Skills' : 'Expand Skills'}
+                            >
+                              <span>{isSkillsExpanded ? 'Show less' : 'Show more'}</span>
+                              {isSkillsExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                          {displayedSkills.map((skill: string, idx: number) => (
+                            <span
+                              key={idx}
+                              style={{
+                                fontSize: 10.5,
+                                padding: '2px 8px',
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: 100,
+                                color: '#d4d4d8'
+                              }}
+                            >
+                              {skill}
+                            </span>
+                          ))}
+
+                          {hasMoreSkills && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSkills(member.id);
+                              }}
+                              style={{
+                                fontSize: 10.5,
+                                padding: '2px 8px',
+                                background: isSkillsExpanded ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                                border: isSkillsExpanded ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
+                                borderRadius: 100,
+                                color: isSkillsExpanded ? '#93c5fd' : '#60a5fa',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                fontWeight: 600,
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = isSkillsExpanded ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.12)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = isSkillsExpanded ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.06)';
+                              }}
+                            >
+                              <span>{isSkillsExpanded ? 'Show less' : `+${member.skills.length - SKILLS_LIMIT} Show more`}</span>
+                              {isSkillsExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                                    {/* Action Buttons */}
                   <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
                     {member.status === 'pending' ? (
                       /* Dedicated Actions for Pending Invitations */
