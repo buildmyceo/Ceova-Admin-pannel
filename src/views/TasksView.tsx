@@ -2133,7 +2133,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                         {pBadge.label}
                       </span>
 
-                      {isAssignedToUser ? (
+                      {isAssignedToUser && (
                         <span style={{
                           fontSize: 10.5,
                           fontWeight: 600,
@@ -2148,22 +2148,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                         }}>
                           <User size={10} />
                           Assigned to You
-                        </span>
-                      ) : (
-                        <span style={{
-                          fontSize: 10.5,
-                          fontWeight: 500,
-                          padding: '3px 9px',
-                          borderRadius: 20,
-                          background: 'rgba(168, 85, 247, 0.08)',
-                          color: '#d8b4fe',
-                          border: '1px solid rgba(168, 85, 247, 0.2)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4
-                        }}>
-                          <Users size={10} style={{ opacity: 0.8 }} />
-                          Given to {displayAssignees.join(', ')} • Not in your To-Do
                         </span>
                       )}
 
