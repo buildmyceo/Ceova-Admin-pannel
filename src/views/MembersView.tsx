@@ -635,7 +635,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           </span>
         </div>
 
-        {pendingMembersCount > 0 && (
+        {isAdmin && pendingMembersCount > 0 && (
           <>
             <div style={{ width: 1, height: 16, background: '#27272a' }} />
             <button
@@ -1055,8 +1055,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                         <span>Awaiting email confirmation & setup</span>
                       ) : isOnline ? (
                         <span>Online right now (Active in portal)</span>
-                      ) : (
+                      ) : (isAdmin || isCurrent) ? (
                         <span>Last online: <strong style={{ color: '#ffffff' }}>{presenceInfo.formatted}</strong></span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-subtle)' }}>
+                          <Lock size={10} style={{ color: 'var(--text-muted)' }} />
+                          <span>Last online visible to Admin</span>
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1555,7 +1560,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Member</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role & Dept</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                  <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{membersTab === 'pending' ? 'Portal Setup Link' : 'Last Online Time'}</th>
+                  <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{membersTab === 'pending' ? 'Portal Setup Link' : (isAdmin ? 'Last Online Time' : 'Presence Status')}</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact & Links</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Action</th>
                 </tr>
@@ -1673,10 +1678,15 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                           </div>
                         ) : isOnline ? (
                           <span style={{ fontSize: 12, color: '#e4e4e7', fontWeight: 600 }}>Active now</span>
-                        ) : (
+                        ) : (isAdmin || isCurrent) ? (
                           <div style={{ fontSize: 12, color: '#e4e4e7' }}>
                             <div>{presenceInfo.formatted}</div>
                             <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>({presenceInfo.relative})</div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 11.5 }}>
+                            <Lock size={11} style={{ color: 'var(--text-muted)' }} />
+                            <span>Admin only</span>
                           </div>
                         )}
                       </td>
