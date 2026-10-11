@@ -26,6 +26,7 @@ import {
   FileCheck, 
   ExternalLink,
   ChevronDown,
+  ChevronUp,
   Timer,
   ShieldCheck,
   RotateCcw,
@@ -357,6 +358,16 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
   });
 
   const [loading, setLoading] = useState(true);
+
+  // Show more / Show less toggle for long task descriptions
+  const [expandedTaskDescriptions, setExpandedTaskDescriptions] = useState<{ [taskId: string]: boolean }>({});
+
+  const toggleTaskDescription = (taskId: string) => {
+    setExpandedTaskDescriptions(prev => ({
+      ...prev,
+      [taskId]: !prev[taskId]
+    }));
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
@@ -2247,20 +2258,56 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     {task.title}
                   </h3>
 
-                  {task.description && (
-                    <p style={{ 
-                      fontSize: 12.5, 
-                      color: 'var(--text-muted)', 
-                      margin: '0 0 14px 0',
-                      lineHeight: 1.5,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 3,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}>
-                      {task.description}
-                    </p>
-                  )}
+                  {task.description && (() => {
+                    const isDescExpanded = Boolean(expandedTaskDescriptions[task.id]);
+                    const isDescLong = task.description.trim().length > 90 || task.description.includes('\n');
+
+                    return (
+                      <div style={{ marginBottom: 14 }}>
+                        <p style={{ 
+                          fontSize: 12.5, 
+                          color: 'var(--text-muted)', 
+                          margin: isDescLong ? '0 0 4px 0' : '0',
+                          lineHeight: 1.5,
+                          display: isDescExpanded ? 'block' : '-webkit-box',
+                          WebkitLineClamp: isDescExpanded ? 'unset' : 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: isDescExpanded ? 'visible' : 'hidden',
+                          wordBreak: 'break-word',
+                          whiteSpace: isDescExpanded ? 'pre-line' : 'normal',
+                        }}>
+                          {task.description}
+                        </p>
+                        {isDescLong && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTaskDescription(task.id);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#60a5fa',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              padding: '2px 0',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              transition: 'color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
+                          >
+                            <span>{isDescExpanded ? 'Show less' : 'Show more'}</span>
+                            {isDescExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Tags */}
                   {task.tags && task.tags.length > 0 && (

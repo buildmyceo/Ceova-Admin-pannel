@@ -22,7 +22,9 @@ import {
   ArrowRight,
   Film,
   Video,
-  Image
+  Image,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 const STORAGE_KEY = 'ceova_local_tasks_cache_v2';
@@ -68,6 +70,14 @@ export const SavedItemsView: React.FC<SavedItemsViewProps> = ({ onNavigate }) =>
   });
 
   const [loading, setLoading] = useState(true);
+  const [expandedTaskDescriptions, setExpandedTaskDescriptions] = useState<{ [taskId: string]: boolean }>({});
+
+  const toggleTaskDescription = (taskId: string) => {
+    setExpandedTaskDescriptions(prev => ({
+      ...prev,
+      [taskId]: !prev[taskId]
+    }));
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'files' | 'notes'>('all');
 
@@ -674,11 +684,56 @@ export const SavedItemsView: React.FC<SavedItemsViewProps> = ({ onNavigate }) =>
                     {task.title}
                   </h3>
 
-                  {task.description && (
-                    <p style={{ fontSize: 12, color: '#a1a1aa', margin: '0 0 14px 0', lineHeight: 1.45 }}>
-                      {task.description}
-                    </p>
-                  )}
+                  {task.description && (() => {
+                    const isDescExpanded = Boolean(expandedTaskDescriptions[task.id]);
+                    const isDescLong = task.description.trim().length > 90 || task.description.includes('\n');
+
+                    return (
+                      <div style={{ marginBottom: 14 }}>
+                        <p style={{ 
+                          fontSize: 12, 
+                          color: '#a1a1aa', 
+                          margin: isDescLong ? '0 0 4px 0' : '0', 
+                          lineHeight: 1.45,
+                          display: isDescExpanded ? 'block' : '-webkit-box',
+                          WebkitLineClamp: isDescExpanded ? 'unset' : 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: isDescExpanded ? 'visible' : 'hidden',
+                          wordBreak: 'break-word',
+                          whiteSpace: isDescExpanded ? 'pre-line' : 'normal',
+                        }}>
+                          {task.description}
+                        </p>
+                        {isDescLong && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTaskDescription(task.id);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#60a5fa',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              padding: '2px 0',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              transition: 'color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
+                          >
+                            <span>{isDescExpanded ? 'Show less' : 'Show more'}</span>
+                            {isDescExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Preserved Briefing Video */}
                   {briefingVideo && (
