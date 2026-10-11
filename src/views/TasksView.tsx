@@ -272,109 +272,25 @@ export const TaskAutoDeleteTimer: React.FC<{
 };
 
 export const getSubmissionGraceStatus = (task: Task) => {
-  if (task.status !== 'review') return { isReview: false, isWithinGrace: true, remainingMs: 0 };
-  const subTime = task.submitted_at 
-    ? new Date(task.submitted_at).getTime()
-    : ((task.attachments || []).filter(a => a.type === 'submission_note' || a.uploaded_at).slice(-1)[0]?.uploaded_at
-      ? new Date((task.attachments || []).filter(a => a.type === 'submission_note' || a.uploaded_at).slice(-1)[0].uploaded_at!).getTime()
-      : new Date(task.created_at).getTime());
-  const elapsed = Date.now() - subTime;
-  const remainingMs = Math.max(0, 5 * 60 * 1000 - elapsed);
+  if (task.status !== 'review') return { isReview: false, isWithinGrace: false, remainingMs: 0 };
   return {
     isReview: true,
-    isWithinGrace: remainingMs > 0,
-    remainingMs
+    isWithinGrace: false, // Strict lock once submitted: editing disabled until rejected by task assigner
+    remainingMs: 0
   };
 };
 
 interface SubmissionGraceTimerProps {
   task: Task;
-  isAssignedToUser: boolean;
+  isAssignedToUser?: boolean;
   isOwner: boolean;
-  onEditDeliverable: () => void;
+  onEditDeliverable?: () => void;
 }
 
 export const SubmissionGraceTimer: React.FC<SubmissionGraceTimerProps> = ({
   task,
-  isAssignedToUser,
-  isOwner,
-  onEditDeliverable
+  isOwner
 }) => {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const submissionTime = useMemo(() => {
-    if (task.submitted_at) return new Date(task.submitted_at).getTime();
-    const lastNote = (task.attachments || [])
-      .filter(a => a.type === 'submission_note' || a.uploaded_at)
-      .slice(-1)[0];
-    if (lastNote?.uploaded_at) return new Date(lastNote.uploaded_at).getTime();
-    return new Date(task.created_at).getTime();
-  }, [task.submitted_at, task.attachments, task.created_at]);
-
-  const graceDurationMs = 5 * 60 * 1000;
-  const elapsedMs = now - submissionTime;
-  const remainingMs = Math.max(0, graceDurationMs - elapsedMs);
-  const isGraceActive = remainingMs > 0;
-
-  const mins = Math.floor(remainingMs / 60000);
-  const secs = Math.floor((remainingMs % 60000) / 1000);
-  const timeFormatted = `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
-
-  if (isGraceActive) {
-    return (
-      <div style={{
-        background: 'rgba(234, 179, 8, 0.08)',
-        border: '1px solid rgba(234, 179, 8, 0.35)',
-        borderRadius: 'var(--radius-sm)',
-        padding: '10px 12px',
-        marginBottom: 12
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#facc15', fontWeight: 600 }}>
-            <Clock size={13} />
-            <span>5-Min Edit Window Active: <strong style={{ color: '#fef08a' }}>{timeFormatted}</strong> left to edit</span>
-          </div>
-
-          {isAssignedToUser && (
-            <button
-              type="button"
-              onClick={onEditDeliverable}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 10.5,
-                fontWeight: 700,
-                color: '#000000',
-                background: '#facc15',
-                border: 'none',
-                borderRadius: 4,
-                padding: '4px 10px',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <Edit2 size={11} />
-              <span>Edit Deliverable</span>
-            </button>
-          )}
-        </div>
-        <p style={{ margin: '6px 0 0 0', fontSize: 10.5, color: '#d4d4d8', lineHeight: 1.4 }}>
-          {isAssignedToUser 
-            ? 'You have 5 minutes after submitting to make edits or replace files. Once this timer ends, your submission locks until reviewed.'
-            : 'Assignee is within their 5-minute grace window and may update deliverables before it locks.'}
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div style={{
       background: 'rgba(168, 85, 247, 0.08)',
@@ -385,12 +301,12 @@ export const SubmissionGraceTimer: React.FC<SubmissionGraceTimerProps> = ({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#c084fc', fontWeight: 700, marginBottom: 4 }}>
         <Lock size={13} style={{ flexShrink: 0 }} />
-        <span>Submission Locked • 5-Min Edit Window Expired</span>
+        <span>Submission Locked • Under Review</span>
       </div>
       <p style={{ margin: 0, fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
         {isOwner
-          ? `Submitted deliverables are locked. Please review the deliverables above and approve or request a retry.`
-          : `Deliverables are locked awaiting evaluation by ${task.assigned_by_name || 'the task owner'}. Editing is disabled until the owner requests a retry.`}
+          ? `Submitted deliverables are locked. Please evaluate the deliverables above and approve or reject (request revision).`
+          : `Deliverables are locked awaiting evaluation by ${task.assigned_by_name || 'the task assigner'}. Editing is disabled until the assigner rejects the task.`}
       </p>
     </div>
   );
@@ -931,11 +847,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
     }
 
     if (currentTask.status === 'review' && !isOwner) {
-      const grace = getSubmissionGraceStatus(currentTask);
-      if (!grace.isWithinGrace) {
-        alert('This deliverable is locked. The 5-minute edit window has expired. Awaiting reviewer feedback.');
-        return;
-      }
+      alert('This deliverable is locked. Once submitted, editing is disabled until the task assigner rejects or requests a retry.');
+      return;
     }
 
     let finalStatus: TaskStatus = targetStatus;
@@ -1065,11 +978,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
   const handleUploadDeliverable = async (task: Task, file: File) => {
     const isOwner = isAdminUser || task.assigned_by_id === user?.id || task.assigned_by_name === user?.full_name;
     if (task.status === 'review' && !isOwner) {
-      const grace = getSubmissionGraceStatus(task);
-      if (!grace.isWithinGrace) {
-        alert('This deliverable is locked. The 5-minute edit window has expired. Awaiting reviewer feedback.');
-        return;
-      }
+      alert('This deliverable is locked. Once submitted, editing and file uploads are disabled until the task assigner rejects the task.');
+      return;
     }
 
     // 0. Security Extension & Payload Verification
@@ -1173,11 +1083,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
   const handleDeleteAttachment = async (task: Task, attachmentIndex: number) => {
     const isOwner = isAdminUser || task.assigned_by_id === user?.id || task.assigned_by_name === user?.full_name;
     if (task.status === 'review' && !isOwner) {
-      const grace = getSubmissionGraceStatus(task);
-      if (!grace.isWithinGrace) {
-        alert('This deliverable is locked. The 5-minute edit window has expired.');
-        return;
-      }
+      alert('This deliverable is locked. Once submitted, removing files is disabled until the task assigner rejects the task.');
+      return;
     }
     if (!confirm('Are you sure you want to remove this attached deliverable?')) return;
 
@@ -1273,6 +1180,12 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
     e.preventDefault();
     if (!submittingTask) return;
     setSubmissionError('');
+
+    const isOwner = isAdminUser || submittingTask.assigned_by_id === user?.id || submittingTask.assigned_by_name === user?.full_name;
+    if (submittingTask.status === 'review' && !isOwner) {
+      setSubmissionError('This deliverable is already submitted and locked. You cannot edit it until the task assigner rejects the task.');
+      return;
+    }
 
     const hasExistingFile = submittingTask.attachments && submittingTask.attachments.some(a => 
       a.type !== 'submission_note' && a.type !== 'banner' && a.type !== 'briefing_video' && a.type !== 'briefing_file'
@@ -1387,7 +1300,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
         if (submittingTask.assigned_by_id) {
           addNotification({
             title: 'Task Deliverable Submitted for Review',
-            message: `Deliverable for "${submittingTask.title}" has been submitted by ${user?.full_name || 'Team Member'} for review. 5-minute grace window active.`,
+            message: `Deliverable for "${submittingTask.title}" has been submitted by ${user?.full_name || 'Team Member'} for review. Locked awaiting your evaluation.`,
             target_type: 'members',
             recipient_ids: [submittingTask.assigned_by_id],
             type: 'task'
@@ -2127,8 +2040,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                                      task.assigned_to_id === user?.id ||
                                      task.assigned_to_name === user?.full_name;
             const isOwner = isAdminUser || task.assigned_by_id === user?.id || task.assigned_by_name === user?.full_name;
-            const grace = getSubmissionGraceStatus(task);
-            const isLockedReview = task.status === 'review' && !grace.isWithinGrace && !isOwner;
+            const isLockedReview = (task.status === 'review' || task.status === 'completed') && !isOwner;
             const canUploadDeliverable = isAssignedToUser && !isLockedReview;
 
             // Resolved list of assignee names
@@ -3040,19 +2952,11 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     </div>
                   )}
 
-                  {/* SUBMISSION GRACE TIMER & LOCK NOTICE (FOR ASSIGNEES / NON-OWNERS) */}
+                  {/* SUBMISSION STATUS & LOCK NOTICE (FOR ASSIGNEES / NON-OWNERS) */}
                   {task.status === 'review' && !isOwner && (
                     <SubmissionGraceTimer
                       task={task}
-                      isAssignedToUser={isAssignedToUser}
                       isOwner={isOwner}
-                      onEditDeliverable={() => {
-                        const existingNote = (task.attachments || []).find(a => a.type === 'submission_note');
-                        setSubmissionNoteText(existingNote?.note || '');
-                        setSubmissionFile(null);
-                        setSubmissionError('');
-                        setSubmittingTask(task);
-                      }}
                     />
                   )}
 
@@ -3256,7 +3160,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                         <select
                           value={task.status}
                           disabled={isLockedReview}
-                          title={isLockedReview ? "Submission locked after 5-minute grace window. Awaiting reviewer feedback." : undefined}
+                          title={isLockedReview ? "Submission locked. Editing is disabled until the task assigner rejects the task." : undefined}
                           onChange={(e) => {
                             const val = e.target.value as TaskStatus;
                             if (val === 'review' || val === 'completed') {
@@ -5056,7 +4960,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                   <span>
                     {submittingWork 
                       ? 'Submitting...' 
-                      : (submittingTask.status === 'review' ? 'Update Deliverable' : 'Submit for Review')}
+                      : (submittingTask.review_feedback ? 'Re-Submit Deliverable' : 'Submit for Review')}
                   </span>
                 </button>
               </div>
