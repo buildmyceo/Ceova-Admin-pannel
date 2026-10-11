@@ -4,6 +4,7 @@ import { usePortalData } from '../context/PortalDataContext';
 import { Meeting, MeetingCategory, Profile, Task, TaskPriority, TaskStatus } from '../types';
 import { 
   getVisibleMeetings, 
+  fetchMeetingsFromSupabase,
   createMeeting, 
   updateMeeting,
   deleteMeeting 
@@ -172,8 +173,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load and subscribe to meetings and tasks
-  const reloadMeetings = () => {
+  const reloadMeetings = async () => {
+    // 1. Instantly display locally cached meetings
     setMeetings(getVisibleMeetings(user));
+    // 2. Fetch latest meetings from Supabase cloud notifications
+    try {
+      const fresh = await fetchMeetingsFromSupabase(user);
+      if (fresh) {
+        setMeetings(fresh);
+      }
+    } catch (e) {
+      console.warn('Failed refreshing meetings from Supabase:', e);
+    }
   };
 
   const reloadTasks = async () => {
@@ -211,12 +222,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
     window.addEventListener('storage', handleTasksUpdate);
 
     const supabase = getSupabaseClient();
-    let channel: any = null;
+    let channelTasks: any = null;
+    let channelMeetings: any = null;
     if (supabase) {
-      channel = supabase
+      channelTasks = supabase
         .channel('ceova-calendar-realtime-tasks')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
           reloadTasks();
+        })
+        .subscribe();
+
+      channelMeetings = supabase
+        .channel('ceova-calendar-realtime-meetings')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload: any) => {
+          if (payload?.new?.type === 'meeting' || payload?.old?.type === 'meeting' || payload?.new?.meeting_id) {
+            reloadMeetings();
+          }
         })
         .subscribe();
     }
@@ -225,7 +246,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
       window.removeEventListener('ceova_meetings_updated', handleMeetingsUpdate);
       window.removeEventListener('ceova_tasks_updated', handleTasksUpdate);
       window.removeEventListener('storage', handleTasksUpdate);
-      if (supabase && channel) supabase.removeChannel(channel);
+      if (supabase) {
+        if (channelTasks) supabase.removeChannel(channelTasks);
+        if (channelMeetings) supabase.removeChannel(channelMeetings);
+      }
     };
   }, [user]);
 

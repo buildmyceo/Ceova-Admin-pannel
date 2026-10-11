@@ -1,8 +1,8 @@
-import { Meeting, Profile } from '../types';
+import { Meeting, MeetingCategory, Profile } from '../types';
 import { addNotification } from './notificationsService';
+import { getSupabaseClient } from './supabase';
 
 const MEETINGS_STORAGE_KEY = 'ceova_meetings_v2';
-
 const FAKE_MEETING_IDS = new Set(['meet_exec_standup', 'meet_sprint_review']);
 
 // Clear fake seed meetings immediately
@@ -47,6 +47,203 @@ export const saveMeetings = (meetings: Meeting[]) => {
   }
 };
 
+/**
+ * Reconstruct a complete Meeting object from a Supabase notification row
+ */
+export function mapNotificationRowToMeeting(row: any): Meeting {
+  const meta = (row.meta && typeof row.meta === 'object') ? row.meta : {};
+  const meetingId = row.meeting_id || meta.meeting_id || row.id;
+
+  // Title cleanup
+  let title = meta.title || row.title || 'Team Meeting';
+  title = title.replace(/^(New Meeting:\s*|Updated Meeting:\s*)/i, '').trim();
+
+  // Date and time resolution
+  let date = meta.date || '';
+  if (!date && row.created_at) {
+    date = row.created_at.substring(0, 10);
+  }
+  if (!date && row.message) {
+    const match = row.message.match(/(\d{4}-\d{2}-\d{2})/);
+    if (match) date = match[1];
+  }
+
+  let startTime = meta.start_time || '';
+  if (!startTime && row.message) {
+    const match = row.message.match(/at\s+(\d{1,2}:\d{2})/i);
+    if (match) startTime = match[1];
+  }
+  if (!startTime) startTime = '10:00';
+
+  const durationMinutes = Number(meta.duration_minutes) || 30;
+
+  let endTime = meta.end_time;
+  if (!endTime && startTime) {
+    try {
+      const [h, m] = startTime.split(':').map(Number);
+      const totalMinutes = h * 60 + m + durationMinutes;
+      const endH = Math.floor(totalMinutes / 60) % 24;
+      const endM = totalMinutes % 60;
+      endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+    } catch {}
+  }
+
+  // Description
+  let description = meta.description;
+  if (!description && row.message && !row.message.toLowerCase().includes('scheduled a google meet for')) {
+    description = row.message;
+  }
+
+  const meetLink = meta.meet_link || row.link || '';
+  const category = (meta.category as MeetingCategory) || 'general';
+  const targetType = (meta.target_type || row.target_type || 'members') === 'all' ? 'all' : 'members';
+
+  const attendeeIds = meta.attendee_ids || (Array.isArray(row.recipient_ids) ? row.recipient_ids : []);
+  const attendeeNames = meta.attendees || (Array.isArray(row.recipient_names) ? row.recipient_names : []);
+
+  return {
+    id: meetingId,
+    title,
+    description: description || null,
+    meet_link: meetLink,
+    date,
+    start_time: startTime,
+    end_time: endTime,
+    duration_minutes: durationMinutes,
+    category,
+    target_type: targetType,
+    attendee_ids: attendeeIds,
+    attendee_names: attendeeNames,
+    created_by_id: meta.created_by_id || row.sender_id || '',
+    created_by_name: meta.created_by_name || row.sender_name || 'Admin',
+    created_at: meta.created_at || row.created_at || new Date().toISOString(),
+    status: meta.status || 'upcoming'
+  };
+}
+
+/**
+ * Filter meetings visible to the given user based on role, ID, and attendee name matches
+ */
+export const filterVisibleMeetings = (meetings: Meeting[], currentUser?: Profile | null): Meeting[] => {
+  if (!currentUser) return meetings;
+
+  // Admins and CEOs can oversee all scheduled meetings
+  if (currentUser.role === 'admin' || currentUser.role === 'ceo') {
+    return meetings;
+  }
+
+  const currentUserId = (currentUser.id || '').toLowerCase().trim();
+  const userIdentifiers = [
+    currentUser.full_name?.trim().toLowerCase(),
+    currentUser.email?.trim().toLowerCase(),
+    currentUser.email?.split('@')[0]?.trim().toLowerCase(),
+    (currentUser as any).username?.trim().toLowerCase()
+  ].filter(Boolean) as string[];
+
+  return meetings.filter(m => {
+    // 1. Broadcast meetings are visible to everyone in the workspace
+    if (m.target_type === 'all') return true;
+
+    // 2. Creator can always see their own meeting
+    if (m.created_by_id && m.created_by_id.toLowerCase().trim() === currentUserId) {
+      return true;
+    }
+
+    // 3. User ID match in attendee_ids
+    if (m.attendee_ids && Array.isArray(m.attendee_ids)) {
+      const idMatch = m.attendee_ids.some(id => id && id.toLowerCase().trim() === currentUserId);
+      if (idMatch) return true;
+    }
+
+    // 4. Name or email match in attendee_names
+    if (m.attendee_names && Array.isArray(m.attendee_names)) {
+      const nameMatch = m.attendee_names.some(name => {
+        if (!name) return false;
+        const normName = name.trim().toLowerCase();
+        return userIdentifiers.some(uid => uid === normName || uid.includes(normName) || normName.includes(uid));
+      });
+      if (nameMatch) return true;
+    }
+
+    // 5. If no specific attendee IDs or names specified, default to visible
+    if ((!m.attendee_ids || m.attendee_ids.length === 0) && (!m.attendee_names || m.attendee_names.length === 0)) {
+      return true;
+    }
+
+    return false;
+  });
+};
+
+export const getVisibleMeetings = (currentUser: Profile | null): Meeting[] => {
+  const all = getStoredMeetings();
+  return filterVisibleMeetings(all, currentUser);
+};
+
+/**
+ * Fetch latest meetings from Supabase notifications table, merge with local cache, and return visible meetings
+ */
+export const fetchMeetingsFromSupabase = async (
+  currentUser?: Profile | null
+): Promise<Meeting[]> => {
+  const local = getStoredMeetings();
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return filterVisibleMeetings(local, currentUser);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('type', 'meeting')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Error fetching meetings from Supabase:', error.message);
+      return filterVisibleMeetings(local, currentUser);
+    }
+
+    if (data && Array.isArray(data)) {
+      const remoteMeetings = data.map(mapNotificationRowToMeeting);
+      const meetingMap = new Map<string, Meeting>();
+
+      // Populate with existing local meetings
+      local.forEach(m => {
+        if (!FAKE_MEETING_IDS.has(m.id)) {
+          meetingMap.set(m.id, m);
+        }
+      });
+
+      // Merge remote meetings
+      remoteMeetings.forEach(rm => {
+        if (FAKE_MEETING_IDS.has(rm.id)) return;
+        const existing = meetingMap.get(rm.id);
+        if (existing) {
+          meetingMap.set(rm.id, {
+            ...existing,
+            ...rm,
+            description: rm.description || existing.description || null
+          });
+        } else {
+          meetingMap.set(rm.id, rm);
+        }
+      });
+
+      const merged = Array.from(meetingMap.values()).sort((a, b) => {
+        return new Date(`${b.date}T${b.start_time || '00:00'}`).getTime() - 
+               new Date(`${a.date}T${a.start_time || '00:00'}`).getTime();
+      });
+
+      saveMeetings(merged);
+      return filterVisibleMeetings(merged, currentUser);
+    }
+  } catch (err) {
+    console.error('Failed fetching meetings from Supabase:', err);
+  }
+
+  return filterVisibleMeetings(local, currentUser);
+};
+
 export const createMeeting = (
   meetingData: Omit<Meeting, 'id' | 'created_at'>
 ): Meeting => {
@@ -61,7 +258,7 @@ export const createMeeting = (
   const updated = [newMeeting, ...current];
   saveMeetings(updated);
 
-  // Automatically dispatch notification
+  // Automatically dispatch notification to Supabase and email
   const audienceText = newMeeting.target_type === 'all'
     ? 'All Members'
     : (newMeeting.attendee_names && newMeeting.attendee_names.length > 0)
@@ -81,12 +278,22 @@ export const createMeeting = (
     user_id: newMeeting.target_type === 'all' ? 'all' : (newMeeting.attendee_ids?.[0] || 'all'),
     meeting_id: newMeeting.id,
     meta: {
+      meeting_id: newMeeting.id,
+      title: newMeeting.title,
+      description: newMeeting.description || null,
       date: newMeeting.date,
       start_time: newMeeting.start_time,
+      end_time: newMeeting.end_time || null,
+      duration_minutes: newMeeting.duration_minutes || 30,
       meet_link: newMeeting.meet_link,
       category: newMeeting.category,
       target_type: newMeeting.target_type,
-      attendees: newMeeting.attendee_names
+      attendee_ids: newMeeting.attendee_ids || [],
+      attendees: newMeeting.attendee_names || [],
+      created_by_id: newMeeting.created_by_id,
+      created_by_name: newMeeting.created_by_name,
+      created_at: newMeeting.created_at,
+      status: newMeeting.status || 'upcoming'
     }
   });
 
@@ -112,7 +319,7 @@ export const updateMeeting = (
   current[index] = updatedMeeting;
   saveMeetings([...current]);
 
-  // Dispatch notification about updated meeting
+  // Dispatch notification and sync to Supabase
   const audienceText = updatedMeeting.target_type === 'all'
     ? 'All Members'
     : (updatedMeeting.attendee_names && updatedMeeting.attendee_names.length > 0)
@@ -124,17 +331,66 @@ export const updateMeeting = (
     message: `${updatedMeeting.created_by_name || 'Admin'} updated meeting details for ${updatedMeeting.date} at ${updatedMeeting.start_time} (${audienceText}).`,
     type: 'meeting',
     link: updatedMeeting.meet_link,
+    sender_id: updatedMeeting.created_by_id,
+    sender_name: updatedMeeting.created_by_name,
+    target_type: updatedMeeting.target_type === 'all' ? 'all' : 'members',
+    recipient_ids: updatedMeeting.target_type === 'all' ? [] : (updatedMeeting.attendee_ids || []),
+    recipient_names: updatedMeeting.target_type === 'all' ? ['Everyone'] : (updatedMeeting.attendee_names || []),
     user_id: updatedMeeting.target_type === 'all' ? 'all' : (updatedMeeting.attendee_ids?.[0] || 'all'),
     meeting_id: updatedMeeting.id,
     meta: {
+      meeting_id: updatedMeeting.id,
+      title: updatedMeeting.title,
+      description: updatedMeeting.description || null,
       date: updatedMeeting.date,
       start_time: updatedMeeting.start_time,
+      end_time: updatedMeeting.end_time || null,
+      duration_minutes: updatedMeeting.duration_minutes || 30,
       meet_link: updatedMeeting.meet_link,
       category: updatedMeeting.category,
       target_type: updatedMeeting.target_type,
-      attendees: updatedMeeting.attendee_names
+      attendee_ids: updatedMeeting.attendee_ids || [],
+      attendees: updatedMeeting.attendee_names || [],
+      created_by_id: updatedMeeting.created_by_id,
+      created_by_name: updatedMeeting.created_by_name,
+      status: updatedMeeting.status || 'upcoming'
     }
   });
+
+  // Also update existing notification in Supabase
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('notifications')
+      .update({
+        title: `Meeting: ${updatedMeeting.title}`,
+        link: updatedMeeting.meet_link,
+        recipient_ids: updatedMeeting.attendee_ids || [],
+        recipient_names: updatedMeeting.attendee_names || [],
+        meta: {
+          meeting_id: updatedMeeting.id,
+          title: updatedMeeting.title,
+          description: updatedMeeting.description || null,
+          date: updatedMeeting.date,
+          start_time: updatedMeeting.start_time,
+          end_time: updatedMeeting.end_time || null,
+          duration_minutes: updatedMeeting.duration_minutes || 30,
+          meet_link: updatedMeeting.meet_link,
+          category: updatedMeeting.category,
+          target_type: updatedMeeting.target_type,
+          attendee_ids: updatedMeeting.attendee_ids || [],
+          attendees: updatedMeeting.attendee_names || [],
+          created_by_id: updatedMeeting.created_by_id,
+          created_by_name: updatedMeeting.created_by_name,
+          status: updatedMeeting.status || 'upcoming'
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('meeting_id', id)
+      .then(({ error }) => {
+        if (error) console.warn('Failed updating meeting in Supabase:', error.message);
+      });
+  }
 
   return updatedMeeting;
 };
@@ -143,22 +399,16 @@ export const deleteMeeting = (id: string) => {
   const current = getStoredMeetings();
   const updated = current.filter(m => m.id !== id);
   saveMeetings(updated);
-};
 
-export const getVisibleMeetings = (currentUser: Profile | null): Meeting[] => {
-  const all = getStoredMeetings();
-  if (!currentUser) return all;
-
-  // Admins and CEOs can see all meetings
-  if (currentUser.role === 'admin' || currentUser.role === 'ceo') {
-    return all;
+  // Sync deletion with Supabase notifications
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    supabase
+      .from('notifications')
+      .delete()
+      .eq('meeting_id', id)
+      .then(({ error }) => {
+        if (error) console.warn('Failed deleting meeting from Supabase:', error.message);
+      });
   }
-
-  // Regular members and interns see meetings targeted to all or where their id is in attendees
-  return all.filter(m => {
-    if (m.target_type === 'all') return true;
-    if (m.attendee_ids && m.attendee_ids.includes(currentUser.id)) return true;
-    if (m.created_by_id === currentUser.id) return true;
-    return false;
-  });
 };

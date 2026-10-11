@@ -39,7 +39,7 @@ import {
 import { NavTab } from '../../components/Sidebar';
 import { Task, TaskPriority, TaskStatus, Meeting, MeetingCategory, Profile } from '../../types';
 import { MemberStatusModal } from '../../components/MemberStatusModal';
-import { getVisibleMeetings } from '../../lib/meetingsService';
+import { getVisibleMeetings, fetchMeetingsFromSupabase } from '../../lib/meetingsService';
 import { sanitizeUrl } from '../../lib/security';
 
 const TASKS_STORAGE_KEY = 'ceova_local_tasks_cache_v2';
@@ -106,8 +106,14 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
 
   // Load latest tasks & meetings and listen for real-time changes
   useEffect(() => {
-    const syncMeetings = () => {
+    const syncMeetings = async () => {
       setMeetings(getVisibleMeetings(user));
+      try {
+        const fresh = await fetchMeetingsFromSupabase(user);
+        if (fresh) setMeetings(fresh);
+      } catch (err) {
+        console.warn('Failed syncing meetings from Supabase:', err);
+      }
     };
 
     const syncTasks = async () => {
