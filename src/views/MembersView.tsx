@@ -66,15 +66,11 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
 
   // Bio and Skills expand/collapse toggles
   const [expandedBios, setExpandedBios] = useState<{ [id: string]: boolean }>({});
-  const [expandedSkills, setExpandedSkills] = useState<{ [id: string]: boolean }>({});
 
   const toggleBio = (memberId: string) => {
     setExpandedBios(prev => ({ ...prev, [memberId]: !prev[memberId] }));
   };
 
-  const toggleSkills = (memberId: string) => {
-    setExpandedSkills(prev => ({ ...prev, [memberId]: !prev[memberId] }));
-  };
 
   // Invite modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -1344,72 +1340,31 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   })()}
 
                   {/* 7. Skills & Specializations Chips (Shown if added!) */}
-                  {member.skills && Array.isArray(member.skills) && member.skills.length > 0 && (() => {
-                    const isSkillsExpanded = Boolean(expandedSkills[member.id]);
-                    const SKILLS_LIMIT = 4;
-                    const hasMoreSkills = member.skills.length > SKILLS_LIMIT;
-                    const displayedSkills = isSkillsExpanded ? member.skills : member.skills.slice(0, SKILLS_LIMIT);
-
-                    return (
-                      <div style={{ marginTop: 'auto', paddingTop: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
-                          <Sparkles size={10} />
-                          <span>Skills</span>
-                          <span style={{ fontSize: 9.5, opacity: 0.65, fontWeight: 500 }}>({member.skills.length})</span>
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-                          {displayedSkills.map((skill: string, idx: number) => (
-                            <span
-                              key={idx}
-                              style={{
-                                fontSize: 10.5,
-                                padding: '2px 8px',
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
-                                borderRadius: 100,
-                                color: '#d4d4d8'
-                              }}
-                            >
-                              {skill}
-                            </span>
-                          ))}
-
-                          {hasMoreSkills && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleSkills(member.id);
-                              }}
-                              style={{
-                                fontSize: 10.5,
-                                padding: '2px 8px',
-                                background: isSkillsExpanded ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-                                border: isSkillsExpanded ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(255, 255, 255, 0.12)',
-                                borderRadius: 100,
-                                color: isSkillsExpanded ? '#93c5fd' : '#60a5fa',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                                fontWeight: 600,
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = isSkillsExpanded ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.12)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = isSkillsExpanded ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.06)';
-                              }}
-                            >
-                              <span>{isSkillsExpanded ? 'Show less' : `+${member.skills.length - SKILLS_LIMIT} Show more`}</span>
-                              {isSkillsExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                            </button>
-                          )}
-                        </div>
+                  {member.skills && Array.isArray(member.skills) && member.skills.length > 0 && (
+                    <div style={{ marginTop: 'auto', paddingTop: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
+                        <Sparkles size={10} />
+                        <span>Skills</span>
                       </div>
-                    );
-                  })()}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {member.skills.map((skill: string, idx: number) => (
+                          <span
+                            key={idx}
+                            style={{
+                              fontSize: 10.5,
+                              padding: '2px 8px',
+                              background: 'rgba(255, 255, 255, 0.04)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              borderRadius: 100,
+                              color: '#d4d4d8'
+                            }}
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                                     {/* Action Buttons */}
                   <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
