@@ -55,6 +55,15 @@ function getStoredAccounts(): SavedAccount[] {
   }
 }
 
+function getStoredUser(): Profile | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function persistAccounts(accounts: SavedAccount[]) {
   try {
     if (accounts.length === 0) {
@@ -68,10 +77,10 @@ function persistAccounts(accounts: SavedAccount[]) {
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<Profile | null>(null);
+  const [user, setUser] = useState<Profile | null>(() => getStoredUser());
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => getStoredAccounts());
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSupabaseConfigured, setIsSupabaseConfigured] = useState<boolean>(false);
+  const [isSupabaseConfigured, setIsSupabaseConfigured] = useState<boolean>(() => getSupabaseCredentials().isConfigured);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false);
 
   const sanitizeRole = (r: any): UserRole => {
@@ -209,61 +218,151 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // 1. Strictly synchronize saved accounts with their latest accounts & roles from Supabase
           if (anonClient && storedAccounts.length > 0) {
-            const emails = storedAccounts.map(a => a.profile.email?.trim().toLowerCase()).filter(Boolean);
-            if (emails.length > 0) {
-              const { data: dbAccounts } = await anonClient
-                .from('profiles')
-                .select('*')
-                .in('email', emails);
+            try {
+              const emails = storedAccounts.map(a => a.profile.email?.trim().toLowerCase()).filter(Boolean);
+              if (emails.length > 0) {
+                const { data: dbAccounts } = await anonClient
+                  .from('profiles')
+                  .select('*')
+                  .in('email', emails);
 
-              if (dbAccounts && dbAccounts.length > 0) {
-                storedAccounts = storedAccounts.map(acc => {
-                  const match = dbAccounts.find(p => 
-                    p.email?.toLowerCase() === acc.profile.email?.toLowerCase() || 
-                    p.id === acc.profile.id
-                  );
-                  if (match) {
-                    const clean = sanitizeProfile(match)!;
-                    return { ...acc, profile: clean };
-                  }
-                  return acc;
-                });
-                setSavedAccounts(storedAccounts);
-                persistAccounts(storedAccounts);
+                if (dbAccounts && dbAccounts.length > 0) {
+                  storedAccounts = storedAccounts.map(acc => {
+                    const match = dbAccounts.find(p => 
+                      p.email?.toLowerCase() === acc.profile.email?.toLowerCase() || 
+                      p.id === acc.profile.id
+                    );
+                    if (match) {
+                      const clean = sanitizeProfile(match)!;
+                      return { ...acc, profile: clean };
+                    }
+                    return acc;
+                  });
+                  setSavedAccounts(storedAccounts);
+                  persistAccounts(storedAccounts);
+                }
               }
+            } catch (syncErr) {
+              console.warn('Silent failure syncing saved accounts on init:', syncErr);
             }
           }
 
           // 2. Check active Supabase Auth session
-          const { data: { session } } = await client.auth.getSession();
+          let { data: { session } } = await client.auth.getSession();
+
+          // 2a. If getSession() is null, attempt to restore session from storedAccounts tokens
+          if (!session?.user && storedAccounts.length > 0) {
+            const currentStoredUser = getStoredUser();
+            const targetAccount = (currentStoredUser?.id 
+              ? storedAccounts.find(a => a.profile.id === currentStoredUser.id || a.profile.email?.toLowerCase() === currentStoredUser.email?.toLowerCase())
+              : null) || storedAccounts[0];
+
+            if (targetAccount?.session?.refresh_token) {
+              try {
+                if (targetAccount.session.access_token) {
+                  const { data: setRes } = await client.auth.setSession({
+                    access_token: targetAccount.session.access_token,
+                    refresh_token: targetAccount.session.refresh_token,
+                  });
+                  if (setRes?.session) {
+                    session = setRes.session;
+                  }
+                }
+                if (!session?.user && targetAccount.session.refresh_token) {
+                  const { data: refRes } = await client.auth.refreshSession({
+                    refresh_token: targetAccount.session.refresh_token,
+                  });
+                  if (refRes?.session) {
+                    session = refRes.session;
+                  }
+                }
+              } catch (restoreErr) {
+                console.warn('Session restoration from saved account attempt error:', restoreErr);
+              }
+            }
+          }
+
           if (session?.user) {
-            // Verify if user still exists on Supabase Auth server
-            const { data: { user: serverUser }, error: userError } = await client.auth.getUser();
-            if (userError || !serverUser) {
-              // User was deleted from Supabase Auth!
+            // 2b. Check if token is expired or about to expire, refresh pre-emptively
+            const isTokenExpired = session.expires_at ? (Date.now() / 1000) >= (session.expires_at - 60) : false;
+            if (isTokenExpired && session.refresh_token) {
+              try {
+                const { data: refRes } = await client.auth.refreshSession();
+                if (refRes?.session) {
+                  session = refRes.session;
+                }
+              } catch (refErr) {
+                console.warn('Pre-emptive refresh error:', refErr);
+              }
+            }
+
+            // 2c. Verify if user is valid on Supabase Auth server without prematurely signing out on network errors
+            let authVerified = true;
+            try {
+              let { data: { user: serverUser }, error: userError } = await client.auth.getUser();
+              if (userError) {
+                const isAuthError = (userError as any).status === 401 || 
+                                    userError.message?.toLowerCase().includes('jwt') || 
+                                    userError.message?.toLowerCase().includes('token');
+                if (isAuthError) {
+                  const { data: refreshed, error: refErr } = await client.auth.refreshSession();
+                  if (refreshed?.session?.user) {
+                    session = refreshed.session;
+                    serverUser = refreshed.session.user;
+                  } else {
+                    const isDefinitiveFailure = refErr?.message?.toLowerCase().includes('invalid') || 
+                                              refErr?.message?.toLowerCase().includes('revoked') || 
+                                              refErr?.message?.toLowerCase().includes('not found') || 
+                                              (refErr as any)?.status === 400 || 
+                                              (refErr as any)?.status === 401;
+                    if (isDefinitiveFailure) {
+                      authVerified = false;
+                    }
+                  }
+                }
+                // If network/offline error, preserve session
+              } else if (!serverUser) {
+                authVerified = false;
+              }
+            } catch (netEx) {
+              console.warn('Network exception while verifying user with auth:', netEx);
+            }
+
+            if (!authVerified) {
               await client.auth.signOut().catch(() => {});
               setUser(null);
               localStorage.removeItem(LOCAL_USER_KEY);
             } else {
               const userEmail = session.user.email?.trim().toLowerCase();
               let profileData = null;
+              let profileQueryError = false;
 
               if (userEmail) {
-                const { data: byEmail } = await (anonClient || client)
-                  .from('profiles')
-                  .select('*')
-                  .ilike('email', userEmail)
-                  .maybeSingle();
-                if (byEmail) profileData = byEmail;
+                try {
+                  const { data: byEmail, error: emailErr } = await (anonClient || client)
+                    .from('profiles')
+                    .select('*')
+                    .ilike('email', userEmail)
+                    .maybeSingle();
+                  if (byEmail) profileData = byEmail;
+                  if (emailErr) profileQueryError = true;
+                } catch {
+                  profileQueryError = true;
+                }
               }
 
               if (!profileData) {
-                const { data: byId } = await (anonClient || client)
-                  .from('profiles')
-                  .select('*')
-                  .eq('id', session.user.id)
-                  .maybeSingle();
-                if (byId) profileData = byId;
+                try {
+                  const { data: byId, error: idErr } = await (anonClient || client)
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .maybeSingle();
+                  if (byId) profileData = byId;
+                  if (idErr) profileQueryError = true;
+                } catch {
+                  profileQueryError = true;
+                }
               }
 
               if (profileData) {
@@ -308,23 +407,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   setSavedAccounts(storedAccounts);
                   persistAccounts(storedAccounts);
                 }
+              } else if (profileQueryError) {
+                // Database query error / network problem - DO NOT sign out!
+                const cached = getStoredUser();
+                if (cached) {
+                  setUser(cached);
+                }
               } else {
-                // User profile was deleted from public.profiles table in Supabase!
-                // DO NOT auto-create it! Sign out immediately to respect admin deletion!
+                // Confirmed deletion from public.profiles table by administrator
                 await client.auth.signOut().catch(() => {});
                 setUser(null);
                 localStorage.removeItem(LOCAL_USER_KEY);
               }
             }
           } else {
-            // 3. If no active Supabase Auth session, the user is signed out
-            setUser(null);
-            localStorage.removeItem(LOCAL_USER_KEY);
+            // 3. If no active Supabase Auth session and no saved accounts exist, clear user
+            const cached = getStoredUser();
+            if (storedAccounts.length === 0 && !cached) {
+              setUser(null);
+              localStorage.removeItem(LOCAL_USER_KEY);
+            } else if (cached) {
+              setUser(cached);
+            }
           }
         } catch (err) {
           console.error('Error fetching Supabase session/profile:', err);
-          setUser(null);
-          localStorage.removeItem(LOCAL_USER_KEY);
+          const cached = getStoredUser();
+          if (cached) {
+            setUser(cached);
+          }
         } finally {
           setIsLoading(false);
         }
@@ -337,23 +448,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (session?.user) {
             const userEmail = session.user.email?.trim().toLowerCase();
             let profileData = null;
+            let queryFailed = false;
 
             if (userEmail) {
-              const { data: byEmail } = await client
-                .from('profiles')
-                .select('*')
-                .ilike('email', userEmail)
-                .maybeSingle();
-              if (byEmail) profileData = byEmail;
+              try {
+                const { data: byEmail, error: emailErr } = await client
+                  .from('profiles')
+                  .select('*')
+                  .ilike('email', userEmail)
+                  .maybeSingle();
+                if (byEmail) profileData = byEmail;
+                if (emailErr) queryFailed = true;
+              } catch {
+                queryFailed = true;
+              }
             }
 
             if (!profileData) {
-              const { data: byId } = await client
-                .from('profiles')
-                .select('*')
-                .eq('id', session.user.id)
-                .maybeSingle();
-              if (byId) profileData = byId;
+              try {
+                const { data: byId, error: idErr } = await client
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', session.user.id)
+                  .maybeSingle();
+                if (byId) profileData = byId;
+                if (idErr) queryFailed = true;
+              } catch {
+                queryFailed = true;
+              }
             }
 
             if (profileData && profileData.id !== session.user.id && userEmail) {
@@ -366,18 +488,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               } catch (_) {}
             }
 
-            if (!profileData) {
-              // Profile was deleted from profiles table! Do NOT auto-create!
-              await client.auth.signOut().catch(() => {});
-              setUser(null);
-              localStorage.removeItem(LOCAL_USER_KEY);
-              return;
-            }
-
             if (profileData) {
               const sanitized = sanitizeProfile(profileData);
               if (sanitized) {
-                if (session.user.user_metadata?.cover_url && !session.user.user_metadata.cover_url.startsWith('data:')) {
+                if (session.user.user_metadata?.cover_url && !sanitized.cover_url && !session.user.user_metadata.cover_url.startsWith('data:')) {
                   sanitized.cover_url = session.user.user_metadata.cover_url;
                 }
                 if (session.user.user_metadata?.social_links) {
@@ -390,9 +504,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(sanitized));
                 upsertAccount(sanitized, { access_token: session.access_token, refresh_token: session.refresh_token });
               }
+            } else if (!queryFailed) {
+              await client.auth.signOut().catch(() => {});
+              setUser(null);
+              localStorage.removeItem(LOCAL_USER_KEY);
             }
           } else if (event === 'SIGNED_OUT') {
-            // Only clear state when explicitly signed out
             setUser(null);
             localStorage.removeItem(LOCAL_USER_KEY);
           }
@@ -403,10 +520,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           authListener?.subscription.unsubscribe();
         };
       } else {
-        // If Supabase client is not configured, do not revive mock users
-        setUser(null);
-        localStorage.removeItem(LOCAL_USER_KEY);
-        setSavedAccounts([]);
+        const cached = getStoredUser();
+        if (cached) {
+          setUser(cached);
+        } else {
+          setUser(null);
+        }
         setIsLoading(false);
       }
     }
