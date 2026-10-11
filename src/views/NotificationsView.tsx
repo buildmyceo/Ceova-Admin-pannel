@@ -1789,7 +1789,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                                     {member.full_name}
                                   </span>
                                   <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>
-                                    {member.designation || member.department || member.email}
+                                    {member.designation || member.department || (isAdmin ? member.email : (member.role === 'intern' ? 'Intern' : 'Member'))}
                                   </span>
                                 </div>
                               </div>

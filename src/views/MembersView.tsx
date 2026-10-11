@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePortalData } from '../context/PortalDataContext';
 import { getSupabaseClient } from '../lib/supabase';
@@ -32,7 +32,8 @@ import {
   Trash2,
   UserCheck,
   Link as LinkIcon,
-  ArrowRight
+  ArrowRight,
+  Lock
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
 import { Profile } from '../types';
@@ -49,6 +50,12 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
   // View state
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [membersTab, setMembersTab] = useState<'active' | 'pending'>('active');
+
+  useEffect(() => {
+    if (!isAdmin && membersTab === 'pending') {
+      setMembersTab('active');
+    }
+  }, [isAdmin, membersTab]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'member' | 'intern'>('all');
   const [copiedEmailMap, setCopiedEmailMap] = useState<{ [id: string]: boolean }>({});
@@ -115,6 +122,11 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
   // One-click copy email
   const handleCopyEmail = (id: string, emailStr: string) => {
     if (!emailStr) return;
+    const isTargetCurrent = Boolean(
+      (currentUser?.id && id === currentUser.id) ||
+      (currentUser?.email && emailStr && currentUser.email.toLowerCase() === emailStr.toLowerCase())
+    );
+    if (!isAdmin && !isTargetCurrent) return;
     navigator.clipboard.writeText(emailStr);
     setCopiedEmailMap(prev => ({ ...prev, [id]: true }));
     setTimeout(() => {
@@ -335,11 +347,16 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         if (m.status !== 'pending') return false;
       }
 
+      const isCur = Boolean(
+        (currentUser?.id && m.id === currentUser.id) || 
+        (currentUser?.email && m.email && currentUser.email.toLowerCase() === m.email.toLowerCase())
+      );
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = 
         !q || 
         (m.full_name || '').toLowerCase().includes(q) || 
-        (m.email || '').toLowerCase().includes(q) || 
+        ((isAdmin || isCur) && (m.email || '').toLowerCase().includes(q)) || 
+        ((isAdmin || isCur) && (m.phone || '').toLowerCase().includes(q)) || 
         (m.designation || '').toLowerCase().includes(q) ||
         (m.department || '').toLowerCase().includes(q);
 
@@ -541,38 +558,40 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setMembersTab('pending')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 16px',
-            borderRadius: 8,
-            border: membersTab === 'pending' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
-            background: membersTab === 'pending' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-            color: membersTab === 'pending' ? '#fbbf24' : 'var(--text-muted)',
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <Mail size={15} />
-          <span>Pending Invitations & Unactivated</span>
-          <span style={{
-            padding: '2px 7px',
-            borderRadius: 6,
-            fontSize: 11,
-            fontWeight: 700,
-            background: membersTab === 'pending' ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)',
-            color: membersTab === 'pending' ? '#000000' : '#fbbf24'
-          }}>
-            {pendingMembersCount}
-          </span>
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setMembersTab('pending')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: membersTab === 'pending' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+              background: membersTab === 'pending' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+              color: membersTab === 'pending' ? '#fbbf24' : 'var(--text-muted)',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Mail size={15} />
+            <span>Pending Invitations & Unactivated</span>
+            <span style={{
+              padding: '2px 7px',
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              background: membersTab === 'pending' ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)',
+              color: membersTab === 'pending' ? '#000000' : '#fbbf24'
+            }}>
+              {pendingMembersCount}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Real-time Live Presence Summary Bar (Solid Colors) */}
@@ -848,6 +867,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
               (currentUser?.id && member.id === currentUser.id) ||
               (currentUser?.email && member.email && currentUser.email.toLowerCase() === member.email.toLowerCase())
             );
+            const canViewContact = Boolean(isAdmin || isCurrent);
             const isAdminRole = member.role === 'admin' || member.role === 'ceo';
             const isInternRole = member.role === 'intern';
             const presenceInfo = formatLastSeen(member.last_active_at || member.updated_at || member.created_at);
@@ -1147,51 +1167,8 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   )}
 
                   {/* 5. Contact Information (Email with Copy button & Phone with Verified Badge) */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 12 }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '7px 10px',
-                      background: 'rgba(0, 0, 0, 0.4)',
-                      borderRadius: 6,
-                      border: '1px solid rgba(255, 255, 255, 0.04)'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: 1 }}>
-                        <Mail size={13} style={{ color: 'var(--text-subtle)', flexShrink: 0 }} />
-                        <span style={{
-                          fontSize: 12,
-                          color: '#e4e4e7',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {member.email}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyEmail(member.id, member.email)}
-                        title="Copy email address"
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: copiedEmailMap[member.id] ? '#10b981' : 'var(--text-muted)',
-                          cursor: 'pointer',
-                          padding: 3,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 3,
-                          fontSize: 10,
-                          flexShrink: 0
-                        }}
-                      >
-                        {copiedEmailMap[member.id] ? <Check size={12} /> : <Copy size={12} />}
-                        <span>{copiedEmailMap[member.id] ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-
-                    {member.phone && (
+                  {canViewContact ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 12 }}>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1201,24 +1178,86 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                         borderRadius: 6,
                         border: '1px solid rgba(255, 255, 255, 0.04)'
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <Phone size={13} style={{ color: 'var(--text-subtle)', flexShrink: 0 }} />
-                          <span style={{ fontSize: 12, color: '#e4e4e7' }}>{member.phone}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: 1 }}>
+                          <Mail size={13} style={{ color: 'var(--text-subtle)', flexShrink: 0 }} />
+                          <span style={{
+                            fontSize: 12,
+                            color: '#e4e4e7',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {member.email}
+                          </span>
                         </div>
-                        <span style={{
-                          fontSize: 10,
-                          color: '#e4e4e7',
-                          background: '#18181b',
-                          border: '1px solid #27272a',
-                          padding: '2px 7px',
-                          borderRadius: 4,
-                          fontWeight: 600
-                        }}>
-                          Verified
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyEmail(member.id, member.email)}
+                          title="Copy email address"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: copiedEmailMap[member.id] ? '#10b981' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: 3,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            fontSize: 10,
+                            flexShrink: 0
+                          }}
+                        >
+                          {copiedEmailMap[member.id] ? <Check size={12} /> : <Copy size={12} />}
+                          <span>{copiedEmailMap[member.id] ? 'Copied' : 'Copy'}</span>
+                        </button>
                       </div>
-                    )}
-                  </div>
+
+                      {member.phone && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '7px 10px',
+                          background: 'rgba(0, 0, 0, 0.4)',
+                          borderRadius: 6,
+                          border: '1px solid rgba(255, 255, 255, 0.04)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <Phone size={13} style={{ color: 'var(--text-subtle)', flexShrink: 0 }} />
+                            <span style={{ fontSize: 12, color: '#e4e4e7' }}>{member.phone}</span>
+                          </div>
+                          <span style={{
+                            fontSize: 10,
+                            color: '#e4e4e7',
+                            background: '#18181b',
+                            border: '1px solid #27272a',
+                            padding: '2px 7px',
+                            borderRadius: 4,
+                            fontWeight: 600
+                          }}>
+                            Verified
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 7,
+                      padding: '8px 10px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      borderRadius: 6,
+                      border: '1px dashed rgba(255, 255, 255, 0.08)',
+                      marginBottom: 12,
+                      color: 'var(--text-subtle)',
+                      fontSize: 11
+                    }}>
+                      <Lock size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                      <span>Contact details restricted to Admin</span>
+                    </div>
+                  )}
 
                   {/* 6. Bio & Overview Snippet (Shown if added!) */}
                   {member.bio && (
@@ -1528,6 +1567,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                     (currentUser?.id && member.id === currentUser.id) ||
                     (currentUser?.email && member.email && currentUser.email.toLowerCase() === member.email.toLowerCase())
                   );
+                  const canViewContact = Boolean(isAdmin || isCurrent);
                   const isAdminRole = member.role === 'admin' || member.role === 'ceo';
                   const isInternRole = member.role === 'intern';
                   const presenceInfo = formatLastSeen(member.last_active_at || member.updated_at || member.created_at);
@@ -1643,26 +1683,35 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
 
                       <td style={{ padding: '14px 20px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 12.5, color: '#e4e4e7' }}>{member.email}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyEmail(member.id, member.email)}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: copiedEmailMap[member.id] ? '#10b981' : 'var(--text-subtle)',
-                                cursor: 'pointer',
-                                padding: 2
-                              }}
-                            >
-                              {copiedEmailMap[member.id] ? <Check size={12} /> : <Copy size={12} />}
-                            </button>
-                          </div>
-                          {member.phone && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{member.phone}</span>
-                              <span style={{ fontSize: 9.5, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>Verified</span>
+                          {canViewContact ? (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 12.5, color: '#e4e4e7' }}>{member.email}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyEmail(member.id, member.email)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: copiedEmailMap[member.id] ? '#10b981' : 'var(--text-subtle)',
+                                    cursor: 'pointer',
+                                    padding: 2
+                                  }}
+                                >
+                                  {copiedEmailMap[member.id] ? <Check size={12} /> : <Copy size={12} />}
+                                </button>
+                              </div>
+                              {member.phone && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{member.phone}</span>
+                                  <span style={{ fontSize: 9.5, color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '1px 5px', borderRadius: 4, fontWeight: 600 }}>Verified</span>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 11.5 }}>
+                              <Lock size={12} style={{ color: 'var(--text-muted)' }} />
+                              <span>Admin only</span>
                             </div>
                           )}
                           {member.social_links && (member.social_links.github || member.social_links.instagram || member.social_links.linkedin || member.social_links.twitter) && (

@@ -491,7 +491,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
     const q = memberSearchQuery.toLowerCase();
     return activePool.filter(m => 
       m.full_name?.toLowerCase().includes(q) ||
-      m.email?.toLowerCase().includes(q) ||
+      ((isAdminUser || user?.id === m.id) && m.email?.toLowerCase().includes(q)) ||
       m.department?.toLowerCase().includes(q)
     );
   }, [members, memberSearchQuery]);
