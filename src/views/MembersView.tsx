@@ -515,7 +515,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Sub-Tabs Navigation: Active Directory vs Pending Invitations */}
+      {/* Sub-Tabs Navigation: Active Members vs Pending Invitations */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -545,7 +545,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
           }}
         >
           <Users size={15} />
-          <span>Active Directory</span>
+          <span>Active Members</span>
           <span style={{
             padding: '2px 7px',
             borderRadius: 6,
