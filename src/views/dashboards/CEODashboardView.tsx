@@ -62,7 +62,23 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
   onNavigate,
 }) => {
   const { user, role, isSupabaseConfigured } = useAuth();
-  const { departments, members } = usePortalData();
+  const { departments, members, isUserOnline } = usePortalData();
+
+  // Top 5 members who recently used the portal
+  const recentTopMembers = useMemo(() => {
+    return [...members]
+      .sort((a, b) => {
+        const aOnline = isUserOnline ? isUserOnline(a.id) : false;
+        const bOnline = isUserOnline ? isUserOnline(b.id) : false;
+        if (aOnline && !bOnline) return -1;
+        if (!aOnline && bOnline) return 1;
+
+        const aTime = new Date(a.last_active_at || a.updated_at || a.created_at || 0).getTime();
+        const bTime = new Date(b.last_active_at || b.updated_at || b.created_at || 0).getTime();
+        return bTime - aTime;
+      })
+      .slice(0, 5);
+  }, [members, isUserOnline]);
 
 
   // Member tasks & meetings state
@@ -997,7 +1013,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                   Team Access &amp; Security Control
                 </h3>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Pause or block member workspace access. Suspended users will immediately see a restriction notice with instructions to contact you.
+                  Showing top 5 recently active members. For all other team members, view the full directory.
                 </span>
               </div>
             </div>
@@ -1029,7 +1045,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
             gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
             gap: 14
           }}>
-            {members.map((m) => {
+            {recentTopMembers.map((m) => {
               const isSelf = user?.id === m.id || (user?.email && m.email && user.email.toLowerCase() === m.email.toLowerCase());
               const isPaused = m.status === 'paused';
               const isBlocked = m.status === 'blocked';
@@ -1178,6 +1194,45 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
               );
             })}
           </div>
+
+          {members.length > 5 && (
+            <div style={{
+              marginTop: 14,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 16px',
+              borderRadius: 10,
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              flexWrap: 'wrap',
+              gap: 8
+            }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Showing top 5 recently active portal users ({recentTopMembers.length} of {members.length} team members).
+              </span>
+              <button
+                type="button"
+                onClick={() => onNavigate('members')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#60a5fa',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
+              >
+                <span>Go to Members Page to view all</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
