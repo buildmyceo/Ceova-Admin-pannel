@@ -1338,35 +1338,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                         }}>
                           {member.bio}
                         </div>
-                        {isBioLong && (
-                          <div style={{ marginTop: 4, display: 'flex', justifyContent: 'flex-end' }}>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleBio(member.id);
-                              }}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: '#60a5fa',
-                                fontSize: 10.5,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                padding: '1px 0',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                                transition: 'color 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
-                              onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
-                            >
-                              <span>{isBioExpanded ? 'Show less' : 'Show more'}</span>
-                              {isBioExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                            </button>
-                          </div>
-                        )}
+
                       </div>
                     );
                   })()}
@@ -1380,40 +1352,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
 
                     return (
                       <div style={{ marginTop: 'auto', paddingTop: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>
-                            <Sparkles size={10} />
-                            <span>Skills</span>
-                            <span style={{ fontSize: 9.5, opacity: 0.65, fontWeight: 500 }}>({member.skills.length})</span>
-                          </div>
-                          {hasMoreSkills && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleSkills(member.id);
-                              }}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: '#60a5fa',
-                                fontSize: 10,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                padding: '0 2px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 2,
-                                transition: 'color 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.color = '#93c5fd'}
-                              onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
-                              title={isSkillsExpanded ? 'Collapse Skills' : 'Expand Skills'}
-                            >
-                              <span>{isSkillsExpanded ? 'Show less' : 'Show more'}</span>
-                              {isSkillsExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                            </button>
-                          )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
+                          <Sparkles size={10} />
+                          <span>Skills</span>
+                          <span style={{ fontSize: 9.5, opacity: 0.65, fontWeight: 500 }}>({member.skills.length})</span>
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
                           {displayedSkills.map((skill: string, idx: number) => (
