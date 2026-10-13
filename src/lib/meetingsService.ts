@@ -133,10 +133,11 @@ export const filterVisibleMeetings = (meetings: Meeting[], currentUser?: Profile
   }
 
   const currentUserId = (currentUser.id || '').toLowerCase().trim();
+  const currentUserName = (currentUser.full_name || '').toLowerCase().trim();
+  const currentUserEmail = (currentUser.email || '').toLowerCase().trim();
   const userIdentifiers = [
-    currentUser.full_name?.trim().toLowerCase(),
-    currentUser.email?.trim().toLowerCase(),
-    currentUser.email?.split('@')[0]?.trim().toLowerCase(),
+    currentUserName,
+    currentUserEmail,
     (currentUser as any).username?.trim().toLowerCase()
   ].filter(Boolean) as string[];
 
@@ -155,21 +156,22 @@ export const filterVisibleMeetings = (meetings: Meeting[], currentUser?: Profile
       if (idMatch) return true;
     }
 
-    // 4. Name or email match in attendee_names
+    // 4. Exact name or email match in attendee_names
     if (m.attendee_names && Array.isArray(m.attendee_names)) {
       const nameMatch = m.attendee_names.some(name => {
         if (!name) return false;
         const normName = name.trim().toLowerCase();
-        return userIdentifiers.some(uid => uid === normName || uid.includes(normName) || normName.includes(uid));
+        // Exact identifier match
+        if (userIdentifiers.some(uid => uid === normName)) return true;
+        // Match name with email appended e.g. "Full Name (email@domain.com)"
+        if (currentUserEmail && normName.includes(`(${currentUserEmail})`)) return true;
+        if (currentUserName && normName.startsWith(currentUserName)) return true;
+        return false;
       });
       if (nameMatch) return true;
     }
 
-    // 5. If no specific attendee IDs or names specified, default to visible
-    if ((!m.attendee_ids || m.attendee_ids.length === 0) && (!m.attendee_names || m.attendee_names.length === 0)) {
-      return true;
-    }
-
+    // If target_type is 'members', uninvited users cannot see it
     return false;
   });
 };

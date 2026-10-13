@@ -117,6 +117,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
   const { members } = usePortalData();
 
   const isAdminUser = Boolean(user && (user.role === 'admin' || user.role === 'ceo'));
+  const isMemberUser = user?.role === 'member';
+  const canDelegate = isAdminUser || isMemberUser;
 
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedDateStr, setSelectedDateStr] = useState<string>(() => {
@@ -136,7 +138,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
   });
 
   const [calendarFilter, setCalendarFilter] = useState<'all' | 'meetings' | 'tasks'>('all');
-  const [taskScope, setTaskScope] = useState<'all' | 'mine'>('all');
+  const [taskScope, setTaskScope] = useState<'mine' | 'delegated' | 'all'>('mine');
   const [upcomingTab, setUpcomingTab] = useState<'all' | 'meetings' | 'tasks'>('all');
 
   // Side Popover and Edit State
@@ -328,20 +330,86 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
       .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
   }, [meetings]);
 
+  // Robust check: Is this task assigned to the currently logged in user?
+  const isAssignedToMe = (t: Task): boolean => {
+    if (!user) return false;
+    const uid = (user.id || '').toLowerCase().trim();
+    const uname = (user.full_name || '').trim().toLowerCase();
+    const uemail = (user.email || '').trim().toLowerCase();
+
+    // 1. Array of assignee IDs
+    if (t.assigned_to_ids && Array.isArray(t.assigned_to_ids)) {
+      if (t.assigned_to_ids.some(id => id && id.toLowerCase().trim() === uid)) return true;
+    }
+
+    // 2. Direct assigned_to_id
+    if (t.assigned_to_id && t.assigned_to_id.toLowerCase().trim() === uid) return true;
+
+    // 3. Array of assignee names
+    if (uname && t.assigned_to_names && Array.isArray(t.assigned_to_names)) {
+      if (t.assigned_to_names.some(n => n && n.trim().toLowerCase() === uname)) return true;
+    }
+
+    // 4. String assigned_to_name (could be single name or comma-separated list)
+    if (t.assigned_to_name) {
+      const parts = t.assigned_to_name.split(',').map(s => s.trim().toLowerCase());
+      if (uname && (parts.includes(uname) || t.assigned_to_name.trim().toLowerCase() === uname)) return true;
+      if (uemail && (parts.includes(uemail) || t.assigned_to_name.trim().toLowerCase() === uemail)) return true;
+    }
+
+    return false;
+  };
+
+  // Robust check: Was this task given/delegated by the currently logged in user?
+  const isGivenByMe = (t: Task): boolean => {
+    if (!user) return false;
+    const uid = (user.id || '').toLowerCase().trim();
+    const uname = (user.full_name || '').trim().toLowerCase();
+
+    if (t.assigned_by_id && t.assigned_by_id.toLowerCase().trim() === uid) return true;
+    if (uname && t.assigned_by_name && t.assigned_by_name.trim().toLowerCase() === uname) return true;
+
+    return false;
+  };
+
   // Filtered visible tasks according to taskScope
   const visibleTasks = useMemo(() => {
-    if (!user) return tasks;
-    if (taskScope === 'mine') {
-      return tasks.filter(t => {
-        const isAssigned = (t.assigned_to_ids && t.assigned_to_ids.includes(user.id)) ||
-                           t.assigned_to_id === user.id ||
-                           t.assigned_to_name === user.full_name ||
-                           t.assigned_by_id === user.id;
-        return isAssigned;
-      });
+    if (!user) return [];
+
+    // Non-admin team members (members, interns) must ONLY see tasks assigned to them,
+    // or tasks they delegated if they have assignment permissions.
+    // They must NEVER see tasks assigned to others across the workspace.
+    if (!isAdminUser) {
+      if (taskScope === 'delegated' && canDelegate) {
+        return tasks.filter(t => isGivenByMe(t));
+      }
+      return tasks.filter(t => isAssignedToMe(t));
     }
-    return tasks;
-  }, [tasks, user, taskScope]);
+
+    // Admin / CEO oversight
+    if (taskScope === 'delegated') {
+      return tasks.filter(t => isGivenByMe(t));
+    }
+    if (taskScope === 'all') {
+      return tasks;
+    }
+
+    // Default 'mine': only tasks assigned to the user
+    return tasks.filter(t => isAssignedToMe(t));
+  }, [tasks, user, taskScope, isAdminUser, canDelegate]);
+
+  // Scope counts for header pills
+  const myTasksCount = useMemo(() => {
+    return tasks.filter(t => isAssignedToMe(t) && !!parseTaskDueDate(t)).length;
+  }, [tasks, user]);
+
+  const delegatedTasksCount = useMemo(() => {
+    return tasks.filter(t => isGivenByMe(t) && !!parseTaskDueDate(t)).length;
+  }, [tasks, user]);
+
+  const allTasksCount = useMemo(() => {
+    return tasks.filter(t => !!parseTaskDueDate(t)).length;
+  }, [tasks]);
 
   // Tasks grouped by deadline date (YYYY-MM-DD)
   const tasksByDueDate = useMemo(() => {
@@ -798,41 +866,99 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
         </div>
 
         {calendarFilter !== 'meetings' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: '#71717a' }}>Tasks:</span>
-            <div style={{ display: 'inline-flex', background: '#18181b', border: '1px solid #27272a', borderRadius: 6, padding: 2 }}>
-              <button
-                type="button"
-                onClick={() => setTaskScope('all')}
-                style={{
-                  padding: '3px 8px',
-                  borderRadius: 4,
-                  background: taskScope === 'all' ? '#27272a' : 'transparent',
-                  color: taskScope === 'all' ? '#ffffff' : '#71717a',
-                  border: 'none',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                All Workspace
-              </button>
+            <div style={{ display: 'inline-flex', background: '#18181b', border: '1px solid #27272a', borderRadius: 6, padding: 2, gap: 2 }}>
               <button
                 type="button"
                 onClick={() => setTaskScope('mine')}
                 style={{
-                  padding: '3px 8px',
+                  padding: '3px 9px',
                   borderRadius: 4,
                   background: taskScope === 'mine' ? '#27272a' : 'transparent',
                   color: taskScope === 'mine' ? '#ffffff' : '#71717a',
                   border: 'none',
                   fontSize: 11,
                   fontWeight: 600,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5
                 }}
               >
-                My Tasks
+                <span>My Tasks</span>
+                <span style={{
+                  fontSize: 9.5,
+                  padding: '0 5px',
+                  borderRadius: 3,
+                  background: taskScope === 'mine' ? '#18181b' : '#27272a',
+                  color: taskScope === 'mine' ? '#60a5fa' : '#a1a1aa'
+                }}>
+                  {myTasksCount}
+                </span>
               </button>
+
+              {canDelegate && (
+                <button
+                  type="button"
+                  onClick={() => setTaskScope('delegated')}
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: 4,
+                    background: taskScope === 'delegated' ? '#27272a' : 'transparent',
+                    color: taskScope === 'delegated' ? '#ffffff' : '#71717a',
+                    border: 'none',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5
+                  }}
+                >
+                  <span>Given to Team</span>
+                  <span style={{
+                    fontSize: 9.5,
+                    padding: '0 5px',
+                    borderRadius: 3,
+                    background: taskScope === 'delegated' ? '#18181b' : '#27272a',
+                    color: taskScope === 'delegated' ? '#c084fc' : '#a1a1aa'
+                  }}>
+                    {delegatedTasksCount}
+                  </span>
+                </button>
+              )}
+
+              {isAdminUser && (
+                <button
+                  type="button"
+                  onClick={() => setTaskScope('all')}
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: 4,
+                    background: taskScope === 'all' ? '#27272a' : 'transparent',
+                    color: taskScope === 'all' ? '#ffffff' : '#71717a',
+                    border: 'none',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5
+                  }}
+                >
+                  <span>All Workspace</span>
+                  <span style={{
+                    fontSize: 9.5,
+                    padding: '0 5px',
+                    borderRadius: 3,
+                    background: taskScope === 'all' ? '#18181b' : '#27272a',
+                    color: taskScope === 'all' ? '#34d399' : '#a1a1aa'
+                  }}>
+                    {allTasksCount}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         )}
