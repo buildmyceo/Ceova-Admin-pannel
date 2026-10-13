@@ -90,8 +90,13 @@ export function mapNotificationRowToMeeting(row: any): Meeting {
 
   // Description
   let description = meta.description;
-  if (!description && row.message && !row.message.toLowerCase().includes('scheduled a google meet for')) {
-    description = row.message;
+  if (!description && row.message) {
+    const noteMatch = row.message.match(/Note\s*\/\s*Agenda:\s*([\s\S]+)$/i);
+    if (noteMatch) {
+      description = noteMatch[1].trim();
+    } else if (!row.message.toLowerCase().includes('scheduled a google meet for')) {
+      description = row.message;
+    }
   }
 
   const meetLink = meta.meet_link || row.link || '';
@@ -261,15 +266,14 @@ export const createMeeting = (
   saveMeetings(updated);
 
   // Automatically dispatch notification to Supabase and email
-  const audienceText = newMeeting.target_type === 'all'
-    ? 'All Members'
-    : (newMeeting.attendee_names && newMeeting.attendee_names.length > 0)
-      ? newMeeting.attendee_names.join(', ')
-      : 'Invited Members';
+  const scheduleLine = `${newMeeting.created_by_name} scheduled a Google Meet for ${newMeeting.date} at ${newMeeting.start_time}.`;
+  const messageBody = newMeeting.description && newMeeting.description.trim()
+    ? `${scheduleLine}\n\nNote / Agenda:\n${newMeeting.description.trim()}`
+    : scheduleLine;
 
   addNotification({
     title: `New Meeting: ${newMeeting.title}`,
-    message: `${newMeeting.created_by_name} scheduled a Google Meet for ${newMeeting.date} at ${newMeeting.start_time} (${audienceText}).`,
+    message: messageBody,
     type: 'meeting',
     link: newMeeting.meet_link,
     sender_id: newMeeting.created_by_id,
@@ -322,15 +326,14 @@ export const updateMeeting = (
   saveMeetings([...current]);
 
   // Dispatch notification and sync to Supabase
-  const audienceText = updatedMeeting.target_type === 'all'
-    ? 'All Members'
-    : (updatedMeeting.attendee_names && updatedMeeting.attendee_names.length > 0)
-      ? updatedMeeting.attendee_names.join(', ')
-      : 'Invited Members';
+  const updateScheduleLine = `${updatedMeeting.created_by_name || 'Admin'} updated meeting details for ${updatedMeeting.date} at ${updatedMeeting.start_time}.`;
+  const updateMessageBody = updatedMeeting.description && updatedMeeting.description.trim()
+    ? `${updateScheduleLine}\n\nNote / Agenda:\n${updatedMeeting.description.trim()}`
+    : updateScheduleLine;
 
   addNotification({
     title: `Updated Meeting: ${updatedMeeting.title}`,
-    message: `${updatedMeeting.created_by_name || 'Admin'} updated meeting details for ${updatedMeeting.date} at ${updatedMeeting.start_time} (${audienceText}).`,
+    message: updateMessageBody,
     type: 'meeting',
     link: updatedMeeting.meet_link,
     sender_id: updatedMeeting.created_by_id,

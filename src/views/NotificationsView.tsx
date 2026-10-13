@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AppNotification, NotificationType, NotificationAttachment, Profile } from '../types';
+import { AppNotification, NotificationType, NotificationAttachment, Profile, Meeting } from '../types';
 import { NavTab } from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { usePortalData } from '../context/PortalDataContext';
+import { getStoredMeetings } from '../lib/meetingsService';
 import {
   getStoredNotifications,
   fetchNotificationsFromSupabase,
@@ -77,6 +78,11 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
   // Photo Lightbox modal
   const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<string | null>(null);
 
+  // Audience / Recipients modal
+  const [selectedAudienceNotification, setSelectedAudienceNotification] = useState<AppNotification | null>(null);
+  const [audienceSearch, setAudienceSearch] = useState('');
+  const [storedMeetings, setStoredMeetings] = useState<Meeting[]>(() => getStoredMeetings());
+
   // File input refs
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +108,10 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
       reloadNotifications();
     };
 
+    const handleMeetingsUpdate = () => {
+      setStoredMeetings(getStoredMeetings());
+    };
+
     const handleOpenCompose = (e: any) => {
       setIsComposeOpen(true);
       if (e.detail?.memberId) {
@@ -111,6 +121,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
     };
 
     window.addEventListener('ceova_notifications_updated', handleUpdate);
+    window.addEventListener('ceova_meetings_updated', handleMeetingsUpdate);
     window.addEventListener('ceova_open_compose_notification', handleOpenCompose);
 
     // Check if opened with pre-selected member in sessionStorage
@@ -124,10 +135,22 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
 
     return () => {
       window.removeEventListener('ceova_notifications_updated', handleUpdate);
+      window.removeEventListener('ceova_meetings_updated', handleMeetingsUpdate);
       window.removeEventListener('ceova_open_compose_notification', handleOpenCompose);
       unsubscribeRealtime();
     };
   }, [user]);
+
+  // Close audience modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedAudienceNotification) {
+        setSelectedAudienceNotification(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedAudienceNotification]);
 
   // When compose modal opens, default target type appropriately
   const handleOpenComposeModal = (initialRecipientId?: string) => {
@@ -436,6 +459,154 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
     } catch {
       return '';
     }
+  };
+
+  // Resolve complete profiles for members in the selected notification's audience
+  const resolvedAudienceList = useMemo(() => {
+    if (!selectedAudienceNotification) return [];
+
+    if (selectedAudienceNotification.target_type === 'all') {
+      return members.map(m => {
+        const hasRead = (selectedAudienceNotification.read_by_ids && selectedAudienceNotification.read_by_ids.includes(m.id)) ||
+          (selectedAudienceNotification.read_by_names && selectedAudienceNotification.read_by_names.some(rn => rn.toLowerCase() === (m.full_name || '').toLowerCase()));
+        return {
+          id: m.id,
+          name: m.full_name || m.email || 'Team Member',
+          email: m.email || '',
+          role: m.role,
+          department: m.department || '',
+          designation: m.designation || '',
+          avatar: m.avatar_url,
+          hasRead: Boolean(hasRead)
+        };
+      });
+    }
+
+    const recIds = selectedAudienceNotification.recipient_ids || [];
+    const recNames = selectedAudienceNotification.recipient_names || [];
+
+    const list: Array<{
+      id: string;
+      name: string;
+      email: string;
+      role?: string;
+      department?: string;
+      designation?: string;
+      avatar?: string;
+      hasRead: boolean;
+    }> = [];
+
+    const processedIds = new Set<string>();
+    const processedNames = new Set<string>();
+
+    // 1. Match by IDs
+    recIds.forEach(id => {
+      if (!id) return;
+      const idKey = id.toLowerCase().trim();
+      if (processedIds.has(idKey)) return;
+      processedIds.add(idKey);
+
+      const member = members.find(m => m.id.toLowerCase().trim() === idKey);
+      if (member) {
+        if (member.full_name) processedNames.add(member.full_name.toLowerCase().trim());
+        const hasRead = (selectedAudienceNotification.read_by_ids && selectedAudienceNotification.read_by_ids.includes(member.id)) ||
+          (selectedAudienceNotification.read_by_names && selectedAudienceNotification.read_by_names.some(rn => rn.toLowerCase() === (member.full_name || '').toLowerCase()));
+        list.push({
+          id: member.id,
+          name: member.full_name || member.email || 'Team Member',
+          email: member.email || '',
+          role: member.role,
+          department: member.department || '',
+          designation: member.designation || '',
+          avatar: member.avatar_url,
+          hasRead: Boolean(hasRead)
+        });
+      } else {
+        const hasRead = selectedAudienceNotification.read_by_ids && selectedAudienceNotification.read_by_ids.includes(id);
+        list.push({
+          id,
+          name: id,
+          email: '',
+          hasRead: Boolean(hasRead)
+        });
+      }
+    });
+
+    // 2. Match by Names (e.g. for meetings where recipient_names are populated)
+    recNames.forEach(rawName => {
+      if (!rawName || rawName === 'Everyone' || rawName === 'Specific Members') return;
+      const cleanName = rawName.replace(/\s*\([^)]*\)$/, '').trim();
+      const nameKey = cleanName.toLowerCase();
+      if (processedNames.has(nameKey)) return;
+      processedNames.add(nameKey);
+
+      const member = members.find(m =>
+        (m.full_name && m.full_name.toLowerCase().trim() === nameKey) ||
+        (m.email && m.email.toLowerCase().trim() === nameKey)
+      );
+
+      if (member) {
+        if (!processedIds.has(member.id.toLowerCase().trim())) {
+          processedIds.add(member.id.toLowerCase().trim());
+          const hasRead = (selectedAudienceNotification.read_by_ids && selectedAudienceNotification.read_by_ids.includes(member.id)) ||
+            (selectedAudienceNotification.read_by_names && selectedAudienceNotification.read_by_names.some(rn => rn.toLowerCase() === cleanName.toLowerCase()));
+          list.push({
+            id: member.id,
+            name: member.full_name || member.email || cleanName,
+            email: member.email || '',
+            role: member.role,
+            department: member.department || '',
+            designation: member.designation || '',
+            avatar: member.avatar_url,
+            hasRead: Boolean(hasRead)
+          });
+        }
+      } else {
+        const hasRead = selectedAudienceNotification.read_by_names &&
+          selectedAudienceNotification.read_by_names.some(rn => rn.toLowerCase().trim() === nameKey);
+        list.push({
+          id: 'user_' + cleanName,
+          name: cleanName,
+          email: '',
+          hasRead: Boolean(hasRead)
+        });
+      }
+    });
+
+    return list;
+  }, [selectedAudienceNotification, members]);
+
+  const filteredAudienceList = useMemo(() => {
+    if (!audienceSearch.trim()) return resolvedAudienceList;
+    const q = audienceSearch.toLowerCase().trim();
+    return resolvedAudienceList.filter(item =>
+      item.name.toLowerCase().includes(q) ||
+      item.email.toLowerCase().includes(q) ||
+      (item.department && item.department.toLowerCase().includes(q)) ||
+      (item.designation && item.designation.toLowerCase().includes(q)) ||
+      (item.role && item.role.toLowerCase().includes(q))
+    );
+  }, [resolvedAudienceList, audienceSearch]);
+
+  const getInitials = (name: string) => {
+    if (!name) return 'U';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const getInitialsGradient = (name: string) => {
+    const gradients = [
+      'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+      'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+      'linear-gradient(135deg, #ec4899, #be185d)',
+      'linear-gradient(135deg, #10b981, #047857)',
+      'linear-gradient(135deg, #f59e0b, #d97706)',
+      'linear-gradient(135deg, #06b6d4, #0e7490)'
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i);
+    return gradients[Math.abs(hash) % gradients.length];
   };
 
   const getTypeMeta = (type: NotificationType) => {
@@ -962,53 +1133,114 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                         </span>
                       )}
 
-                      {/* Audience Badge */}
-                      <span style={{
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        padding: '1px 7px',
-                        borderRadius: 4,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        flexShrink: 0
-                      }}>
+                      {/* Audience Badge - Interactive button to view all recipients */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAudienceSearch('');
+                          setSelectedAudienceNotification(item);
+                        }}
+                        title={
+                          item.target_type === 'all'
+                            ? 'Broadcast to all members • Click to view recipients'
+                            : (item.recipient_names && item.recipient_names.length > 1)
+                              ? `Sent to ${item.recipient_names.length} members • Click to view all recipients`
+                              : 'Click to view recipient details'
+                        }
+                        style={{
+                          fontSize: 11,
+                          color: '#e4e4e7',
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          flexShrink: 0,
+                          cursor: 'pointer',
+                          transition: 'all 0.18s ease',
+                          outline: 'none'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.18)';
+                          e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.45)';
+                          e.currentTarget.style.color = '#ffffff';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                          e.currentTarget.style.color = '#e4e4e7';
+                        }}
+                      >
                         {item.target_type === 'all' ? (
                           <>
-                            <Users size={11} />
+                            <Users size={12} style={{ color: '#38bdf8' }} />
                             <span>To: Everyone</span>
                           </>
                         ) : (
                           <>
-                            <UserCheck size={11} />
+                            <UserCheck size={12} style={{ color: '#60a5fa' }} />
                             <span>
                               To: {item.recipient_names && item.recipient_names.length > 0
-                                ? (item.recipient_names.length === 1 
-                                    ? item.recipient_names[0] 
-                                    : `${item.recipient_names[0]} +${item.recipient_names.length - 1}`)
+                                ? item.recipient_names[0]
                                 : 'Specific Members'}
                             </span>
+                            {item.recipient_names && item.recipient_names.length > 1 && (
+                              <span
+                                style={{
+                                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.45), rgba(37, 99, 235, 0.45))',
+                                  color: '#bfdbfe',
+                                  padding: '1px 6px',
+                                  borderRadius: 10,
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  border: '1px solid rgba(147, 197, 253, 0.35)',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  marginLeft: 1
+                                }}
+                              >
+                                +{item.recipient_names.length - 1}
+                              </span>
+                            )}
                           </>
                         )}
-                      </span>
+                      </button>
 
                       {/* Read Receipt Badge on Header for Senders */}
                       {isSentByMe && receipt && (
-                        <span
-                          title={receipt.seenNames.length > 0 ? `Seen by: ${receipt.seenNames.join(', ')}` : (receipt.seenCount > 0 ? 'Seen by recipient' : 'Delivered to recipients')}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAudienceSearch('');
+                            setSelectedAudienceNotification(item);
+                          }}
+                          title={receipt.seenNames.length > 0 ? `Seen by: ${receipt.seenNames.join(', ')} (Click to view)` : 'Click to view delivery status'}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 4,
-                            padding: '1px 7px',
-                            borderRadius: 5,
+                            padding: '2px 8px',
+                            borderRadius: 6,
                             background: receipt.seenCount > 0 ? 'rgba(16, 185, 129, 0.16)' : 'rgba(255, 255, 255, 0.06)',
                             border: receipt.seenCount > 0 ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255, 255, 255, 0.1)',
                             color: receipt.seenCount > 0 ? '#34d399' : '#a1a1aa',
                             fontSize: 11,
                             fontWeight: 700,
-                            flexShrink: 0
+                            flexShrink: 0,
+                            cursor: 'pointer',
+                            outline: 'none',
+                            transition: 'all 0.18s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.filter = 'brightness(1.15)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.filter = 'none';
                           }}
                         >
                           {receipt.seenCount > 0 ? (
@@ -1021,7 +1253,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                               ? (receipt.seenCount > 0 ? `Seen by ${receipt.seenCount}/${receipt.totalRecipients}` : 'Delivered (0 seen)')
                               : (receipt.seenCount > 0 ? 'Seen' : 'Delivered')}
                           </span>
-                        </span>
+                        </button>
                       )}
 
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
@@ -1041,15 +1273,87 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
                     </h4>
 
                     {/* Message Body */}
-                    <p style={{
-                      margin: 0,
-                      fontSize: 13,
-                      color: 'var(--text-muted, #a1a1aa)',
-                      lineHeight: 1.55,
-                      whiteSpace: 'pre-wrap'
-                    }}>
-                      {item.message}
-                    </p>
+                    {item.type === 'meeting' ? (
+                      (() => {
+                        // Strip trailing recipient list in parentheses: "(Harshit Kumar, Pragya tyagi, ...)" or "(All Members)"
+                        let cleanText = (item.message || '')
+                          .replace(/\s*\([^)]*(?:@|,|Members|Everyone|All|Invited)[^)]*\)\.?/gi, '.')
+                          .replace(/\s*\([^)]+\)\.?$/g, '.')
+                          .replace(/\.{2,}$/, '.')
+                          .trim();
+
+                        // Look up note / description
+                        let noteOrDescription = (item.meta?.description || '').trim();
+                        if (!noteOrDescription && item.meeting_id) {
+                          const matchedMeeting = storedMeetings.find(m => m.id === item.meeting_id);
+                          if (matchedMeeting?.description) {
+                            noteOrDescription = matchedMeeting.description.trim();
+                          }
+                        }
+
+                        // Check if cleanText already includes the note
+                        const noteAlreadyInMessage = noteOrDescription && cleanText.includes(noteOrDescription);
+
+                        return (
+                          <div>
+                            <p style={{
+                              margin: 0,
+                              fontSize: 13,
+                              color: 'var(--text-muted, #a1a1aa)',
+                              lineHeight: 1.55,
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              {cleanText}
+                            </p>
+
+                            {noteOrDescription && !noteAlreadyInMessage && (
+                              <div style={{
+                                marginTop: 10,
+                                padding: '10px 14px',
+                                borderRadius: 8,
+                                background: 'rgba(30, 41, 59, 0.45)',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                borderLeft: '3px solid #3b82f6'
+                              }}>
+                                <div style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.04em',
+                                  color: '#60a5fa',
+                                  marginBottom: 4,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5
+                                }}>
+                                  <FileText size={12} />
+                                  <span>Meeting Agenda / Notes:</span>
+                                </div>
+                                <div style={{
+                                  fontSize: 13,
+                                  color: '#f1f5f9',
+                                  lineHeight: 1.5,
+                                  whiteSpace: 'pre-wrap',
+                                  fontWeight: 450
+                                }}>
+                                  {noteOrDescription}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <p style={{
+                        margin: 0,
+                        fontSize: 13,
+                        color: 'var(--text-muted, #a1a1aa)',
+                        lineHeight: 1.55,
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        {item.message}
+                      </p>
+                    )}
 
                     {/* Attachments Section: ONLY Link, Photos, and Files */}
                     {/* 1. LINK ATTACHMENT */}
@@ -2223,6 +2527,381 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onNavigate
             >
               <X size={18} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* RECIPIENTS / AUDIENCE MODAL                                               */}
+      {/* ========================================================================= */}
+      {selectedAudienceNotification && (
+        <div
+          onClick={() => setSelectedAudienceNotification(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.78)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: 16
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'rgba(15, 20, 30, 0.94)',
+              backdropFilter: 'blur(50px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(50px) saturate(180%)',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
+              borderRadius: 18,
+              width: '100%',
+              maxWidth: 520,
+              maxHeight: '86vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 22px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(37, 99, 235, 0.15))',
+                  border: '1px solid rgba(59, 130, 246, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#60a5fa',
+                  flexShrink: 0
+                }}>
+                  {selectedAudienceNotification.type === 'meeting' ? <Video size={18} /> : <Users size={18} />}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
+                      {selectedAudienceNotification.type === 'meeting' ? 'Meeting Attendees' : 'Message Recipients'}
+                    </h3>
+                    <span style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: 'rgba(59, 130, 246, 0.18)',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      color: '#93c5fd'
+                    }}>
+                      {selectedAudienceNotification.target_type === 'all'
+                        ? 'All Members'
+                        : `${resolvedAudienceList.length}`}
+                    </span>
+                  </div>
+                  <p style={{
+                    margin: '3px 0 0 0',
+                    fontSize: 12,
+                    color: 'var(--text-muted, #94a3b8)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {selectedAudienceNotification.title}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAudienceNotification(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: 8,
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-muted, #94a3b8)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                  e.currentTarget.style.color = '#94a3b8';
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Search Bar if > 4 recipients */}
+            {resolvedAudienceList.length > 4 && (
+              <div style={{
+                padding: '12px 22px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                background: 'rgba(0, 0, 0, 0.2)'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '7px 12px',
+                  borderRadius: 8,
+                  background: '#121620',
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  <Search size={14} style={{ color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    value={audienceSearch}
+                    onChange={(e) => setAudienceSearch(e.target.value)}
+                    placeholder="Filter by name, email, or department..."
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      width: '100%',
+                      outline: 'none'
+                    }}
+                  />
+                  {audienceSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setAudienceSearch('')}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Body - Recipient List */}
+            <div style={{
+              padding: '12px 22px',
+              overflowY: 'auto',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8
+            }}>
+              {filteredAudienceList.length === 0 ? (
+                <div style={{
+                  padding: '36px 16px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted, #94a3b8)',
+                  fontSize: 13
+                }}>
+                  No recipients found matching "{audienceSearch}".
+                </div>
+              ) : (
+                filteredAudienceList.map((recipient) => (
+                  <div
+                    key={recipient.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      {recipient.avatar ? (
+                        <img
+                          src={recipient.avatar}
+                          alt={recipient.name}
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            flexShrink: 0
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: '50%',
+                          background: getInitialsGradient(recipient.name),
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          flexShrink: 0,
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.3)'
+                        }}>
+                          {getInitials(recipient.name)}
+                        </div>
+                      )}
+
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: '#ffffff'
+                          }}>
+                            {recipient.name}
+                          </span>
+
+                          {recipient.role && (
+                            <span style={{
+                              fontSize: 9,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              background: recipient.role === 'admin' ? 'rgba(239, 68, 68, 0.18)' : recipient.role === 'intern' ? 'rgba(245, 158, 11, 0.18)' : 'rgba(59, 130, 246, 0.18)',
+                              color: recipient.role === 'admin' ? '#f87171' : recipient.role === 'intern' ? '#fbbf24' : '#60a5fa',
+                              border: '1px solid rgba(255, 255, 255, 0.08)'
+                            }}>
+                              {recipient.role}
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{
+                          fontSize: 11,
+                          color: 'var(--text-muted, #94a3b8)',
+                          marginTop: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexWrap: 'wrap'
+                        }}>
+                          {recipient.designation && <span>{recipient.designation}</span>}
+                          {recipient.designation && recipient.department && <span>•</span>}
+                          {recipient.department && <span>{recipient.department}</span>}
+                          {(recipient.designation || recipient.department) && recipient.email && <span>•</span>}
+                          {recipient.email && <span style={{ color: '#64748b' }}>{recipient.email}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Delivery / Seen status */}
+                    <div style={{ flexShrink: 0 }}>
+                      {recipient.hasRead ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: 'rgba(16, 185, 129, 0.14)',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                          color: '#34d399',
+                          fontSize: 11,
+                          fontWeight: 600
+                        }}>
+                          <CheckCheck size={12} />
+                          <span>Seen</span>
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: 'rgba(255, 255, 255, 0.04)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          color: '#94a3b8',
+                          fontSize: 11
+                        }}>
+                          <Check size={11} />
+                          <span>Delivered</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 22px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'rgba(0, 0, 0, 0.2)'
+            }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted, #94a3b8)' }}>
+                Total: <strong>{resolvedAudienceList.length}</strong> recipient{resolvedAudienceList.length === 1 ? '' : 's'}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAudienceNotification(null)}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: 8,
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: '#ffffff',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.14)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
