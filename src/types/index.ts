@@ -70,6 +70,8 @@ export interface TaskAttachment {
   uploaded_by: string;
   uploaded_at: string;
   note?: string;
+  uploaded_by_id?: string;
+  user_id?: string;
 }
 
 export interface Task {

@@ -10,6 +10,7 @@ import {
   Calendar, 
   Clock, 
   AlertTriangle, 
+  AlertCircle,
   CheckCircle2, 
   User, 
   Tag, 
@@ -272,11 +273,80 @@ export const TaskAutoDeleteTimer: React.FC<{
   );
 };
 
+export const isTaskOverdue = (task: Task): boolean => {
+  if (!task.due_date || task.status === 'completed') return false;
+  return new Date(task.due_date).getTime() < Date.now();
+};
+
+export const hasUserSubmittedTask = (task: Task, targetUser: { id?: string; full_name?: string } | null): boolean => {
+  if (!targetUser || !task.attachments || !Array.isArray(task.attachments)) return false;
+  const uid = (targetUser.id || '').trim();
+  const uname = (targetUser.full_name || '').trim().toLowerCase();
+
+  return task.attachments.some(a => {
+    const isDeliverable = a.type !== 'banner' && a.type !== 'briefing_video' && a.type !== 'briefing_file';
+    if (!isDeliverable) return false;
+
+    if (uid && ((a as any).uploaded_by_id === uid || (a as any).user_id === uid)) {
+      return true;
+    }
+    if (uname && a.uploaded_by && a.uploaded_by.trim().toLowerCase() === uname) {
+      return true;
+    }
+    return false;
+  });
+};
+
+export interface TaskAssigneeStatus {
+  id?: string;
+  name: string;
+  hasSubmitted: boolean;
+  submittedAt?: string;
+}
+
+export const getTaskAssigneesStatus = (task: Task): TaskAssigneeStatus[] => {
+  const result: TaskAssigneeStatus[] = [];
+  const rawNames = (task.assigned_to_names && task.assigned_to_names.length > 0)
+    ? task.assigned_to_names
+    : (task.assigned_to_name ? task.assigned_to_name.split(',').map(s => s.trim()) : []);
+
+  const rawIds = task.assigned_to_ids || (task.assigned_to_id ? [task.assigned_to_id] : []);
+  const count = Math.max(rawNames.length, rawIds.length, 1);
+
+  for (let i = 0; i < count; i++) {
+    const id = rawIds[i];
+    const name = rawNames[i] || (id ? 'Team Member' : 'Unassigned');
+    const normName = name.trim().toLowerCase();
+
+    const userDeliverables = (task.attachments || []).filter(a => {
+      const isDeliverable = a.type !== 'banner' && a.type !== 'briefing_video' && a.type !== 'briefing_file';
+      if (!isDeliverable) return false;
+      if (id && ((a as any).uploaded_by_id === id || (a as any).user_id === id)) return true;
+      if (normName && a.uploaded_by && a.uploaded_by.trim().toLowerCase() === normName) return true;
+      return false;
+    });
+
+    const hasSubmitted = userDeliverables.length > 0;
+    const latestSubmission = userDeliverables.sort((a, b) => 
+      new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime()
+    )[0];
+
+    result.push({
+      id,
+      name,
+      hasSubmitted,
+      submittedAt: latestSubmission?.uploaded_at
+    });
+  }
+
+  return result;
+};
+
 export const getSubmissionGraceStatus = (task: Task) => {
   if (task.status !== 'review') return { isReview: false, isWithinGrace: false, remainingMs: 0 };
   return {
     isReview: true,
-    isWithinGrace: false, // Strict lock once submitted: editing disabled until rejected by task assigner
+    isWithinGrace: false,
     remainingMs: 0
   };
 };
@@ -848,8 +918,19 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                              currentTask.assigned_to_id === user?.id ||
                              currentTask.assigned_to_name === user?.full_name;
 
+    const isOverdue = isTaskOverdue(currentTask);
+    const hasSubmitted = hasUserSubmittedTask(currentTask, user);
+
     // If an assignee (non-owner/admin) attempts to submit or complete, enforce the deliverable submission modal
     if ((targetStatus === 'completed' || targetStatus === 'review') && !isOwner && isAssignedToUser) {
+      if (isOverdue) {
+        alert('The deadline for this task has passed. Submissions are closed.');
+        return;
+      }
+      if (hasSubmitted && !currentTask.review_feedback) {
+        alert('Your deliverable is already submitted and locked awaiting evaluation.');
+        return;
+      }
       setSubmittingTask(currentTask);
       setSubmissionNoteText('');
       setSubmissionFile(null);
@@ -857,8 +938,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
       return;
     }
 
-    if (currentTask.status === 'review' && !isOwner) {
-      alert('This deliverable is locked. Once submitted, editing is disabled until the task assigner rejects or requests a retry.');
+    if (hasSubmitted && !isOwner && !currentTask.review_feedback) {
+      alert('Your deliverable is locked. Once submitted, editing is disabled until the task assigner rejects or requests a retry.');
       return;
     }
 
@@ -988,8 +1069,16 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
   // Upload deliverable file to Supabase Storage and attach to task
   const handleUploadDeliverable = async (task: Task, file: File) => {
     const isOwner = isAdminUser || task.assigned_by_id === user?.id || task.assigned_by_name === user?.full_name;
-    if (task.status === 'review' && !isOwner) {
-      alert('This deliverable is locked. Once submitted, editing and file uploads are disabled until the task assigner rejects the task.');
+    const isOverdue = isTaskOverdue(task);
+    const hasSubmitted = hasUserSubmittedTask(task, user);
+
+    if (isOverdue && !isOwner) {
+      alert('The deadline for this task has passed. Submissions are closed.');
+      return;
+    }
+
+    if (hasSubmitted && !isOwner && !task.review_feedback) {
+      alert('Your deliverable is already submitted and locked awaiting review.');
       return;
     }
 
@@ -1059,7 +1148,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
         size: fileToUpload.size,
         type: fileToUpload.type || 'file',
         uploaded_by: user?.full_name || 'Team Member',
-        uploaded_at: new Date().toISOString()
+        uploaded_at: new Date().toISOString(),
+        uploaded_by_id: user?.id,
+        user_id: user?.id
       };
 
       const updatedAttachments = [...(task.attachments || []), newAttachment];
@@ -1193,17 +1284,36 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
     setSubmissionError('');
 
     const isOwner = isAdminUser || submittingTask.assigned_by_id === user?.id || submittingTask.assigned_by_name === user?.full_name;
-    if (submittingTask.status === 'review' && !isOwner) {
-      setSubmissionError('This deliverable is already submitted and locked. You cannot edit it until the task assigner rejects the task.');
+
+    // Rule 0A: If task deadline has passed, no user can submit work
+    if (isTaskOverdue(submittingTask) && !isOwner) {
+      setSubmissionError('The deadline for this task has passed. Submissions are closed.');
       return;
     }
 
-    const hasExistingFile = submittingTask.attachments && submittingTask.attachments.some(a => 
-      a.type !== 'submission_note' && a.type !== 'banner' && a.type !== 'briefing_video' && a.type !== 'briefing_file'
-    );
+    // Rule 0B: If task is completed and approved
+    if (submittingTask.status === 'completed' && !isOwner) {
+      setSubmissionError('This task is already completed and approved.');
+      return;
+    }
+
+    // Rule 0C: Has this specific user already submitted?
+    const hasAlreadySubmitted = hasUserSubmittedTask(submittingTask, user);
+    if (hasAlreadySubmitted && !submittingTask.review_feedback && !isOwner) {
+      setSubmissionError('Your deliverable is already submitted and locked. You cannot edit it until the task assigner rejects or requests a retry.');
+      return;
+    }
+
+    const hasMyExistingFile = (submittingTask.attachments || []).some(a => {
+      const isDeliverable = a.type !== 'submission_note' && a.type !== 'banner' && a.type !== 'briefing_video' && a.type !== 'briefing_file';
+      if (!isDeliverable) return false;
+      const isThisUser = (user?.id && ((a as any).uploaded_by_id === user.id || (a as any).user_id === user.id)) ||
+        (user?.full_name && a.uploaded_by?.toLowerCase().trim() === user.full_name.toLowerCase().trim());
+      return isThisUser;
+    });
 
     // Rule 1: If requires_upload is TRUE, file upload is strictly required
-    if (submittingTask.requires_upload && !hasExistingFile && !submissionFile) {
+    if (submittingTask.requires_upload && !hasMyExistingFile && !submissionFile) {
       setSubmissionError('File upload is strictly required for this deliverable. Please attach your completed file before submitting.');
       return;
     }
@@ -1257,32 +1367,54 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
           size: fileToUpload.size,
           type: fileToUpload.type || 'file',
           uploaded_by: user?.full_name || 'Team Member',
-          uploaded_at: new Date().toISOString()
+          uploaded_at: new Date().toISOString(),
+          uploaded_by_id: user?.id,
+          user_id: user?.id
         });
       }
 
-      // If written summary was entered, record as submission note (replace prior note if editing)
+      // If written summary was entered, record as submission note (only replace note of THIS user)
       if (submissionNoteText.trim()) {
-        updatedAttachments = updatedAttachments.filter(a => a.type !== 'submission_note');
+        updatedAttachments = updatedAttachments.filter(a => {
+          if (a.type !== 'submission_note') return true;
+          const isThisUser = (user?.id && ((a as any).uploaded_by_id === user.id || (a as any).user_id === user.id)) ||
+            (user?.full_name && a.uploaded_by?.toLowerCase().trim() === user.full_name.toLowerCase().trim());
+          return !isThisUser;
+        });
+
         updatedAttachments.push({
-          name: 'Work Submission Summary',
+          name: `Work Submission (${user?.full_name || 'Team Member'})`,
           url: '',
           size: submissionNoteText.trim().length,
           type: 'submission_note',
           uploaded_by: user?.full_name || 'Team Member',
           uploaded_at: new Date().toISOString(),
-          note: submissionNoteText.trim()
+          note: submissionNoteText.trim(),
+          uploaded_by_id: user?.id,
+          user_id: user?.id
         });
       }
 
-      const submissionTimestamp = submittingTask.status === 'review' && submittingTask.submitted_at 
-        ? submittingTask.submitted_at 
-        : new Date().toISOString();
+      // Count team submission progress
+      const tempTask = { ...submittingTask, attachments: updatedAttachments };
+      const assigneesStatus = getTaskAssigneesStatus(tempTask);
+      const totalAssigneesCount = Math.max(1, assigneesStatus.length);
+      const submittedCount = assigneesStatus.filter(a => a.hasSubmitted).length;
+      const allSubmitted = submittedCount >= totalAssigneesCount;
+
+      const submissionTimestamp = new Date().toISOString();
+      const finalStatus: TaskStatus = allSubmitted 
+        ? 'review' 
+        : (submittingTask.status === 'todo' ? 'in_progress' : submittingTask.status);
 
       const updatePayload: Partial<Task> = {
         attachments: updatedAttachments,
-        status: 'review',
-        submitted_at: submissionTimestamp
+        status: finalStatus,
+        submitted_at: submissionTimestamp,
+        review_feedback: null,
+        reviewed_at: null,
+        reviewed_by_id: null,
+        reviewed_by_name: null
       };
 
       setTasks(prev => prev.map(t => t.id === submittingTask.id ? { ...t, ...updatePayload } : t));
@@ -1297,7 +1429,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
           if (dbError.message && dbError.message.includes('submitted_at')) {
             const fallbackPayload = {
               attachments: updatedAttachments,
-              status: 'review'
+              status: finalStatus
             };
             await supabase.from('tasks').update(fallbackPayload).eq('id', submittingTask.id);
           } else {
@@ -1309,9 +1441,12 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
       // Dispatch notification (and Resend email) to task owner/assigner
       try {
         if (submittingTask.assigned_by_id) {
+          const progressMsg = totalAssigneesCount > 1 
+            ? ` (${submittedCount}/${totalAssigneesCount} team members submitted)` 
+            : '';
           addNotification({
-            title: 'Task Deliverable Submitted for Review',
-            message: `Deliverable for "${submittingTask.title}" has been submitted by ${user?.full_name || 'Team Member'} for review. Locked awaiting your evaluation.`,
+            title: allSubmitted ? 'All Task Deliverables Submitted for Review' : 'Task Deliverable Update Received',
+            message: `Deliverable for "${submittingTask.title}" has been submitted by ${user?.full_name || 'Team Member'}${progressMsg}.`,
             target_type: 'members',
             recipient_ids: [submittingTask.assigned_by_id],
             type: 'task'
@@ -2051,8 +2186,20 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                                      task.assigned_to_id === user?.id ||
                                      task.assigned_to_name === user?.full_name;
             const isOwner = isAdminUser || task.assigned_by_id === user?.id || task.assigned_by_name === user?.full_name;
-            const isLockedReview = (task.status === 'review' || task.status === 'completed') && !isOwner;
-            const canUploadDeliverable = isAssignedToUser && !isLockedReview;
+
+            const isOverdue = isTaskOverdue(task);
+            const hasCurrentUserSubmitted = hasUserSubmittedTask(task, user);
+            const assigneesStatus = getTaskAssigneesStatus(task);
+            const totalAssigneesCount = assigneesStatus.length;
+            const submittedAssigneesCount = assigneesStatus.filter(a => a.hasSubmitted).length;
+
+            // An individual assignee is only locked if: task is completed, deadline has passed, or they already submitted
+            const isMySubmissionLocked = !isOwner && (
+              task.status === 'completed' ||
+              isOverdue ||
+              (hasCurrentUserSubmitted && !task.review_feedback)
+            );
+            const canUploadDeliverable = isAssignedToUser && !isMySubmissionLocked;
 
             // Resolved list of assignee names
             const displayAssignees = (task.assigned_to_names && task.assigned_to_names.length > 0)
@@ -2562,7 +2709,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                                     <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
                                       {new Date(att.uploaded_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                     </span>
-                                    {(canDelete || (att.uploaded_by === user?.full_name && !isLockedReview)) && (
+                                    {(canDelete || (att.uploaded_by === user?.full_name && !isMySubmissionLocked)) && (
                                       <button
                                         type="button"
                                         onClick={() => handleDeleteAttachment(task, (task.attachments || []).indexOf(att))}
@@ -2628,7 +2775,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                                     <Download size={10} /> Download
                                   </button>
 
-                                  {(canDelete || (att.uploaded_by === user?.full_name && !isLockedReview)) && (
+                                  {(canDelete || (att.uploaded_by === user?.full_name && !isMySubmissionLocked)) && (
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteAttachment(task, (task.attachments || []).indexOf(att))}
@@ -2983,45 +3130,79 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     </div>
                   )}
 
-                  {/* SUBMISSION STATUS & LOCK NOTICE (FOR ASSIGNEES / NON-OWNERS) */}
-                  {task.status === 'review' && !isOwner && (
-                    <SubmissionGraceTimer
-                      task={task}
-                      isOwner={isOwner}
-                    />
-                  )}
-
-                  {/* ASSIGNEE "SUBMIT FOR REVIEW" ACTION BUTTON */}
-                  {isAssignedToUser && task.status !== 'completed' && task.status !== 'review' && (
+                  {/* SUBMISSION STATUS & ACTIONS FOR ASSIGNEES */}
+                  {isAssignedToUser && task.status !== 'completed' && (
                     <div style={{ marginBottom: 12 }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSubmittingTask(task);
-                          setSubmissionNoteText('');
-                          setSubmissionFile(null);
-                          setSubmissionError('');
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          background: '#27272a',
-                          border: '1px solid #3f3f46',
+                      {isOverdue ? (
+                        <div style={{
+                          padding: '9px 12px',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          border: '1px solid rgba(239, 68, 68, 0.35)',
                           borderRadius: 'var(--radius-sm)',
-                          color: '#ffffff',
+                          color: '#f87171',
                           fontSize: 11,
                           fontWeight: 700,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: 6,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Send size={12} />
-                        <span>{task.review_feedback ? 'Re-Submit for Review' : 'Submit Work for Review'}</span>
-                      </button>
+                          gap: 6
+                        }}>
+                          <AlertTriangle size={13} />
+                          <span>Time Over • Submissions Closed</span>
+                        </div>
+                      ) : hasCurrentUserSubmitted && !task.review_feedback ? (
+                        <div style={{
+                          background: 'rgba(168, 85, 247, 0.08)',
+                          border: '1px solid rgba(168, 85, 247, 0.25)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '10px 12px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#c084fc', fontWeight: 700, marginBottom: 4 }}>
+                            <CheckCircle2 size={13} style={{ color: '#10b981', flexShrink: 0 }} />
+                            <span>Your Deliverable Submitted {totalAssigneesCount > 1 ? `(${submittedAssigneesCount}/${totalAssigneesCount} Team)` : ''} • Under Review</span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                            {totalAssigneesCount > 1 && submittedAssigneesCount < totalAssigneesCount
+                              ? `Your work is submitted and locked. Waiting for remaining team members (${assigneesStatus.filter(a => !a.hasSubmitted).map(a => a.name).join(', ')}) to submit.`
+                              : `Your deliverable is locked awaiting evaluation by ${task.assigned_by_name || 'the task assigner'}.`}
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubmittingTask(task);
+                            setSubmissionNoteText('');
+                            setSubmissionFile(null);
+                            setSubmissionError('');
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            background: '#27272a',
+                            border: '1px solid #3f3f46',
+                            borderRadius: 'var(--radius-sm)',
+                            color: '#ffffff',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <Send size={12} />
+                          <span>
+                            {task.review_feedback 
+                              ? 'Re-Submit for Review' 
+                              : (totalAssigneesCount > 1 
+                                  ? `Submit Your Deliverable (${submittedAssigneesCount}/${totalAssigneesCount} Submitted)` 
+                                  : 'Submit Work for Review')}
+                          </span>
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -3183,6 +3364,47 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     )}
                   </div>
 
+                  {/* Multi-Assignee Team Turnout Breakdown */}
+                  {totalAssigneesCount > 1 && (
+                    <div style={{
+                      marginTop: 8,
+                      marginBottom: 10,
+                      padding: '8px 10px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255, 255, 255, 0.06)'
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#a1a1aa', marginBottom: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>Team Submissions ({submittedAssigneesCount}/{totalAssigneesCount})</span>
+                        <span style={{
+                          fontSize: 9.5,
+                          padding: '1px 6px',
+                          borderRadius: 10,
+                          background: submittedAssigneesCount === totalAssigneesCount ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                          color: submittedAssigneesCount === totalAssigneesCount ? '#34d399' : '#60a5fa'
+                        }}>
+                          {submittedAssigneesCount === totalAssigneesCount ? 'All Submitted' : `${totalAssigneesCount - submittedAssigneesCount} Pending`}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {assigneesStatus.map((as, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10.5 }}>
+                            <span style={{ color: '#e4e4e7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{as.name}</span>
+                            {as.hasSubmitted ? (
+                              <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600 }}>
+                                <CheckCircle2 size={10} /> Submitted
+                              </span>
+                            ) : (
+                              <span style={{ color: isOverdue ? '#f87171' : '#f59e0b', display: 'flex', alignItems: 'center', gap: 3, fontSize: 10 }}>
+                                <Clock size={10} /> {isOverdue ? 'Time Over' : 'Pending'}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Status Indicator / Controller */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 11, color: '#71717a' }}>Status:</span>
@@ -3190,11 +3412,25 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <select
                           value={task.status}
-                          disabled={isLockedReview}
-                          title={isLockedReview ? "Submission locked. Editing is disabled until the task assigner rejects the task." : undefined}
+                          disabled={isMySubmissionLocked}
+                          title={
+                            isOverdue
+                              ? "The deadline for this task has passed. Submissions are closed."
+                              : isMySubmissionLocked
+                                ? "Your deliverable is already submitted and locked."
+                                : undefined
+                          }
                           onChange={(e) => {
                             const val = e.target.value as TaskStatus;
+                            if (isOverdue) {
+                              alert('The deadline for this task has passed. Submissions are closed.');
+                              return;
+                            }
                             if (val === 'review' || val === 'completed') {
+                              if (hasCurrentUserSubmitted && !task.review_feedback) {
+                                alert('Your deliverable is already submitted and locked awaiting review.');
+                                return;
+                              }
                               setSubmittingTask(task);
                               setSubmissionNoteText('');
                               setSubmissionFile(null);
@@ -3212,8 +3448,8 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                             background: sBadge.bg,
                             color: sBadge.color,
                             outline: 'none',
-                            cursor: isLockedReview ? 'not-allowed' : 'pointer',
-                            opacity: isLockedReview ? 0.7 : 1,
+                            cursor: isMySubmissionLocked ? 'not-allowed' : 'pointer',
+                            opacity: isMySubmissionLocked ? 0.7 : 1,
                             backdropFilter: 'blur(20px)',
                             WebkitBackdropFilter: 'blur(20px)'
                           }}
@@ -3225,22 +3461,22 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                             Completed (Submits Review)
                           </option>
                         </select>
-                        {isLockedReview && (
+                        {isMySubmissionLocked && (
                           <span 
-                            title="Submission locked after 5-minute window"
+                            title={isOverdue ? "Deadline expired" : "Submission locked awaiting review"}
                             style={{ 
                               display: 'inline-flex', 
                               alignItems: 'center', 
                               gap: 3, 
                               fontSize: 10, 
-                              color: '#c084fc',
-                              background: 'rgba(192, 132, 252, 0.12)',
-                              border: '1px solid rgba(192, 132, 252, 0.3)',
+                              color: isOverdue ? '#f87171' : '#c084fc',
+                              background: isOverdue ? 'rgba(239, 68, 68, 0.12)' : 'rgba(192, 132, 252, 0.12)',
+                              border: isOverdue ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(192, 132, 252, 0.3)',
                               padding: '2px 6px',
                               borderRadius: 12
                             }}
                           >
-                            <Lock size={10} /> Locked
+                            <Lock size={10} /> {isOverdue ? 'Closed' : 'Locked'}
                           </span>
                         )}
                       </div>
@@ -4557,18 +4793,29 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                 }}>
                   <Send size={15} />
                 </div>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
-                    {submittingTask.status === 'review' 
-                      ? 'Edit Deliverable (5-Min Grace Window)' 
-                      : (submittingTask.review_feedback ? 'Re-Submit Deliverable' : 'Submit Deliverable for Review')}
-                  </h3>
-                  <p style={{ margin: 0, fontSize: 11, color: '#71717a' }}>
-                    {submittingTask.status === 'review'
-                      ? 'Update notes or deliverable files before the 5-minute lock takes effect'
-                      : `Sent to ${submittingTask.assigned_by_name || 'Task Owner'} for evaluation`}
-                  </p>
-                </div>
+                {(() => {
+                  const isOverdueModal = isTaskOverdue(submittingTask);
+                  const modalHasUserSubmitted = hasUserSubmittedTask(submittingTask, user);
+
+                  return (
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+                        {isOverdueModal 
+                          ? 'Deliverable Deadline Expired' 
+                          : (modalHasUserSubmitted && !submittingTask.review_feedback 
+                              ? 'Deliverable Submitted (Under Review)' 
+                              : (submittingTask.review_feedback ? 'Re-Submit Deliverable' : 'Submit Deliverable for Review'))}
+                      </h3>
+                      <p style={{ margin: 0, fontSize: 11, color: '#71717a' }}>
+                        {isOverdueModal
+                          ? 'The deadline has ended. Submissions are closed.'
+                          : (modalHasUserSubmitted && !submittingTask.review_feedback
+                              ? 'Your deliverable is recorded. Awaiting review from the task assigner.'
+                              : `Sent to ${submittingTask.assigned_by_name || 'Task Owner'} for evaluation`)}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               <button
@@ -4615,6 +4862,30 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                   </div>
                 )}
               </div>
+
+              {/* Overdue Warning Alert */}
+              {isTaskOverdue(submittingTask) && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  marginBottom: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 12,
+                  color: '#f87171'
+                }}>
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <div>
+                    <strong>Time Over • Deadline Expired</strong>
+                    <div style={{ fontSize: 11, color: '#fca5a5', marginTop: 2 }}>
+                      The deadline for this task ended on {new Date(submittingTask.due_date!).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}. Submissions are no longer accepted. Contact the task assigner if you need an extension.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Review Feedback Alert if re-submitting */}
               {submittingTask.review_feedback && (
@@ -4746,13 +5017,14 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: 10.5, fontWeight: 600, color: '#10b981', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
                         <CheckCircle2 size={12} />
-                        <span>Already Attached Deliverables:</span>
+                        <span>Attached Deliverables ({submittingTask.attachments.filter(a => a.type !== 'submission_note' && a.type !== 'banner' && a.type !== 'briefing_video' && a.type !== 'briefing_file').length}):</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {submittingTask.attachments.filter(a => a.type !== 'submission_note' && a.type !== 'banner' && a.type !== 'briefing_video' && a.type !== 'briefing_file').map((a, i) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 4, fontSize: 11, border: '1px solid #27272a' }}>
                             <Paperclip size={11} style={{ color: '#a1a1aa' }} />
                             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                            <span style={{ color: '#38bdf8', fontSize: 10 }}>by {a.uploaded_by}</span>
                             <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>({formatFileSize(a.size)})</span>
                           </div>
                         ))}
@@ -4767,18 +5039,20 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     padding: '16px',
                     textAlign: 'center',
                     background: '#141416',
-                    cursor: 'pointer',
+                    cursor: isTaskOverdue(submittingTask) ? 'not-allowed' : 'pointer',
+                    opacity: isTaskOverdue(submittingTask) ? 0.6 : 1,
                     position: 'relative',
                     marginBottom: 14
                   }}>
                     <input
                       type="file"
                       id="deliverable-modal-file-req"
+                      disabled={isTaskOverdue(submittingTask)}
                       style={{
                         position: 'absolute',
                         inset: 0,
                         opacity: 0,
-                        cursor: 'pointer',
+                        cursor: isTaskOverdue(submittingTask) ? 'not-allowed' : 'pointer',
                         width: '100%',
                         height: '100%'
                       }}
@@ -4809,8 +5083,12 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                         <Upload size={20} style={{ color: '#a1a1aa' }} />
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#ffffff' }}>Choose or drag deliverable file</span>
-                        <span style={{ fontSize: 10, color: '#71717a' }}>Required before submission</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#ffffff' }}>
+                          {isTaskOverdue(submittingTask) ? 'File upload closed (Deadline passed)' : 'Choose or drag deliverable file'}
+                        </span>
+                        <span style={{ fontSize: 10, color: '#71717a' }}>
+                          {isTaskOverdue(submittingTask) ? 'Deadline has expired' : 'Required before submission'}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -4822,8 +5100,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                     </label>
                     <textarea
                       value={submissionNoteText}
+                      disabled={isTaskOverdue(submittingTask)}
                       onChange={(e) => setSubmissionNoteText(e.target.value)}
-                      placeholder="Add any notes, links, or context explaining the deliverables attached..."
+                      placeholder={isTaskOverdue(submittingTask) ? "Deadline passed. Submissions are closed." : "Add any notes, links, or context explaining the deliverables attached..."}
                       rows={3}
                       style={{
                         width: '100%',
@@ -4835,7 +5114,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                         color: '#ffffff',
                         outline: 'none',
                         resize: 'vertical',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        opacity: isTaskOverdue(submittingTask) ? 0.6 : 1,
+                        cursor: isTaskOverdue(submittingTask) ? 'not-allowed' : 'text'
                       }}
                     />
                   </div>
@@ -4864,13 +5145,14 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                   </label>
                   <textarea
                     value={submissionNoteText}
+                    disabled={isTaskOverdue(submittingTask)}
                     onChange={(e) => {
                       setSubmissionNoteText(e.target.value);
                       if (submissionError) setSubmissionError('');
                     }}
-                    placeholder="Write a clear summary of what you did, completed tasks, results, links or proof of work..."
+                    placeholder={isTaskOverdue(submittingTask) ? "Deadline passed. Submissions are closed." : "Write a clear summary of what you did, completed tasks, results, links or proof of work..."}
                     rows={4}
-                    required
+                    required={!isTaskOverdue(submittingTask)}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
@@ -4882,7 +5164,9 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                       outline: 'none',
                       resize: 'vertical',
                       boxSizing: 'border-box',
-                      marginBottom: 14
+                      marginBottom: 14,
+                      opacity: isTaskOverdue(submittingTask) ? 0.6 : 1,
+                      cursor: isTaskOverdue(submittingTask) ? 'not-allowed' : 'text'
                     }}
                   />
 
@@ -4904,11 +5188,12 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                       <input
                         type="file"
                         id="deliverable-modal-file-optional"
+                        disabled={isTaskOverdue(submittingTask)}
                         style={{
                           position: 'absolute',
                           inset: 0,
                           opacity: 0,
-                          cursor: 'pointer',
+                          cursor: isTaskOverdue(submittingTask) ? 'not-allowed' : 'pointer',
                           width: '100%',
                           height: '100%'
                         }}
@@ -4971,17 +5256,17 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingWork}
+                  disabled={submittingWork || isTaskOverdue(submittingTask)}
                   style={{
                     padding: '8px 20px',
-                    background: '#ffffff',
-                    border: '1px solid #ffffff',
+                    background: isTaskOverdue(submittingTask) ? '#27272a' : '#ffffff',
+                    border: isTaskOverdue(submittingTask) ? '1px solid #3f3f46' : '1px solid #ffffff',
                     borderRadius: 8,
-                    color: '#000000',
+                    color: isTaskOverdue(submittingTask) ? '#71717a' : '#000000',
                     fontSize: 12,
                     fontWeight: 700,
-                    cursor: submittingWork ? 'not-allowed' : 'pointer',
-                    opacity: submittingWork ? 0.6 : 1,
+                    cursor: (submittingWork || isTaskOverdue(submittingTask)) ? 'not-allowed' : 'pointer',
+                    opacity: (submittingWork || isTaskOverdue(submittingTask)) ? 0.6 : 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6
@@ -4989,9 +5274,11 @@ export const TasksView: React.FC<TasksViewProps> = ({ initialScope }) => {
                 >
                   <Send size={12} />
                   <span>
-                    {submittingWork 
-                      ? 'Submitting...' 
-                      : (submittingTask.review_feedback ? 'Re-Submit Deliverable' : 'Submit for Review')}
+                    {isTaskOverdue(submittingTask)
+                      ? 'Submissions Closed (Time Over)'
+                      : submittingWork 
+                        ? 'Submitting...' 
+                        : (submittingTask.review_feedback ? 'Re-Submit Deliverable' : 'Submit for Review')}
                   </span>
                 </button>
               </div>

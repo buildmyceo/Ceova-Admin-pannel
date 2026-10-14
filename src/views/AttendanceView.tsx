@@ -14,7 +14,7 @@ import {
   CalendarCheck
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
-import { Meeting, Profile } from '../types';
+import { Meeting, Profile, AttendanceStatus } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { usePortalData } from '../context/PortalDataContext';
 import { getVisibleMeetings, fetchMeetingsFromSupabase } from '../lib/meetingsService';
@@ -59,7 +59,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
     return () => window.removeEventListener('ceova_meetings_updated', handleUpdate);
   }, [reloadMeetings]);
 
-  // Meetings relevant to current user (invited or whole workspace)
+  // Meetings relevant to current user (invited, hosted, or whole workspace)
   const myMeetings = useMemo(() => {
     if (!user) return [];
     const uid = (user.id || '').toLowerCase().trim();
@@ -87,21 +87,35 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
 
     if (!user) return { totalInvited, attended, absent, pending, rate: 0 };
 
+    const uid = (user.id || '').toLowerCase().trim();
+    const uname = (user.full_name || '').toLowerCase().trim();
+    const uemail = (user.email || '').toLowerCase().trim();
+
     myMeetings.forEach(m => {
       // If attendance was recorded
       if (m.attendance && m.attendance.records) {
         totalInvited++;
-        const rec = m.attendance.records.find(r => 
-          r.user_id === user.id || 
-          r.user_email?.toLowerCase() === user.email?.toLowerCase() ||
-          r.user_name?.toLowerCase().trim() === user.full_name?.toLowerCase().trim()
+        const isHost = Boolean(
+          (m.created_by_id && m.created_by_id.toLowerCase().trim() === uid) ||
+          (m.created_by_name && m.created_by_name.toLowerCase().trim() === uname) ||
+          (m.attendance.marked_by_id && m.attendance.marked_by_id.toLowerCase().trim() === uid)
         );
+
+        const rec = m.attendance.records.find(r => 
+          (r.user_id && r.user_id.toLowerCase().trim() === uid) || 
+          (r.user_email && uemail && r.user_email.toLowerCase().trim() === uemail) ||
+          (r.user_name && r.user_name.toLowerCase().trim() === uname)
+        );
+
         if (rec) {
           if (rec.status === 'present' || rec.status === 'late') {
             attended++;
           } else if (rec.status === 'absent') {
             absent++;
           }
+        } else if (isHost) {
+          // The host organized and conducted the meeting
+          attended++;
         } else {
           // If in an all-hands meeting without individual entry
           attended++;
@@ -115,19 +129,27 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
     return { totalInvited, attended, absent, pending, rate };
   }, [myMeetings, user]);
 
-  // Meetings hosted by current user
+  // Upcoming meetings list (today onwards)
+  const upcomingMeetingsList = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return meetings.filter(m => !m.date || m.date >= todayStr);
+  }, [meetings]);
+
+  // Meetings hosted by current user (upcoming only)
   const hostedMeetings = useMemo(() => {
     if (!user) return [];
+    const todayStr = new Date().toISOString().split('T')[0];
     return meetings.filter(m => 
-      m.created_by_id === user.id || 
-      m.created_by_name?.toLowerCase().trim() === user.full_name?.toLowerCase().trim()
+      (!m.date || m.date >= todayStr) &&
+      (m.created_by_id === user.id || 
+       m.created_by_name?.toLowerCase().trim() === user.full_name?.toLowerCase().trim())
     );
   }, [meetings, user]);
 
-  // Meetings pending host attendance marking
+  // Meetings pending host attendance marking (today's concluded/ongoing meetings)
   const pendingHostedAttendance = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    return hostedMeetings.filter(m => !m.attendance && m.date <= todayStr);
+    return hostedMeetings.filter(m => !m.attendance && m.date === todayStr);
   }, [hostedMeetings]);
 
   // Team roster overall stats
@@ -152,6 +174,26 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
 
     meetings.forEach(m => {
       if (m.attendance && m.attendance.records) {
+        // Also credit the host as attended
+        const hostId = m.created_by_id?.toLowerCase().trim();
+        const hostName = m.created_by_name?.toLowerCase().trim();
+        if (hostId || hostName) {
+          const hostEntry = (hostId ? memberMap.get(hostId) : undefined) || Array.from(memberMap.values()).find(e => 
+            (hostId && e.profile.id.toLowerCase().trim() === hostId) ||
+            (hostName && e.profile.full_name.toLowerCase().trim() === hostName)
+          );
+          if (hostEntry) {
+            const hostInRecords = m.attendance.records.some(r => 
+              (r.user_id && r.user_id.toLowerCase().trim() === hostEntry.profile.id.toLowerCase().trim()) ||
+              (r.user_name && r.user_name.toLowerCase().trim() === hostEntry.profile.full_name.toLowerCase().trim())
+            );
+            if (!hostInRecords) {
+              hostEntry.totalInvited++;
+              hostEntry.attended++;
+            }
+          }
+        }
+
         m.attendance.records.forEach(r => {
           const entry = memberMap.get(r.user_id) || Array.from(memberMap.values()).find(e => 
             e.profile.full_name.toLowerCase().trim() === r.user_name.toLowerCase().trim()
@@ -468,7 +510,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
             }}
           >
             <ClipboardCheck size={16} />
-            Meetings Attendance Manager ({meetings.length})
+            Meetings Attendance Manager ({upcomingMeetingsList.length})
             {pendingHostedAttendance.length > 0 && (
               <span style={{
                 background: '#f59e0b',
@@ -569,34 +611,75 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
               }
               if (statusFilter !== 'all') {
                 const hasAttendance = Boolean(m.attendance);
-                const rec = m.attendance?.records?.find(r => 
-                  r.user_id === user?.id || 
-                  r.user_email?.toLowerCase() === user?.email?.toLowerCase() ||
-                  r.user_name?.toLowerCase().trim() === user?.full_name?.toLowerCase().trim()
+                const uid = (user?.id || '').toLowerCase().trim();
+                const uname = (user?.full_name || '').toLowerCase().trim();
+                const uemail = (user?.email || '').toLowerCase().trim();
+
+                const isHost = Boolean(
+                  user && (
+                    (m.created_by_id && m.created_by_id.toLowerCase().trim() === uid) ||
+                    (m.created_by_name && m.created_by_name.toLowerCase().trim() === uname) ||
+                    (m.attendance?.marked_by_id && m.attendance.marked_by_id.toLowerCase().trim() === uid)
+                  )
                 );
+
+                const rec = m.attendance?.records?.find(r => 
+                  (r.user_id && r.user_id.toLowerCase().trim() === uid) || 
+                  (r.user_email && uemail && r.user_email.toLowerCase().trim() === uemail) ||
+                  (r.user_name && r.user_name.toLowerCase().trim() === uname)
+                );
+
+                const userStatus: AttendanceStatus | 'pending' = !hasAttendance
+                  ? 'pending'
+                  : rec
+                  ? rec.status
+                  : isHost
+                  ? 'present'
+                  : 'present';
+
                 if (statusFilter === 'attended') {
-                  if (!hasAttendance || (rec?.status !== 'present' && rec?.status !== 'late')) return false;
+                  if (userStatus !== 'present' && userStatus !== 'late' && userStatus !== 'excused') return false;
                 } else if (statusFilter === 'absent') {
-                  if (!hasAttendance || rec?.status !== 'absent') return false;
+                  if (userStatus !== 'absent') return false;
                 } else if (statusFilter === 'pending') {
-                  if (hasAttendance) return false;
+                  if (userStatus !== 'pending') return false;
                 }
               }
               return true;
             })
             .map(m => {
-              // Find user's attendance record in this meeting
-              const rec = m.attendance?.records?.find(r => 
-                r.user_id === user?.id || 
-                r.user_email?.toLowerCase() === user?.email?.toLowerCase() ||
-                r.user_name?.toLowerCase().trim() === user?.full_name?.toLowerCase().trim()
+              const hasAttendance = Boolean(m.attendance);
+              const uid = (user?.id || '').toLowerCase().trim();
+              const uname = (user?.full_name || '').toLowerCase().trim();
+              const uemail = (user?.email || '').toLowerCase().trim();
+
+              const isHost = Boolean(
+                user && (
+                  (m.created_by_id && m.created_by_id.toLowerCase().trim() === uid) ||
+                  (m.created_by_name && m.created_by_name.toLowerCase().trim() === uname) ||
+                  (m.attendance?.marked_by_id && m.attendance.marked_by_id.toLowerCase().trim() === uid)
+                )
               );
 
-              const hasAttendance = Boolean(m.attendance);
-              const isPresent = rec?.status === 'present';
-              const isLate = rec?.status === 'late';
-              const isAbsent = rec?.status === 'absent';
-              const isHost = m.created_by_id === user?.id;
+              // Find user's attendance record in this meeting
+              const rec = m.attendance?.records?.find(r => 
+                (r.user_id && r.user_id.toLowerCase().trim() === uid) || 
+                (r.user_email && uemail && r.user_email.toLowerCase().trim() === uemail) ||
+                (r.user_name && r.user_name.toLowerCase().trim() === uname)
+              );
+
+              const userStatus: AttendanceStatus | 'pending' = !hasAttendance
+                ? 'pending'
+                : rec
+                ? rec.status
+                : isHost
+                ? 'present'
+                : 'present';
+
+              const isPresent = userStatus === 'present';
+              const isLate = userStatus === 'late';
+              const isExcused = userStatus === 'excused';
+              const isAbsent = userStatus === 'absent';
 
               return (
                 <div
@@ -715,6 +798,21 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
                           }}>
                             <Clock size={14} /> Attended (Late)
                           </div>
+                        ) : isExcused ? (
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            border: '1px solid rgba(59, 130, 246, 0.35)',
+                            fontSize: 12,
+                            fontWeight: 700
+                          }}>
+                            <CheckCircle2 size={14} /> Attended (Excused)
+                          </div>
                         ) : (
                           <div style={{
                             display: 'inline-flex',
@@ -792,7 +890,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ onNavigate }) =>
           ========================================================================= */}
       {activeTab === 'manage_meetings' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {meetings
+          {upcomingMeetingsList
             .filter(m => {
               if (!searchQuery) return true;
               const q = searchQuery.toLowerCase();

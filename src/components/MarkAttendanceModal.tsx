@@ -401,7 +401,7 @@ export const MarkAttendanceModal: React.FC<MarkAttendanceModalProps> = ({
         )}
 
         {/* User's Personal Result Banner */}
-        {myRecord && (
+        {myRecord ? (
           <div style={{
             margin: '16px 24px 0 24px',
             padding: '12px 18px',
@@ -435,7 +435,7 @@ export const MarkAttendanceModal: React.FC<MarkAttendanceModalProps> = ({
                 {myRecord.status === 'present' ? <CheckCircle2 size={20} /> : myRecord.status === 'late' ? <Clock size={20} /> : <XCircle size={20} />}
               </div>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>
                   Your Attendance Result
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
@@ -452,7 +452,48 @@ export const MarkAttendanceModal: React.FC<MarkAttendanceModalProps> = ({
               </span>
             )}
           </div>
-        )}
+        ) : (isCreatorOrAdmin || meeting.created_by_id === user?.id || meeting.created_by_name?.toLowerCase().trim() === user?.full_name?.toLowerCase().trim()) ? (
+          <div style={{
+            margin: '16px 24px 0 24px',
+            padding: '12px 18px',
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: 'rgba(16, 185, 129, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#34d399'
+              }}>
+                <CheckCircle2 size={20} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>
+                  Your Role &amp; Attendance Status
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                  Meeting Host &amp; Organizer • ATTENDED (Present) ✅
+                </div>
+              </div>
+            </div>
+
+            {meeting.attendance && (
+              <span style={{ fontSize: 11.5, color: '#34d399', fontWeight: 600 }}>
+                Attendance Finalized
+              </span>
+            )}
+          </div>
+        ) : null}
 
         {/* Summary Metric Ribbon */}
         <div style={{

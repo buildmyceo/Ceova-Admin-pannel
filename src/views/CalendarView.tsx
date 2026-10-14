@@ -313,17 +313,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
     setIsAddModalOpen(true);
   };
 
-  // Map meetings by date (YYYY-MM-DD)
+  // Filter meetings strictly to upcoming / today onwards only
+  const upcomingMeetingsList = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return meetings.filter(m => !m.date || m.date >= todayStr);
+  }, [meetings]);
+
+  // Map meetings by date (YYYY-MM-DD) - upcoming only
   const meetingsByDate = useMemo(() => {
     const map: Record<string, Meeting[]> = {};
-    meetings.forEach(m => {
+    upcomingMeetingsList.forEach(m => {
       if (!map[m.date]) {
         map[m.date] = [];
       }
       map[m.date].push(m);
     });
     return map;
-  }, [meetings]);
+  }, [upcomingMeetingsList]);
 
   // Selected date meetings
   const selectedDateMeetings = useMemo(() => {
@@ -332,11 +338,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
 
   // Upcoming meetings list (sorted chronologically)
   const upcomingMeetings = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    return [...meetings]
-      .filter(m => m.date >= todayStr)
+    return [...upcomingMeetingsList]
       .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
-  }, [meetings]);
+  }, [upcomingMeetingsList]);
 
   // Robust check: Is this task assigned to the currently logged in user?
   const isAssignedToMe = (t: Task): boolean => {
@@ -829,7 +833,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
               cursor: 'pointer'
             }}
           >
-            All Items ({meetings.length + visibleTasks.filter(t => !!parseTaskDueDate(t)).length})
+            All Items ({upcomingMeetingsList.length + visibleTasks.filter(t => !!parseTaskDueDate(t)).length})
           </button>
           <button
             type="button"
@@ -849,7 +853,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
             }}
           >
             <Video size={12} />
-            <span>Meetings ({meetings.length})</span>
+            <span>Meetings ({upcomingMeetingsList.length})</span>
           </button>
           <button
             type="button"

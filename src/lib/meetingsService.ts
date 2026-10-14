@@ -5,19 +5,6 @@ import { getSupabaseClient } from './supabase';
 const MEETINGS_STORAGE_KEY = 'ceova_meetings_v2';
 const FAKE_MEETING_IDS = new Set(['meet_exec_standup', 'meet_sprint_review']);
 
-// Clear fake seed meetings immediately
-try {
-  const existing = localStorage.getItem(MEETINGS_STORAGE_KEY);
-  if (existing) {
-    const parsed = JSON.parse(existing);
-    if (Array.isArray(parsed)) {
-      const filtered = parsed.filter(m => !FAKE_MEETING_IDS.has(m.id));
-      localStorage.setItem(MEETINGS_STORAGE_KEY, JSON.stringify(filtered));
-    }
-  }
-} catch (e) {
-  console.error(e);
-}
 
 export const getStoredMeetings = (): Meeting[] => {
   try {
