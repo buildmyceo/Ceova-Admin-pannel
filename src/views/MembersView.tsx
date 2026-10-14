@@ -6,9 +6,6 @@ import { sanitizeSocialLink } from '../lib/security';
 import { sendInvitationEmail } from '../lib/emailService';
 import { 
   Users, 
-  GraduationCap,
-  Megaphone,
-  Code2,
   UserPlus, 
   Send, 
   AlertCircle, 
@@ -38,57 +35,33 @@ import {
   ArrowRight,
   Lock,
   ChevronDown,
-  ChevronUp,
-  AlertTriangle,
-  FolderPlus
+  ChevronUp
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
 import { UserAvatar } from '../components/UserAvatar';
 import { getMemberCoverStyle } from '../lib/coverUtils';
 import { Profile } from '../types';
 import { MemberStatusModal } from '../components/MemberStatusModal';
-import { AssignGroupModal } from '../components/AssignGroupModal';
-import { CreateGroupModal } from '../components/CreateGroupModal';
-
-export type MembersPart = 'members' | 'interns' | 'pending';
 
 interface MembersViewProps {
-  initialPart?: MembersPart;
   onNavigate?: (tab: NavTab) => void;
 }
 
-export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members', onNavigate }) => {
+export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
   const { user: currentUser, isAdmin, savedAccounts } = useAuth();
-  const { members, departments, refreshData, isLoadingData, updateMemberStatus, createGroup } = usePortalData();
+  const { members, refreshData, isUserOnline, isLoadingData, updateMemberStatus } = usePortalData();
 
-  // View state: cards vs table and primary section (Members vs Interns vs Pending)
+  // View state
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-  const [activePart, setActivePart] = useState<MembersPart>(() => initialPart || 'members');
-  const [groupFilter, setGroupFilter] = useState<string>('all');
-  const [pendingFilter, setPendingFilter] = useState<string>('all');
+  const [membersTab, setMembersTab] = useState<'active' | 'pending'>('active');
 
   useEffect(() => {
-    if (initialPart) {
-      setActivePart(initialPart);
+    if (!isAdmin && membersTab === 'pending') {
+      setMembersTab('active');
     }
-  }, [initialPart]);
-
-  useEffect(() => {
-    if (!isAdmin && activePart === 'pending') {
-      setActivePart('members');
-    }
-  }, [isAdmin, activePart]);
-
-  const handleSwitchPart = (part: MembersPart) => {
-    setActivePart(part);
-    setGroupFilter('all');
-    if (onNavigate) {
-      if (part === 'interns') onNavigate('interns');
-      else if (part === 'members') onNavigate('members');
-    }
-  };
-
+  }, [isAdmin, membersTab]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'member' | 'intern'>('all');
   const [copiedEmailMap, setCopiedEmailMap] = useState<{ [id: string]: boolean }>({});
   const [copiedInviteLinkMap, setCopiedInviteLinkMap] = useState<{ [id: string]: boolean }>({});
   const [actionLoadingMemberId, setActionLoadingMemberId] = useState<string | null>(null);
@@ -105,24 +78,58 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
     setExpandedBios(prev => ({ ...prev, [memberId]: !prev[memberId] }));
   };
 
-  // Invite modal state with mandatory Group selection ('Marketing' | 'Development')
+
+  // Invite modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [statusModalMember, setStatusModalMember] = useState<Profile | null>(null);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
-
-  // Admin Assign / Switch Group Modal state
-  const [isAssignGroupModalOpen, setIsAssignGroupModalOpen] = useState(false);
-  const [assignGroupTargetMember, setAssignGroupTargetMember] = useState<Profile | null>(null);
-
-  // Admin Make Group Modal state
-  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
-
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'member' | 'intern' | 'admin'>('member');
-  const [group, setGroup] = useState<string>('Development');
+  const [role, setRole] = useState('member');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
+
+  // Helper: Format date & time of last online
+  const formatLastSeen = (dateInput?: string | null): { formatted: string; relative: string } => {
+    if (!dateInput) {
+      return { formatted: 'No activity recorded', relative: 'Never' };
+    }
+
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) {
+      return { formatted: 'Unknown', relative: 'Unknown' };
+    }
+
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isToday = now.toDateString() === d.toDateString();
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = yesterday.toDateString() === d.toDateString();
+
+    let relative = `${diffMins}m ago`;
+    if (diffMins === 0) relative = 'Just now';
+    else if (diffHours >= 1 && diffHours < 24) relative = `${diffHours}h ${diffMins % 60}m ago`;
+    else if (diffDays >= 1) relative = `${diffDays}d ago`;
+
+    let formatted = '';
+    if (isToday) {
+      formatted = `Today at ${timeStr}`;
+    } else if (isYesterday) {
+      formatted = `Yesterday at ${timeStr}`;
+    } else {
+      const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+      formatted = `${dateStr} at ${timeStr}`;
+    }
+
+    return { formatted, relative };
+  };
 
   // Helper: Format social link URL safely
   const getSocialLink = (platform: string, rawValue?: string | null) => {
@@ -242,13 +249,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
     setIsError(false);
 
     try {
-      if (!email.trim() || !email.includes('@')) {
-        throw new Error('Please enter a valid email address.');
-      }
-      if (!group || !group.trim()) {
-        throw new Error('Please select or make a group for this intern.');
-      }
-
       const supabase = getSupabaseClient();
       if (!supabase) throw new Error('Supabase client is not configured.');
 
@@ -264,13 +264,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
 
       const profileId = existingProf?.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'prof-' + Date.now());
 
-      const computedDesignation = 
-        role === 'admin' 
-          ? 'Administrator' 
-          : role === 'intern' 
-            ? `${group} Intern` 
-            : `${group} Specialist`;
-
       // 2. Add directly to profiles table with status 'pending' so member appears in list immediately
       const { error: profileError } = await supabase
         .from('profiles')
@@ -279,8 +272,8 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
           email: cleanEmail,
           full_name: generatedName,
           role: role,
-          department: group,
-          designation: computedDesignation,
+          department: role === 'admin' ? 'Administration' : role === 'intern' ? 'Internship' : 'Development',
+          designation: role === 'admin' ? 'Administrator' : role === 'intern' ? 'Intern' : 'Team Member',
           status: 'pending',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -288,21 +281,15 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
 
       if (profileError) {
         console.error('Profile upsert error:', profileError);
-        throw new Error(profileError.message || 'Failed to save user profile.');
+        throw new Error(profileError.message || 'Failed to save member profile.');
       }
 
       // 3. Also record in invitations table
       try {
         await supabase
           .from('invitations')
-          .upsert([{ email: cleanEmail, role, department: group }], { onConflict: 'email' });
-      } catch (_) {
-        try {
-          await supabase
-            .from('invitations')
-            .upsert([{ email: cleanEmail, role }], { onConflict: 'email' });
-        } catch (_) {}
-      }
+          .upsert([{ email: cleanEmail, role }], { onConflict: 'email' });
+      } catch (_) {}
 
       // 4. Send official workspace invitation email using improved template
       let emailDispatched = false;
@@ -310,7 +297,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
         const emailRes = await sendInvitationEmail({
           to: cleanEmail,
           role,
-          department: group,
+          department: role === 'admin' ? 'Administration' : role === 'intern' ? 'Internship' : 'Development',
           inviterName: currentUser?.full_name || 'CEOVA Administration',
         });
         emailDispatched = emailRes.success;
@@ -319,12 +306,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
       }
 
       if (emailDispatched) {
-        setMessage(`✓ Invitation dispatched! ${cleanEmail} has been invited to ${group} (${role === 'intern' ? 'Intern' : 'Member'}).`);
+        setMessage(`✓ Invitation dispatched! ${cleanEmail} has been sent an official workspace setup email.`);
       } else {
-        setMessage(`Added to directory as ${role === 'intern' ? 'Intern' : 'Member'} (${group})! Note: You can resend their invitation email anytime.`);
+        setMessage(`Member added to directory! Note: You can resend their invitation email anytime from their profile card.`);
       }
 
       setEmail('');
+      setRole('member');
       setTimeout(() => {
         setIsInviteModalOpen(false);
         setMessage('');
@@ -332,170 +320,25 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
       }, 2500);
     } catch (err: any) {
       setIsError(true);
-      setMessage(err.message || 'Failed to add user.');
+      setMessage(err.message || 'Failed to add member.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Dynamically resolve all groups from departments, guaranteeing Development and Marketing are present
-  const allAvailableGroups = useMemo(() => {
-    const list = [...departments];
-    if (!list.some(d => d.name.toLowerCase() === 'development')) {
-      list.unshift({ id: 'dept-dev', name: 'Development', code: 'dev', description: 'Software engineering, tech, and architecture', color: '#3b82f6' });
-    }
-    if (!list.some(d => d.name.toLowerCase() === 'marketing')) {
-      list.unshift({ id: 'dept-mkt', name: 'Marketing', code: 'mkt', description: 'Brand identity, growth, and campaigns', color: '#ec4899' });
-    }
-    return list;
-  }, [departments]);
+  // Pre-calculated counts
+  const activeMembersCount = useMemo(() => {
+    return members.filter(m => m.status !== 'pending' && (isAdmin || (m.status !== 'blocked' && m.status !== 'paused'))).length;
+  }, [members, isAdmin]);
 
-  // Current user's normalized department
-  const userDept = useMemo(() => {
-    return (currentUser?.department || '').trim().toLowerCase();
-  }, [currentUser?.department]);
-
-  // Admin can see every group; members can only see groups of their department
-  const availableGroups = useMemo(() => {
-    if (isAdmin) {
-      return allAvailableGroups;
-    }
-    // Non-admin members can only see groups of their department
-    if (!userDept || userDept === 'general' || userDept === 'unassigned') {
-      const matches = allAvailableGroups.filter(g => g.name.toLowerCase() === userDept);
-      return matches.length > 0 ? matches : allAvailableGroups;
-    }
-    const matched = allAvailableGroups.filter(g => {
-      const gName = g.name.toLowerCase();
-      return gName.includes(userDept) || userDept.includes(gName);
-    });
-    if (matched.length === 0) {
-      return [{
-        id: `dept-${userDept}`,
-        name: currentUser?.department || 'My Department',
-        code: userDept.slice(0, 3),
-        description: `${currentUser?.department} Department`,
-        color: '#3b82f6'
-      }];
-    }
-    return matched;
-  }, [isAdmin, allAvailableGroups, userDept, currentUser?.department]);
-
-  // Active Pools (Admin sees all; members only see members/interns of their department)
-  const activeTeamMembers = useMemo(() => {
-    return members.filter(m => {
-      if (m.status === 'pending' || m.role === 'intern') return false;
-      if (!isAdmin && (m.status === 'blocked' || m.status === 'paused')) return false;
-      if (!isAdmin && userDept && userDept !== 'general' && userDept !== 'unassigned') {
-        const d = (m.department || '').toLowerCase();
-        const isCur = Boolean(
-          (currentUser?.id && m.id === currentUser.id) || 
-          (currentUser?.email && m.email && currentUser.email.toLowerCase() === m.email.toLowerCase())
-        );
-        return d.includes(userDept) || userDept.includes(d) || isCur;
-      }
-      return true;
-    });
-  }, [members, isAdmin, userDept, currentUser]);
-
-  const activeInterns = useMemo(() => {
-    return members.filter(m => {
-      if (m.status === 'pending' || m.role !== 'intern') return false;
-      if (!isAdmin && (m.status === 'blocked' || m.status === 'paused')) return false;
-      if (!isAdmin && userDept && userDept !== 'general' && userDept !== 'unassigned') {
-        const d = (m.department || '').toLowerCase();
-        const isCur = Boolean(
-          (currentUser?.id && m.id === currentUser.id) || 
-          (currentUser?.email && m.email && currentUser.email.toLowerCase() === m.email.toLowerCase())
-        );
-        return d.includes(userDept) || userDept.includes(d) || isCur;
-      }
-      return true;
-    });
-  }, [members, isAdmin, userDept, currentUser]);
-
-  const pendingMembers = useMemo(() => {
-    return members.filter(m => m.status === 'pending' && m.role !== 'intern');
+  const pendingMembersCount = useMemo(() => {
+    return members.filter(m => m.status === 'pending').length;
   }, [members]);
-
-  const pendingInterns = useMemo(() => {
-    return members.filter(m => m.status === 'pending' && m.role === 'intern');
-  }, [members]);
-
-  const allPending = useMemo(() => {
-    return members.filter(m => m.status === 'pending');
-  }, [members]);
-
-  // Dynamic group counts for active members or interns
-  const groupStats = useMemo(() => {
-    const targetPool = activePart === 'interns' ? activeInterns : activeTeamMembers;
-    return availableGroups.map(g => {
-      const gNameLower = g.name.toLowerCase();
-      const count = targetPool.filter(m => {
-        const d = (m.department || '').toLowerCase();
-        return d.includes(gNameLower) || gNameLower.includes(d);
-      }).length;
-      return {
-        ...g,
-        count
-      };
-    });
-  }, [availableGroups, activePart, activeInterns, activeTeamMembers]);
-
-  // Group counts for Members
-  const marketingMembersCount = useMemo(() => {
-    return activeTeamMembers.filter(m => (m.department || '').toLowerCase().includes('market')).length;
-  }, [activeTeamMembers]);
-
-  const devMembersCount = useMemo(() => {
-    return activeTeamMembers.filter(m => (m.department || '').toLowerCase().includes('dev')).length;
-  }, [activeTeamMembers]);
-
-  // Group counts for Interns
-  const marketingInternsCount = useMemo(() => {
-    return activeInterns.filter(m => (m.department || '').toLowerCase().includes('market')).length;
-  }, [activeInterns]);
-
-  const devInternsCount = useMemo(() => {
-    return activeInterns.filter(m => (m.department || '').toLowerCase().includes('dev')).length;
-  }, [activeInterns]);
-
-  // Unassigned detection: Members/Interns without a recognized department group
-  const isUnassignedMember = (m: Profile) => {
-    const isCeo = (m.designation || '').toLowerCase().includes('ceo') || (m.designation || '').toLowerCase().includes('founder');
-    if (isCeo) return false;
-    const dept = (m.department || '').toLowerCase().trim();
-    if (!dept || dept === 'general' || dept === 'unassigned' || dept === 'internship') return true;
-    return !allAvailableGroups.some(g => dept.includes(g.name.toLowerCase()) || g.name.toLowerCase().includes(dept));
-  };
-
-  const unassignedMembers = useMemo(() => {
-    return members.filter(m => isUnassignedMember(m));
-  }, [members, allAvailableGroups]);
-
-  const unassignedInCurrentPart = useMemo(() => {
-    return unassignedMembers.filter(m => {
-      if (activePart === 'interns') return m.role === 'intern' && m.status !== 'pending';
-      if (activePart === 'pending') return m.status === 'pending';
-      return m.role !== 'intern' && m.status !== 'pending';
-    });
-  }, [unassignedMembers, activePart]);
-
-  // Auto-prompt popup modal for admin once per session if unassigned members exist
-  useEffect(() => {
-    if (isAdmin && unassignedMembers.length > 0 && !isLoadingData) {
-      const alreadyPrompted = sessionStorage.getItem('ceova_prompted_unassigned_groups');
-      if (!alreadyPrompted) {
-        sessionStorage.setItem('ceova_prompted_unassigned_groups', 'true');
-        setAssignGroupTargetMember(unassignedMembers[0]);
-        setIsAssignGroupModalOpen(true);
-      }
-    }
-  }, [isAdmin, unassignedMembers, isLoadingData]);
 
   // Filtered members list with all rich profile attributes merged
   const filteredMembers = useMemo(() => {
     return members.map((rawMember) => {
+      // Merge with currentUser and saved accounts to ensure all latest added profile details appear
       const savedAcc = savedAccounts?.find(a => 
         (a.profile.id && a.profile.id === rawMember.id) || 
         (a.profile.email && a.profile.email.toLowerCase() === rawMember.email?.toLowerCase())
@@ -507,54 +350,18 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
         ...(isCur ? currentUser : {})
       };
     }).filter((m) => {
+      // If viewer is not an admin, they must NEVER see blocked or paused member profiles
       if (!isAdmin && (m.status === 'blocked' || m.status === 'paused')) {
         return false;
       }
 
-      // 1. Part check
-      if (activePart === 'pending') {
-        if (m.status !== 'pending') return false;
-        if (pendingFilter === 'members' && m.role === 'intern') return false;
-        if (pendingFilter === 'interns' && m.role !== 'intern') return false;
-        if (pendingFilter === 'unassigned' && !isUnassignedMember(m)) return false;
-        if (pendingFilter !== 'all' && pendingFilter !== 'members' && pendingFilter !== 'interns' && pendingFilter !== 'unassigned') {
-          const dept = (m.department || '').toLowerCase();
-          const target = pendingFilter.toLowerCase();
-          if (!dept.includes(target) && !target.includes(dept)) return false;
-        }
-      } else if (activePart === 'interns') {
-        if (m.status === 'pending' || m.role !== 'intern') return false;
-        if (groupFilter === 'unassigned') {
-          if (!isUnassignedMember(m)) return false;
-        } else if (groupFilter !== 'all') {
-          const dept = (m.department || '').toLowerCase();
-          const target = groupFilter.toLowerCase();
-          if (!dept.includes(target) && !target.includes(dept)) return false;
-        }
+      // CRITICAL: Filter by Tab!
+      // In 'active' tab: pending accounts are NEVER shown!
+      // In 'pending' tab: ONLY unactivated / pending accounts are shown!
+      if (membersTab === 'active') {
+        if (m.status === 'pending') return false;
       } else {
-        // 'members' part
-        if (m.status === 'pending' || m.role === 'intern') return false;
-        if (groupFilter === 'unassigned') {
-          if (!isUnassignedMember(m)) return false;
-        } else if (groupFilter !== 'all') {
-          const dept = (m.department || '').toLowerCase();
-          const target = groupFilter.toLowerCase();
-          if (!dept.includes(target) && !target.includes(dept)) return false;
-        }
-      }
-
-      // 2. Department restriction for regular members/interns:
-      // Admins see everyone across all groups; members only see groups/people of their department
-      if (!isAdmin && userDept && userDept !== 'general' && userDept !== 'unassigned') {
-        const memberDept = (m.department || '').toLowerCase();
-        const isCur = Boolean(
-          (currentUser?.id && m.id === currentUser.id) || 
-          (currentUser?.email && m.email && currentUser.email.toLowerCase() === m.email.toLowerCase())
-        );
-        const matchesUserDept = memberDept.includes(userDept) || userDept.includes(memberDept);
-        if (!matchesUserDept && !isCur) {
-          return false;
-        }
+        if (m.status !== 'pending') return false;
       }
 
       const isCur = Boolean(
@@ -570,10 +377,30 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
         (m.designation || '').toLowerCase().includes(q) ||
         (m.department || '').toLowerCase().includes(q);
 
-      return matchesSearch;
-    });
-  }, [members, currentUser, savedAccounts, searchQuery, activePart, groupFilter, pendingFilter, isAdmin, userDept]);
+      const normalizedRole = (m.role || '').toLowerCase();
+      let matchesRole = true;
+      if (roleFilter === 'admin') matchesRole = normalizedRole === 'admin' || normalizedRole === 'ceo';
+      else if (roleFilter === 'member') matchesRole = normalizedRole === 'member';
+      else if (roleFilter === 'intern') matchesRole = normalizedRole === 'intern';
 
+      return matchesSearch && matchesRole;
+    });
+  }, [members, currentUser, savedAccounts, searchQuery, roleFilter, isAdmin, membersTab]);
+
+  // Real-time presence counts (Instant sync)
+  const presenceCounts = useMemo(() => {
+    let online = 0;
+    let offline = 0;
+    const activePool = members.filter(m => m.status !== 'pending' && (isAdmin || (m.status !== 'blocked' && m.status !== 'paused')));
+    activePool.forEach((m) => {
+      if (isUserOnline(m.id)) {
+        online++;
+      } else {
+        offline++;
+      }
+    });
+    return { online, offline, total: activePool.length, pending: pendingMembersCount };
+  }, [members, isUserOnline, isAdmin, pendingMembersCount]);
 
   return (
     <div className="view-container fade-in" style={{ paddingBottom: 48 }}>
@@ -582,33 +409,22 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
         <div className="panel-title-wrap">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 40,
-              height: 40,
+              width: 38,
+              height: 38,
               borderRadius: 10,
               background: '#161618',
-              border: activePart === 'interns' ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: activePart === 'interns' ? '#fbbf24' : '#ffffff'
+              color: '#ffffff'
             }}>
-              {activePart === 'interns' ? <GraduationCap size={22} /> : activePart === 'pending' ? <Mail size={20} /> : <Users size={20} />}
+              <Users size={20} />
             </div>
             <div>
               <h2 className="neo-serif-title" style={{ fontSize: 24, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
-                {activePart === 'interns' ? 'Interns Workspace' : activePart === 'pending' ? 'Pending Invitations' : 'Team Members'}
+                Team Members
               </h2>
-              <div style={{ fontSize: 12.5, color: '#a1a1aa', marginTop: 3 }}>
-                {activePart === 'interns'
-                  ? (!isAdmin && currentUser?.department
-                      ? `Active interns in your ${currentUser.department} group`
-                      : 'Active interns collaborating across workspace groups')
-                  : activePart === 'pending'
-                    ? 'Pending activations and sent workspace invitations'
-                    : (!isAdmin && currentUser?.department
-                        ? `Core team members in your ${currentUser.department} department`
-                        : 'Core team members and workspace leaders across all groups')}
-              </div>
             </div>
           </div>
         </div>
@@ -695,75 +511,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
             <span>Send Notification</span>
           </button>
 
-          {isAdmin && unassignedMembers.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setAssignGroupTargetMember(unassignedMembers[0]);
-                setIsAssignGroupModalOpen(true);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '8px 16px',
-                fontSize: 13,
-                fontWeight: 700,
-                borderRadius: 8,
-                background: 'rgba(245, 158, 11, 0.16)',
-                border: '1px solid rgba(245, 158, 11, 0.45)',
-                color: '#fbbf24',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                boxShadow: '0 2px 10px rgba(245, 158, 11, 0.15)'
-              }}
-              title="Pop-up modal to assign members and interns to Marketing or Development"
-            >
-              <FolderPlus size={15} />
-              <span>Assign Groups ({unassignedMembers.length})</span>
-            </button>
-          )}
-
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setIsCreateGroupModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '8px 14px',
-                fontSize: 13,
-                fontWeight: 600,
-                borderRadius: 8,
-                background: 'rgba(255, 255, 255, 0.06)',
-                color: '#ffffff',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-              }}
-            >
-              <FolderPlus size={15} style={{ color: '#fbbf24' }} />
-              <span>{activePart === 'interns' ? 'Make Intern Group' : 'Make Group'}</span>
-            </button>
-          )}
-
           {isAdmin && (
             <button 
               className="btn btn-primary" 
-              onClick={() => {
-                setRole(activePart === 'interns' ? 'intern' : 'member');
-                setGroup(availableGroups[0]?.name || 'Development');
-                setMessage('');
-                setIsError(false);
-                setIsInviteModalOpen(true);
-              }}
+              onClick={() => setIsInviteModalOpen(true)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -771,20 +522,17 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                 padding: '8px 16px',
                 fontSize: 13,
                 fontWeight: 600,
-                borderRadius: 8,
-                background: activePart === 'interns' ? '#f59e0b' : '#ffffff',
-                color: '#000000',
-                border: activePart === 'interns' ? '1px solid #f59e0b' : '1px solid #ffffff'
+                borderRadius: 8
               }}
             >
-              {activePart === 'interns' ? <GraduationCap size={15} /> : <UserPlus size={15} />}
-              <span>{activePart === 'interns' ? 'Invite Intern' : activePart === 'pending' ? 'Invite User' : 'Invite Member'}</span>
+              <UserPlus size={15} />
+              <span>Invite Member</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Two Different Parts Navigation: Members vs Interns (+ Pending for Admin) */}
+      {/* Sub-Tabs Navigation: Active Members vs Pending Invitations */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -794,19 +542,18 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
         paddingBottom: 14,
         overflowX: 'auto'
       }}>
-        {/* Part 1: Members */}
         <button
           type="button"
-          onClick={() => handleSwitchPart('members')}
+          onClick={() => setMembersTab('active')}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            padding: '8px 18px',
+            padding: '8px 16px',
             borderRadius: 8,
-            border: activePart === 'members' ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.08)',
-            background: activePart === 'members' ? '#ffffff' : 'rgba(255, 255, 255, 0.04)',
-            color: activePart === 'members' ? '#000000' : 'var(--text-muted)',
+            border: membersTab === 'active' ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.08)',
+            background: membersTab === 'active' ? '#ffffff' : 'rgba(255, 255, 255, 0.04)',
+            color: membersTab === 'active' ? '#000000' : 'var(--text-muted)',
             fontSize: 13,
             fontWeight: 700,
             cursor: 'pointer',
@@ -815,67 +562,32 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
           }}
         >
           <Users size={15} />
-          <span>Members</span>
+          <span>Active Members</span>
           <span style={{
             padding: '2px 7px',
             borderRadius: 6,
             fontSize: 11,
             fontWeight: 700,
-            background: activePart === 'members' ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.08)',
-            color: activePart === 'members' ? '#000000' : 'var(--text-subtle)'
+            background: membersTab === 'active' ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.08)',
+            color: membersTab === 'active' ? '#000000' : 'var(--text-subtle)'
           }}>
-            {activeTeamMembers.length}
+            {activeMembersCount}
           </span>
         </button>
 
-        {/* Part 2: Interns */}
-        <button
-          type="button"
-          onClick={() => handleSwitchPart('interns')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 18px',
-            borderRadius: 8,
-            border: activePart === 'interns' ? '1px solid #fbbf24' : '1px solid rgba(255, 255, 255, 0.08)',
-            background: activePart === 'interns' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-            color: activePart === 'interns' ? '#fbbf24' : 'var(--text-muted)',
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          <GraduationCap size={15} />
-          <span>Interns</span>
-          <span style={{
-            padding: '2px 7px',
-            borderRadius: 6,
-            fontSize: 11,
-            fontWeight: 700,
-            background: activePart === 'interns' ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)',
-            color: activePart === 'interns' ? '#000000' : '#fbbf24'
-          }}>
-            {activeInterns.length}
-          </span>
-        </button>
-
-        {/* Part 3: Pending Invitations (Admin only) */}
         {isAdmin && (
           <button
             type="button"
-            onClick={() => handleSwitchPart('pending')}
+            onClick={() => setMembersTab('pending')}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              padding: '8px 18px',
+              padding: '8px 16px',
               borderRadius: 8,
-              border: activePart === 'pending' ? '1px solid rgba(245, 158, 11, 0.6)' : '1px solid rgba(255, 255, 255, 0.08)',
-              background: activePart === 'pending' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255, 255, 255, 0.04)',
-              color: activePart === 'pending' ? '#fbbf24' : 'var(--text-muted)',
+              border: membersTab === 'pending' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
+              background: membersTab === 'pending' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+              color: membersTab === 'pending' ? '#fbbf24' : 'var(--text-muted)',
               fontSize: 13,
               fontWeight: 700,
               cursor: 'pointer',
@@ -884,95 +596,22 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
             }}
           >
             <Mail size={15} />
-            <span>Pending Invitations &amp; Unactivated</span>
+            <span>Pending Invitations & Unactivated</span>
             <span style={{
               padding: '2px 7px',
               borderRadius: 6,
               fontSize: 11,
               fontWeight: 700,
-              background: activePart === 'pending' ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)',
-              color: activePart === 'pending' ? '#000000' : '#fbbf24'
+              background: membersTab === 'pending' ? '#f59e0b' : 'rgba(245, 158, 11, 0.2)',
+              color: membersTab === 'pending' ? '#000000' : '#fbbf24'
             }}>
-              {allPending.length}
+              {pendingMembersCount}
             </span>
           </button>
         )}
       </div>
 
-      {/* Admin Attention Banner: Unassigned Members/Interns Prompt */}
-      {isAdmin && unassignedMembers.length > 0 && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.14) 0%, rgba(236, 72, 153, 0.08) 100%)',
-          border: '1px solid rgba(234, 179, 8, 0.4)',
-          borderRadius: 14,
-          padding: '16px 20px',
-          marginBottom: 18,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 14,
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              width: 42,
-              height: 42,
-              borderRadius: 12,
-              background: 'rgba(234, 179, 8, 0.22)',
-              border: '1px solid rgba(234, 179, 8, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fbbf24',
-              flexShrink: 0
-            }}>
-              <AlertTriangle size={22} />
-            </div>
-            <div>
-              <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span>Action Required: {unassignedMembers.length} {unassignedMembers.length === 1 ? 'person is' : 'people are'} not in any group</span>
-                <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 6, background: '#f59e0b', color: '#000000', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  ADMIN POPUP
-                </span>
-              </div>
-              <div style={{ fontSize: 12.5, color: '#d4d4d8', marginTop: 3 }}>
-                Ceova organizes all members and interns into <strong>Marketing</strong> or <strong>Development</strong>. Assign their group to ensure access to channels, meetings, and materials.
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              type="button"
-              onClick={() => {
-                setAssignGroupTargetMember(unassignedMembers[0]);
-                setIsAssignGroupModalOpen(true);
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '9px 20px',
-                borderRadius: 8,
-                background: '#f59e0b',
-                color: '#000000',
-                fontWeight: 700,
-                fontSize: 13,
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(245, 158, 11, 0.4)',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <FolderPlus size={16} />
-              <span>Select &amp; Assign Groups ({unassignedMembers.length})</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Real-time Live Presence & Group Metrics Summary Bar */}
+      {/* Real-time Live Presence Summary Bar (Solid Colors) */}
       <div style={{
         background: '#0d0d0f',
         border: '1px solid #222225',
@@ -981,112 +620,70 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
         marginBottom: 20,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
         flexWrap: 'wrap',
         gap: 16,
         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
-          {/* Total Count */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Users size={14} style={{ color: '#3b82f6' }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#ffffff' }}>
-              {activePart === 'interns' ? activeInterns.length : activePart === 'members' ? activeTeamMembers.length : allPending.length} {activePart === 'interns' ? 'Interns' : activePart === 'members' ? 'Members' : 'Pending'} {!isAdmin && currentUser?.department ? `(${currentUser.department})` : 'Total'}
-            </span>
-          </div>
-
-          <div style={{ width: 1, height: 16, background: '#27272a' }} />
-
-          {/* Groups list */}
-          {groupStats.map((g) => {
-            const groupColor = g.color || '#3b82f6';
-            return (
-              <React.Fragment key={g.id || g.name}>
-                <div style={{ width: 1, height: 16, background: '#27272a' }} />
-                <div 
-                  onClick={() => setGroupFilter(groupFilter.toLowerCase() === g.name.toLowerCase() ? 'all' : g.name)}
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 6, 
-                    cursor: 'pointer',
-                    opacity: groupFilter !== 'all' && groupFilter.toLowerCase() !== g.name.toLowerCase() ? 0.6 : 1,
-                    transition: 'opacity 0.15s ease'
-                  }}
-                  title={`Click to filter by ${g.name}`}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: groupColor }} />
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: groupColor }}>
-                    {g.count} {g.name}
-                  </span>
-                </div>
-              </React.Fragment>
-            );
-          })}
-
-          {/* Unassigned Chip in Summary Bar (Admin only) */}
-          {isAdmin && unassignedInCurrentPart.length > 0 && (
-            <>
-              <div style={{ width: 1, height: 16, background: '#27272a' }} />
-              <button
-                type="button"
-                onClick={() => {
-                  if (isAdmin) {
-                    setAssignGroupTargetMember(unassignedInCurrentPart[0]);
-                    setIsAssignGroupModalOpen(true);
-                  } else {
-                    setGroupFilter('unassigned');
-                  }
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  border: '1px solid rgba(245, 158, 11, 0.35)',
-                  borderRadius: 6,
-                  padding: '3px 8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <AlertTriangle size={13} style={{ color: '#fbbf24' }} />
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fbbf24' }}>
-                  {unassignedInCurrentPart.length} Unassigned
-                </span>
-                {isAdmin && <span style={{ fontSize: 11, color: '#fbbf24', textDecoration: 'underline' }}>• Pop-up →</span>}
-              </button>
-            </>
-          )}
+        {/* Presence Stats */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: '#22c55e'
+          }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#ffffff' }}>
+            {presenceCounts.online} Active in Portal
+          </span>
         </div>
 
-        {isAdmin && allPending.length > 0 && activePart !== 'pending' && (
-          <button
-            type="button"
-            onClick={() => handleSwitchPart('pending')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 7,
-              background: 'rgba(245, 158, 11, 0.15)',
-              border: '1px solid rgba(245, 158, 11, 0.3)',
-              padding: '5px 12px',
-              borderRadius: 8,
-              cursor: 'pointer',
-              color: '#fbbf24',
-              fontSize: 12,
-              fontWeight: 600
-            }}
-          >
-            <Clock size={13} />
-            <span>{allPending.length} Pending Setup &amp; Invitations</span>
-            <span style={{ fontSize: 11, textDecoration: 'underline' }}>View →</span>
-          </button>
+        <div style={{ width: 1, height: 16, background: '#27272a' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: '#71717a'
+          }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#a1a1aa' }}>
+            {presenceCounts.offline} Offline
+          </span>
+        </div>
+
+        {isAdmin && pendingMembersCount > 0 && (
+          <>
+            <div style={{ width: 1, height: 16, background: '#27272a' }} />
+            <button
+              type="button"
+              onClick={() => setMembersTab('pending')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                background: membersTab === 'pending' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                border: 'none',
+                padding: '4px 8px',
+                borderRadius: 6,
+                cursor: 'pointer',
+                color: '#fbbf24',
+                fontSize: 12.5,
+                fontWeight: 600
+              }}
+            >
+              <Clock size={13} />
+              <span>{pendingMembersCount} Pending Setup & Invitations</span>
+              <span style={{ fontSize: 11, color: '#f59e0b', textDecoration: 'underline' }}>
+                {membersTab === 'pending' ? '• Currently Viewing' : 'View Tab →'}
+              </span>
+            </button>
+          </>
         )}
       </div>
 
       {/* Banner for Pending Invitations Tab */}
-      {activePart === 'pending' && (
+      {membersTab === 'pending' && (
         <div style={{
           background: 'rgba(245, 158, 11, 0.08)',
           border: '1px solid rgba(245, 158, 11, 0.25)',
@@ -1116,10 +713,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
-                Pending Invitations &amp; Unactivated Accounts ({allPending.length})
+                Pending Member Invitations & Unactivated Accounts ({pendingMembersCount})
               </div>
               <div style={{ fontSize: 12, color: '#a1a1aa', marginTop: 2 }}>
-                {pendingMembers.length} Members • {pendingInterns.length} Interns awaiting activation. You can resend invitations or copy portal links directly.
+                These invited members have not activated their account or completed setup yet. They are isolated from the active team directory until activated.
               </div>
             </div>
           </div>
@@ -1128,13 +725,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => {
-                setRole('member');
-                setGroup('Development');
-                setMessage('');
-                setIsError(false);
-                setIsInviteModalOpen(true);
-              }}
+              onClick={() => setIsInviteModalOpen(true)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1146,7 +737,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
               }}
             >
               <UserPlus size={14} />
-              <span>Invite New User</span>
+              <span>Invite Member</span>
             </button>
           )}
         </div>
@@ -1169,7 +760,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
           <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-subtle)' }} />
           <input
             type="text"
-            placeholder={activePart === 'interns' ? "Search intern, group, email..." : "Search member, group, email..."}
+            placeholder="Search member, email, or title..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
@@ -1185,166 +776,30 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
           />
         </div>
 
-        {/* Group Filter Chips: Marketing vs Development */}
-        {activePart !== 'pending' ? (
-          <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: 4 }}>
-              Group:
-            </span>
+        <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
+          {(['all', 'admin', 'member', 'intern'] as const).map((r) => (
             <button
+              key={r}
               type="button"
-              onClick={() => setGroupFilter('all')}
+              onClick={() => setRoleFilter(r)}
               style={{
                 padding: '6px 14px',
                 borderRadius: 8,
-                border: groupFilter === 'all' ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.06)',
-                background: groupFilter === 'all' ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
-                color: groupFilter === 'all' ? '#ffffff' : 'var(--text-muted)',
+                border: roleFilter === r ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.06)',
+                background: roleFilter === r ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
+                color: roleFilter === r ? '#ffffff' : 'var(--text-muted)',
                 fontSize: 12,
                 fontWeight: 600,
+                textTransform: 'capitalize',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
                 whiteSpace: 'nowrap'
               }}
             >
-              {isAdmin ? 'All Groups' : 'All'} ({activePart === 'interns' ? activeInterns.length : activeTeamMembers.length})
+              {r === 'all' ? 'All Roles' : r === 'admin' ? 'Admins' : r === 'member' ? 'Members' : 'Interns'}
             </button>
-
-            {groupStats.map((g) => {
-              const isSelected = groupFilter.toLowerCase() === g.name.toLowerCase();
-              const groupColor = g.color || '#3b82f6';
-              return (
-                <button
-                  key={g.id || g.name}
-                  type="button"
-                  onClick={() => setGroupFilter(isSelected ? 'all' : g.name)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '6px 14px',
-                    borderRadius: 8,
-                    border: isSelected ? `1px solid ${groupColor}` : `1px solid ${groupColor}35`,
-                    background: isSelected ? `${groupColor}25` : 'transparent',
-                    color: isSelected ? '#ffffff' : groupColor,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: groupColor }} />
-                  <span>{g.name}</span>
-                  <span style={{
-                    fontSize: 10,
-                    padding: '1px 5px',
-                    borderRadius: 4,
-                    background: `${groupColor}30`,
-                    color: groupColor
-                  }}>
-                    {g.count}
-                  </span>
-                </button>
-              );
-            })}
-
-            {isAdmin && unassignedInCurrentPart.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setGroupFilter('unassigned')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 14px',
-                  borderRadius: 8,
-                  border: groupFilter === 'unassigned' ? '1px solid #fbbf24' : '1px solid rgba(245, 158, 11, 0.3)',
-                  background: groupFilter === 'unassigned' ? 'rgba(245, 158, 11, 0.22)' : 'transparent',
-                  color: groupFilter === 'unassigned' ? '#fbbf24' : 'var(--text-muted)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                <AlertTriangle size={12} color="#fbbf24" />
-                <span>Unassigned</span>
-                <span style={{
-                  fontSize: 10,
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  background: 'rgba(245, 158, 11, 0.3)',
-                  color: '#fbbf24'
-                }}>
-                  {unassignedInCurrentPart.length}
-                </span>
-              </button>
-            )}
-
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setIsCreateGroupModalOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  border: '1px dashed #3f3f46',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  color: '#fbbf24',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                <FolderPlus size={12} />
-                <span>+ Make Group</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          /* Pending Tab Filter Buttons */
-          <div className="ceova-filter-scroll-row ceova-hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', maxWidth: '100%' }}>
-            {(['all', 'members', 'interns', 'marketing', 'development', 'unassigned'] as const).map((pf) => (
-              <button
-                key={pf}
-                type="button"
-                onClick={() => setPendingFilter(pf)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  border: pendingFilter === pf ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.06)',
-                  background: pendingFilter === pf ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
-                  color: pendingFilter === pf ? '#fbbf24' : 'var(--text-muted)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: 'capitalize',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {pf === 'all' 
-                  ? `All Pending (${allPending.length})` 
-                  : pf === 'members' 
-                    ? `Members (${pendingMembers.length})` 
-                    : pf === 'interns' 
-                      ? `Interns (${pendingInterns.length})` 
-                      : pf === 'marketing' 
-                        ? 'Marketing Group' 
-                        : pf === 'development'
-                          ? 'Development Group'
-                          : `Unassigned (${allPending.filter(m => !(m.department || '').toLowerCase().includes('market') && !(m.department || '').toLowerCase().includes('dev')).length})`}
-              </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
       {/* Main Content Area */}
@@ -1361,7 +816,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
           boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)'
         }}>
           <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px', color: '#60a5fa' }} />
-          <p style={{ margin: 0, fontSize: 14 }}>Loading directory...</p>
+          <p style={{ margin: 0, fontSize: 14 }}>Connecting to live presence and loading directory...</p>
         </div>
       ) : filteredMembers.length === 0 ? (
         <div style={{
@@ -1375,7 +830,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
           color: 'var(--text-muted)',
           boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)'
         }}>
-          {activePart === 'pending' ? (
+          {membersTab === 'pending' ? (
             <>
               <Mail size={36} style={{ margin: '0 auto 12px', color: '#fbbf24', opacity: 0.8 }} />
               <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
@@ -1383,20 +838,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
               </p>
               <p style={{ margin: '6px 0 16px', fontSize: 13, color: 'var(--text-subtle)' }}>
                 {searchQuery 
-                  ? 'Try adjusting your search query or group filter.' 
-                  : 'All invited members and interns have activated their accounts.'}
+                  ? 'Try adjusting your search query or role filter.' 
+                  : 'All team members currently have active and activated portal access.'}
               </p>
               {isAdmin && !searchQuery && (
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => {
-                    setRole('member');
-                    setGroup('Development');
-                    setMessage('');
-                    setIsError(false);
-                    setIsInviteModalOpen(true);
-                  }}
+                  onClick={() => setIsInviteModalOpen(true)}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1408,45 +857,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                   }}
                 >
                   <UserPlus size={15} />
-                  <span>Invite User</span>
-                </button>
-              )}
-            </>
-          ) : activePart === 'interns' ? (
-            <>
-              <GraduationCap size={36} style={{ margin: '0 auto 12px', color: '#fbbf24', opacity: 0.6 }} />
-              <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#ffffff' }}>No interns found</p>
-              <p style={{ margin: '6px 0 16px', fontSize: 13, color: 'var(--text-subtle)' }}>
-                {searchQuery || groupFilter !== 'all' 
-                  ? 'Try adjusting your search or group filter.' 
-                  : 'No interns currently registered. Admins can make a group and invite new interns.'}
-              </p>
-              {isAdmin && !searchQuery && groupFilter === 'all' && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setRole('intern');
-                    setGroup(availableGroups[0]?.name || 'Development');
-                    setMessage('');
-                    setIsError(false);
-                    setIsInviteModalOpen(true);
-                  }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 7,
-                    padding: '8px 16px',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    borderRadius: 8,
-                    background: '#f59e0b',
-                    color: '#000000',
-                    border: '1px solid #f59e0b'
-                  }}
-                >
-                  <GraduationCap size={15} />
-                  <span>Invite First Intern</span>
+                  <span>Invite New Member</span>
                 </button>
               )}
             </>
@@ -1455,7 +866,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
               <Users size={32} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
               <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#ffffff' }}>No team members found</p>
               <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-subtle)' }}>
-                Try adjusting your search query or group filter.
+                Try adjusting your search query or role filter.
               </p>
             </>
           )}
@@ -1468,6 +879,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
           gap: 18
         }}>
           {filteredMembers.map((member) => {
+            const isOnline = isUserOnline(member.id);
             const isCurrent = Boolean(
               (currentUser?.id && member.id === currentUser.id) ||
               (currentUser?.email && member.email && currentUser.email.toLowerCase() === member.email.toLowerCase())
@@ -1475,6 +887,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
             const canViewContact = Boolean(isAdmin || isCurrent);
             const isAdminRole = member.role === 'admin' || member.role === 'ceo';
             const isInternRole = member.role === 'intern';
+            const presenceInfo = formatLastSeen(member.last_active_at || member.updated_at || member.created_at);
             const hasSocial = member.social_links && Object.values(member.social_links).some(v => Boolean(v));
 
             return (
@@ -1528,103 +941,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                         background: 'linear-gradient(to top, rgba(13, 13, 15, 0.88) 0%, transparent 100%)',
                         pointerEvents: 'none'
                       }} />
-                  {/* Top Right Role & Group Pills */}
+                  {/* Top Right Role Pill - Solid Colors, No Neon */}
                   <div style={{
                     position: 'absolute',
                     top: 10,
                     right: 12,
-                    zIndex: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6
+                    zIndex: 2
                   }}>
-                    {/* Group Badge: Marketing vs Development vs Unassigned */}
-                    {(() => {
-                      const deptLower = (member.department || '').toLowerCase();
-                      const isMarketing = deptLower.includes('market');
-                      const isDev = deptLower.includes('dev');
-                      const isCeo = (member.designation || '').toLowerCase().includes('ceo') || (member.designation || '').toLowerCase().includes('founder');
-
-                      if (!isMarketing && !isDev && !isCeo) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (isAdmin) {
-                                setAssignGroupTargetMember(member);
-                                setIsAssignGroupModalOpen(true);
-                              }
-                            }}
-                            title={isAdmin ? "Click to assign Marketing or Development group" : "No group assigned"}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              fontSize: 10,
-                              fontWeight: 700,
-                              letterSpacing: '0.04em',
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              background: 'rgba(245, 158, 11, 0.25)',
-                              border: '1px solid rgba(245, 158, 11, 0.55)',
-                              color: '#fbbf24',
-                              cursor: isAdmin ? 'pointer' : 'default',
-                              textTransform: 'uppercase',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            <AlertTriangle size={10} />
-                            <span>{isAdmin ? 'NO GROUP • ASSIGN' : 'NO GROUP'}</span>
-                          </button>
-                        );
-                      }
-
-                      if (!member.department && !isMarketing && !isDev) return null;
-
-                      return (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isAdmin) {
-                              setAssignGroupTargetMember(member);
-                              setIsAssignGroupModalOpen(true);
-                            }
-                          }}
-                          title={isAdmin ? "Click to change group assignment" : undefined}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            letterSpacing: '0.04em',
-                            padding: '4px 8px',
-                            borderRadius: 6,
-                            background: isMarketing 
-                              ? 'rgba(236, 72, 153, 0.22)' 
-                              : isDev 
-                                ? 'rgba(59, 130, 246, 0.22)' 
-                                : '#1c1c1f',
-                            border: isMarketing 
-                              ? '1px solid rgba(236, 72, 153, 0.45)' 
-                              : isDev 
-                                ? '1px solid rgba(59, 130, 246, 0.45)' 
-                                : '1px solid #2e2e33',
-                            color: isMarketing ? '#f472b6' : isDev ? '#60a5fa' : '#a1a1aa',
-                            textTransform: 'uppercase',
-                            cursor: isAdmin ? 'pointer' : 'default'
-                          }}
-                        >
-                          {isMarketing ? <Megaphone size={10} /> : isDev ? <Code2 size={10} /> : null}
-                          <span>{isMarketing ? 'MARKETING' : isDev ? 'DEVELOPMENT' : member.department}</span>
-                          {isAdmin && <ChevronDown size={10} style={{ opacity: 0.6 }} />}
-                        </button>
-                      );
-                    })()}
-
-                    {/* Role Pill */}
                     <span style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -1637,17 +960,17 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                       background: isAdminRole 
                         ? '#27272a' 
                         : isInternRole 
-                          ? 'rgba(245, 158, 11, 0.18)' 
+                          ? 'rgba(245, 158, 11, 0.15)' 
                           : '#1c1c1f',
                       border: isAdminRole 
                         ? '1px solid #3f3f46' 
                         : isInternRole 
-                          ? '1px solid rgba(245, 158, 11, 0.35)' 
+                          ? '1px solid rgba(245, 158, 11, 0.3)' 
                           : '1px solid #2e2e33',
                       color: isAdminRole ? '#ffffff' : isInternRole ? '#fbbf24' : '#e4e4e7',
                       textTransform: 'uppercase'
                     }}>
-                      {isInternRole ? <GraduationCap size={11} /> : <Shield size={10} />}
+                      <Shield size={10} />
                       {isAdminRole ? 'ADMIN' : isInternRole ? 'INTERN' : 'MEMBER'}
                     </span>
                   </div>
@@ -1659,7 +982,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                 <div style={{ padding: '0 18px 18px', flex: 1, display: 'flex', flexDirection: 'column' }}>
                   {/* Avatar & Online Dot */}
                   <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: -36, marginBottom: 14 }}>
-                    <div>
+                    <div style={{ position: 'relative' }}>
                       <UserAvatar
                         src={member.avatar_url}
                         name={member.full_name}
@@ -1668,6 +991,23 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                         border="3px solid #0d0d0f"
                         style={{
                           boxShadow: '0 4px 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
+
+                      {/* Status indicator ring & dot (Instant Sync, Solid Dot, No Neon Glow) */}
+                      <div 
+                        title={isOnline ? 'Active • In Portal' : 'Offline'}
+                        style={{
+                          position: 'absolute',
+                          bottom: 2,
+                          right: 2,
+                          width: 14,
+                          height: 14,
+                          borderRadius: '50%',
+                          background: isOnline ? '#22c55e' : '#71717a',
+                          border: '2px solid #0d0d0f',
+                          boxShadow: 'none',
+                          transition: 'background 0.2s ease'
                         }}
                       />
                     </div>
@@ -1711,24 +1051,52 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                     </div>
                   </div>
 
-                  {/* Status Box for Pending Invitations */}
-                  {member.status === 'pending' && (
-                    <div style={{
-                      padding: '8px 12px',
-                      borderRadius: 10,
-                      background: 'rgba(245, 158, 11, 0.08)',
-                      border: '1px solid rgba(245, 158, 11, 0.25)',
-                      marginBottom: 12,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontSize: 11.5,
-                      color: '#fbbf24'
-                    }}>
-                      <Clock size={12} style={{ flexShrink: 0 }} />
-                      <span>Pending setup confirmation</span>
+                  {/* 3. Realtime Live Presence Box - Solid Colors, No Neon */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    background: '#141416',
+                    border: '1px solid #222225',
+                    marginBottom: 12
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#71717a' }}>
+                        Status
+                      </span>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: member.status === 'pending' ? '#fbbf24' : isOnline ? '#ffffff' : '#71717a'
+                      }}>
+                        <span style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: member.status === 'pending' ? '#f59e0b' : isOnline ? '#22c55e' : '#71717a'
+                        }} />
+                        {member.status === 'pending' ? 'Invited • Pending Confirmation' : isOnline ? 'Active • In Portal' : 'Offline'}
+                      </span>
                     </div>
-                  )}
+
+                    <div style={{ fontSize: 11.5, color: '#a1a1aa', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Clock size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+                      {member.status === 'pending' ? (
+                        <span>Awaiting email confirmation & setup</span>
+                      ) : isOnline ? (
+                        <span>Online right now (Active in portal)</span>
+                      ) : (isAdmin || isCurrent) ? (
+                        <span>Last online: <strong style={{ color: '#ffffff' }}>{presenceInfo.formatted}</strong></span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text-subtle)' }}>
+                          <Lock size={10} style={{ color: 'var(--text-muted)' }} />
+                          <span>Last online visible to Admin</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
                   {/* 4. Social Links Row (Shown on Member Card!) */}
                   {hasSocial && (
@@ -2173,41 +1541,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                           </button>
                         )}
 
-                        {isAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAssignGroupTargetMember(member);
-                              setIsAssignGroupModalOpen(true);
-                            }}
-                            style={{
-                              width: '100%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 5,
-                              padding: '7px 8px',
-                              borderRadius: 8,
-                              background: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                ? 'rgba(245, 158, 11, 0.2)'
-                                : 'rgba(255, 255, 255, 0.05)',
-                              border: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                ? '1px solid rgba(245, 158, 11, 0.45)'
-                                : '1px solid rgba(255, 255, 255, 0.1)',
-                              color: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                ? '#fbbf24'
-                                : '#d4d4d8',
-                              fontSize: 11.5,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              marginTop: 6
-                            }}
-                          >
-                            <FolderPlus size={12} />
-                            <span>{(!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev'))) ? 'Assign Group (Popup)' : 'Edit Group / Role'}</span>
-                          </button>
-                        )}
-
                         <button
                           type="button"
                           onClick={() => handleNotifyMember(member.id)}
@@ -2322,40 +1655,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                                 </>
                               )}
                             </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAssignGroupTargetMember(member);
-                                setIsAssignGroupModalOpen(true);
-                              }}
-                              style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 6,
-                                padding: '6px 12px',
-                                borderRadius: 8,
-                                marginTop: 6,
-                                background: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                  ? 'rgba(245, 158, 11, 0.2)'
-                                  : 'rgba(255, 255, 255, 0.05)',
-                                border: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                  ? '1px solid rgba(245, 158, 11, 0.45)'
-                                  : '1px solid rgba(255, 255, 255, 0.1)',
-                                color: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                  ? '#fbbf24'
-                                  : '#d4d4d8',
-                                fontSize: 11.5,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              <FolderPlus size={12} />
-                              <span>{(!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev'))) ? 'Assign Group (Popup)' : 'Edit Group / Role'}</span>
-                            </button>
                           </div>
                         )}
                       </>
@@ -2376,15 +1675,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Member</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role & Dept</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                  {activePart === 'pending' && (
-                    <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Portal Setup Link</th>
-                  )}
+                  <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{membersTab === 'pending' ? 'Portal Setup Link' : (isAdmin ? 'Last Online Time' : 'Presence Status')}</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact & Links</th>
                   <th style={{ padding: '14px 20px', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredMembers.map((member) => {
+                  const isOnline = isUserOnline(member.id);
                   const isCurrent = Boolean(
                     (currentUser?.id && member.id === currentUser.id) ||
                     (currentUser?.email && member.email && currentUser.email.toLowerCase() === member.email.toLowerCase())
@@ -2392,6 +1690,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                   const canViewContact = Boolean(isAdmin || isCurrent);
                   const isAdminRole = member.role === 'admin' || member.role === 'ceo';
                   const isInternRole = member.role === 'intern';
+                  const presenceInfo = formatLastSeen(member.last_active_at || member.updated_at || member.created_at);
 
                   return (
                     <tr 
@@ -2422,97 +1721,23 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                       </td>
 
                       <td style={{ padding: '14px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontSize: 10,
-                            fontWeight: 700,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: isAdminRole ? '#27272a' : isInternRole ? 'rgba(245, 158, 11, 0.18)' : '#1c1c1f',
-                            border: isAdminRole ? '1px solid #3f3f46' : isInternRole ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid #2e2e33',
-                            color: isAdminRole ? '#ffffff' : isInternRole ? '#fbbf24' : '#e4e4e7',
-                            textTransform: 'uppercase'
-                          }}>
-                            {isInternRole ? <GraduationCap size={11} /> : <Shield size={10} />}
-                            {isAdminRole ? 'ADMIN' : isInternRole ? 'INTERN' : 'MEMBER'}
-                          </span>
-
-                          {(() => {
-                            const deptLower = (member.department || '').toLowerCase();
-                            const isMarketing = deptLower.includes('market');
-                            const isDev = deptLower.includes('dev');
-                            const isCeo = (member.designation || '').toLowerCase().includes('ceo') || (member.designation || '').toLowerCase().includes('founder');
-
-                            if (!isMarketing && !isDev && !isCeo) {
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (isAdmin) {
-                                      setAssignGroupTargetMember(member);
-                                      setIsAssignGroupModalOpen(true);
-                                    }
-                                  }}
-                                  title={isAdmin ? "Click to assign Marketing or Development group" : "No group assigned"}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    padding: '3px 8px',
-                                    borderRadius: 6,
-                                    background: 'rgba(245, 158, 11, 0.2)',
-                                    border: '1px solid rgba(245, 158, 11, 0.45)',
-                                    color: '#fbbf24',
-                                    cursor: isAdmin ? 'pointer' : 'default',
-                                    textTransform: 'uppercase',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                >
-                                  <AlertTriangle size={10} />
-                                  <span>{isAdmin ? 'NO GROUP • ASSIGN' : 'NO GROUP'}</span>
-                                </button>
-                              );
-                            }
-
-                            if (!member.department && !isMarketing && !isDev) return null;
-                            return (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (isAdmin) {
-                                    setAssignGroupTargetMember(member);
-                                    setIsAssignGroupModalOpen(true);
-                                  }
-                                }}
-                                title={isAdmin ? "Click to change group assignment" : undefined}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  padding: '3px 8px',
-                                  borderRadius: 6,
-                                  background: isMarketing ? 'rgba(236, 72, 153, 0.2)' : isDev ? 'rgba(59, 130, 246, 0.2)' : '#1c1c1f',
-                                  border: isMarketing ? '1px solid rgba(236, 72, 153, 0.4)' : isDev ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid #2e2e33',
-                                  color: isMarketing ? '#f472b6' : isDev ? '#60a5fa' : '#a1a1aa',
-                                  textTransform: 'uppercase',
-                                  cursor: isAdmin ? 'pointer' : 'default'
-                                }}
-                              >
-                                {isMarketing ? <Megaphone size={10} /> : isDev ? <Code2 size={10} /> : null}
-                                <span>{isMarketing ? 'MARKETING' : isDev ? 'DEVELOPMENT' : member.department}</span>
-                                {isAdmin && <ChevronDown size={10} style={{ opacity: 0.6 }} />}
-                              </button>
-                            );
-                          })()}
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          background: isAdminRole ? '#27272a' : isInternRole ? 'rgba(245, 158, 11, 0.15)' : '#1c1c1f',
+                          border: isAdminRole ? '1px solid #3f3f46' : isInternRole ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid #2e2e33',
+                          color: isAdminRole ? '#ffffff' : isInternRole ? '#fbbf24' : '#e4e4e7',
+                          textTransform: 'uppercase'
+                        }}>
+                          {isAdminRole ? 'ADMIN' : isInternRole ? 'INTERN' : 'MEMBER'}
+                        </span>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>
+                          {member.role === 'intern' && (!member.department || member.department === 'General') ? 'Internship' : (member.department || 'General')}
                         </div>
                       </td>
 
@@ -2525,17 +1750,17 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                           borderRadius: 100,
                           fontSize: 11,
                           fontWeight: 600,
-                          background: member.status === 'pending' ? 'rgba(245, 158, 11, 0.1)' : member.status === 'blocked' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
-                          border: member.status === 'pending' ? '1px solid rgba(245, 158, 11, 0.3)' : member.status === 'blocked' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
-                          color: member.status === 'pending' ? '#fbbf24' : member.status === 'blocked' ? '#ef4444' : '#22c55e'
+                          background: member.status === 'pending' ? 'rgba(245, 158, 11, 0.1)' : '#161618',
+                          border: member.status === 'pending' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid #27272a',
+                          color: member.status === 'pending' ? '#fbbf24' : isOnline ? '#ffffff' : '#71717a'
                         }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: member.status === 'pending' ? '#f59e0b' : member.status === 'blocked' ? '#ef4444' : '#22c55e' }} />
-                          {member.status === 'pending' ? 'Pending Activation' : member.status === 'blocked' ? 'Blocked' : 'Active'}
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: member.status === 'pending' ? '#f59e0b' : isOnline ? '#22c55e' : '#71717a' }} />
+                          {member.status === 'pending' ? 'Pending Activation' : isOnline ? 'Active • In Portal' : 'Offline'}
                         </span>
                       </td>
 
-                      {activePart === 'pending' && (
-                        <td style={{ padding: '14px 20px' }}>
+                      <td style={{ padding: '14px 20px' }}>
+                        {member.status === 'pending' ? (
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#161618', border: '1px solid #27272a', padding: '4px 10px', borderRadius: 6 }}>
                             <LinkIcon size={12} color="#60a5fa" />
                             <span style={{ fontSize: 11.5, color: '#e4e4e7' }}>portal.ceovaai.com</span>
@@ -2553,8 +1778,20 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                               {copiedInviteLinkMap[member.id] ? <Check size={12} /> : <Copy size={12} />}
                             </button>
                           </div>
-                        </td>
-                      )}
+                        ) : isOnline ? (
+                          <span style={{ fontSize: 12, color: '#e4e4e7', fontWeight: 600 }}>Active now</span>
+                        ) : (isAdmin || isCurrent) ? (
+                          <div style={{ fontSize: 12, color: '#e4e4e7' }}>
+                            <div>{presenceInfo.formatted}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>({presenceInfo.relative})</div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-subtle)', fontSize: 11.5 }}>
+                            <Lock size={11} style={{ color: 'var(--text-muted)' }} />
+                            <span>Admin only</span>
+                          </div>
+                        )}
+                      </td>
 
                       <td style={{ padding: '14px 20px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -2745,39 +1982,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                                   )}
                                 </button>
                               )}
-
-                              {isAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAssignGroupTargetMember(member);
-                                    setIsAssignGroupModalOpen(true);
-                                  }}
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 5,
-                                    background: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                      ? 'rgba(245, 158, 11, 0.2)'
-                                      : 'rgba(255, 255, 255, 0.06)',
-                                    border: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                      ? '1px solid rgba(245, 158, 11, 0.45)'
-                                      : '1px solid rgba(255, 255, 255, 0.1)',
-                                    color: (!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev')))
-                                      ? '#fbbf24'
-                                      : '#d4d4d8',
-                                    padding: '6px 12px',
-                                    borderRadius: 6,
-                                    fontSize: 11.5,
-                                    fontWeight: 600,
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Assign or change group (Marketing / Development)"
-                                >
-                                  <FolderPlus size={12} />
-                                  <span>{(!member.department || (!member.department.toLowerCase().includes('market') && !member.department.toLowerCase().includes('dev'))) ? 'Assign Group' : 'Group'}</span>
-                                </button>
-                              )}
                             </>
                           )}
                         </div>
@@ -2810,9 +2014,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
             border: '1px solid #27272a',
             borderRadius: 18,
             width: '100%',
-            maxWidth: 490,
-            maxHeight: '92vh',
-            overflowY: 'auto',
+            maxWidth: 450,
             padding: 26,
             position: 'relative',
             boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.04)'
@@ -2859,14 +2061,14 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: role === 'intern' ? '#fbbf24' : '#ffffff',
+                color: '#ffffff',
                 flexShrink: 0
               }}>
-                {role === 'intern' ? <GraduationCap size={20} /> : <UserPlus size={18} />}
+                <UserPlus size={18} />
               </div>
               <div style={{ paddingRight: 36 }}>
                 <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#ffffff', letterSpacing: '-0.02em' }}>
-                  {role === 'intern' ? 'Invite New Intern' : role === 'admin' ? 'Invite Administrator' : 'Invite Team Member'}
+                  Invite New Member
                 </h3>
                 <div style={{ fontSize: 12.5, color: '#71717a', marginTop: 3 }}>
                   Send an official access invitation to join the Ceova workspace
@@ -2874,7 +2076,7 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
               </div>
             </div>
 
-            <form onSubmit={handleSendInvite} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <form onSubmit={handleSendInvite} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {message && (
                 <div style={{ 
                   padding: '10px 14px', 
@@ -2892,7 +2094,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                 </div>
               )}
 
-              {/* Email Address */}
               <div>
                 <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
                   Email Address <span style={{ color: '#ef4444' }}>*</span>
@@ -2919,272 +2120,32 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                 />
               </div>
 
-              {/* Clearance Role Selector */}
               <div>
                 <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-                  Clearance Role <span style={{ color: '#ef4444' }}>*</span>
+                  Assigned Clearance Role
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => setRole('member')}
-                    style={{
-                      padding: '10px 8px',
-                      borderRadius: 8,
-                      border: role === 'member' ? '1px solid #ffffff' : '1px solid #27272a',
-                      background: role === 'member' ? '#222226' : '#141416',
-                      color: role === 'member' ? '#ffffff' : '#a1a1aa',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <Users size={16} style={{ color: role === 'member' ? '#ffffff' : '#71717a' }} />
-                    <span>Member</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setRole('intern')}
-                    style={{
-                      padding: '10px 8px',
-                      borderRadius: 8,
-                      border: role === 'intern' ? '1px solid #fbbf24' : '1px solid #27272a',
-                      background: role === 'intern' ? 'rgba(245, 158, 11, 0.15)' : '#141416',
-                      color: role === 'intern' ? '#fbbf24' : '#a1a1aa',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <GraduationCap size={16} style={{ color: role === 'intern' ? '#fbbf24' : '#71717a' }} />
-                    <span>Intern</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setRole('admin')}
-                    style={{
-                      padding: '10px 8px',
-                      borderRadius: 8,
-                      border: role === 'admin' ? '1px solid #60a5fa' : '1px solid #27272a',
-                      background: role === 'admin' ? 'rgba(96, 165, 250, 0.15)' : '#141416',
-                      color: role === 'admin' ? '#60a5fa' : '#a1a1aa',
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <Shield size={16} style={{ color: role === 'admin' ? '#60a5fa' : '#71717a' }} />
-                    <span>Admin</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Mandatory Group Selection */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>Select Group</span>
-                      <span style={{ color: '#ef4444' }}>*</span>
-                    </label>
-                    <div style={{ fontSize: 11, color: '#71717a', marginTop: 1 }}>
-                      {role === 'intern' ? 'Required: Every intern must come under a group' : 'Required for workspace assignment'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateGroupModalOpen(true)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      padding: '5px 10px',
-                      borderRadius: 6,
-                      background: 'rgba(251, 191, 36, 0.1)',
-                      border: '1px solid rgba(251, 191, 36, 0.3)',
-                      color: '#fbbf24',
-                      fontSize: 11.5,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(251, 191, 36, 0.18)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(251, 191, 36, 0.1)';
-                    }}
-                    title="Make a new group first"
-                  >
-                    <FolderPlus size={13} />
-                    <span>+ Make New Group</span>
-                  </button>
-                </div>
-
-                {role === 'intern' && (
-                  <div style={{
-                    marginBottom: 10,
-                    padding: '8px 12px',
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
                     borderRadius: 8,
-                    background: 'rgba(245, 158, 11, 0.08)',
-                    border: '1px solid rgba(245, 158, 11, 0.22)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontSize: 11.5,
-                    color: '#fbbf24'
-                  }}>
-                    <Sparkles size={14} style={{ flexShrink: 0 }} />
-                    <span>Every intern comes under a group. Select an existing group below or click &quot;+ Make New Group&quot; first.</span>
-                  </div>
-                )}
-
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: 10,
-                  maxHeight: 210,
-                  overflowY: 'auto',
-                  paddingRight: 2
-                }}>
-                  {allAvailableGroups.map((d) => {
-                    const isSelected = (group || '').toLowerCase() === d.name.toLowerCase();
-                    const groupColor = d.color || '#3b82f6';
-                    return (
-                      <div
-                        key={d.id || d.name}
-                        onClick={() => setGroup(d.name)}
-                        style={{
-                          padding: '12px',
-                          borderRadius: 10,
-                          border: isSelected ? `1px solid ${groupColor}` : '1px solid #27272a',
-                          background: isSelected ? `${groupColor}18` : '#141416',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          position: 'relative',
-                          boxShadow: isSelected ? `0 0 16px ${groupColor}25` : 'none'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <div style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 7,
-                            background: `${groupColor}25`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: groupColor
-                          }}>
-                            {d.name.toLowerCase().includes('market') ? (
-                              <Megaphone size={14} />
-                            ) : d.name.toLowerCase().includes('dev') ? (
-                              <Code2 size={14} />
-                            ) : (
-                              <Users size={14} />
-                            )}
-                          </div>
-                          {isSelected && (
-                            <span style={{
-                              width: 18,
-                              height: 18,
-                              borderRadius: '50%',
-                              background: groupColor,
-                              color: '#ffffff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 10
-                            }}>
-                              <Check size={11} strokeWidth={3} />
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: isSelected ? '#ffffff' : '#e4e4e7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {d.name}
-                        </div>
-                        <div style={{ fontSize: 10.5, color: '#a1a1aa', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {d.description || `${d.name} Team`}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Make New Group card tile */}
-                  <div
-                    onClick={() => setIsCreateGroupModalOpen(true)}
-                    style={{
-                      padding: '12px',
-                      borderRadius: 10,
-                      border: '1px dashed #3f3f46',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 4,
-                      minHeight: 80,
-                      color: '#a1a1aa'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#fbbf24';
-                      e.currentTarget.style.color = '#fbbf24';
-                      e.currentTarget.style.background = 'rgba(245, 158, 11, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = '#3f3f46';
-                      e.currentTarget.style.color = '#a1a1aa';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-                    }}
-                  >
-                    <FolderPlus size={18} />
-                    <span style={{ fontSize: 12, fontWeight: 600 }}>+ Make Group</span>
-                    <span style={{ fontSize: 9.5, opacity: 0.7 }}>Create new first</span>
-                  </div>
-                </div>
+                    border: '1px solid #27272a',
+                    background: '#121214',
+                    color: '#ffffff',
+                    outline: 'none',
+                    fontSize: 13,
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="admin">Admin</option>
+                  <option value="member">Member</option>
+                  <option value="intern">Intern</option>
+                </select>
               </div>
 
-              {/* Assignment Summary Box */}
-              <div style={{
-                padding: '11px 14px',
-                borderRadius: 8,
-                background: '#161618',
-                border: '1px solid #27272a',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                fontSize: 12
-              }}>
-                <span style={{ color: '#a1a1aa' }}>Assigned Access:</span>
-                <span style={{ fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span>{role === 'intern' ? 'INTERN' : role === 'admin' ? 'ADMIN' : 'MEMBER'}</span>
-                  <span>•</span>
-                  <span style={{ color: allAvailableGroups.find(d => d.name.toLowerCase() === (group || '').toLowerCase())?.color || '#60a5fa' }}>
-                    {group || 'Select a Group'}
-                  </span>
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 4, paddingTop: 16, borderTop: '1px solid #1f1f23' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 6, paddingTop: 16, borderTop: '1px solid #1f1f23' }}>
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
@@ -3215,9 +2176,9 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                   disabled={loading}
                   style={{
                     padding: '9px 22px',
-                    background: role === 'intern' ? '#f59e0b' : '#ffffff',
+                    background: '#ffffff',
                     color: '#000000',
-                    border: role === 'intern' ? '1px solid #f59e0b' : '1px solid #ffffff',
+                    border: '1px solid #ffffff',
                     borderRadius: 8,
                     fontWeight: 600,
                     fontSize: 13,
@@ -3231,10 +2192,10 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
                     transition: 'all 0.15s ease'
                   }}
                   onMouseEnter={(e) => {
-                    if (!loading) e.currentTarget.style.opacity = '0.9';
+                    if (!loading) e.currentTarget.style.background = '#e4e4e7';
                   }}
                   onMouseLeave={(e) => {
-                    if (!loading) e.currentTarget.style.opacity = '1';
+                    if (!loading) e.currentTarget.style.background = '#ffffff';
                   }}
                 >
                   <Send size={14} />
@@ -3253,31 +2214,6 @@ export const MembersView: React.FC<MembersViewProps> = ({ initialPart = 'members
         onClose={() => {
           setIsStatusModalOpen(false);
           setStatusModalMember(null);
-        }}
-      />
-
-      {/* Admin Assign / Switch Group Pop-up Modal */}
-      <AssignGroupModal
-        isOpen={isAssignGroupModalOpen}
-        member={assignGroupTargetMember}
-        unassignedMembers={unassignedMembers}
-        onClose={() => {
-          setIsAssignGroupModalOpen(false);
-          setAssignGroupTargetMember(null);
-        }}
-        onSuccess={() => {
-          refreshData();
-        }}
-      />
-
-      {/* Admin Create / Make Group Modal */}
-      <CreateGroupModal
-        isOpen={isCreateGroupModalOpen}
-        onClose={() => setIsCreateGroupModalOpen(false)}
-        initialRole={activePart === 'interns' ? 'intern' : 'member'}
-        onSuccess={(createdGroup) => {
-          setGroup(createdGroup.name);
-          refreshData();
         }}
       />
     </div>

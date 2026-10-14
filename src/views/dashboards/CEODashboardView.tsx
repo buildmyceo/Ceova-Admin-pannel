@@ -63,18 +63,23 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
   onNavigate,
 }) => {
   const { user, role, isSupabaseConfigured } = useAuth();
-  const { departments, members } = usePortalData();
+  const { departments, members, isUserOnline } = usePortalData();
 
-  // Top 5 members
+  // Top 5 members who recently used the portal
   const recentTopMembers = useMemo(() => {
     return [...members]
       .sort((a, b) => {
-        const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
-        const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+        const aOnline = isUserOnline ? isUserOnline(a.id) : false;
+        const bOnline = isUserOnline ? isUserOnline(b.id) : false;
+        if (aOnline && !bOnline) return -1;
+        if (!aOnline && bOnline) return 1;
+
+        const aTime = new Date(a.last_active_at || a.updated_at || a.created_at || 0).getTime();
+        const bTime = new Date(b.last_active_at || b.updated_at || b.created_at || 0).getTime();
         return bTime - aTime;
       })
       .slice(0, 5);
-  }, [members]);
+  }, [members, isUserOnline]);
 
 
   // Member tasks & meetings state
@@ -1190,7 +1195,7 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
               gap: 8
             }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Showing top 5 team members ({recentTopMembers.length} of {members.length} total).
+                Showing top 5 recently active portal users ({recentTopMembers.length} of {members.length} team members).
               </span>
               <button
                 type="button"

@@ -100,9 +100,7 @@ const PortalMain: React.FC = () => {
       case 'profile':
         return <ProfileView />;
       case 'members':
-        return <MembersView initialPart="members" onNavigate={handleSelectTab} />;
-      case 'interns':
-        return <MembersView initialPart="interns" onNavigate={handleSelectTab} />;
+        return <MembersView onNavigate={handleSelectTab} />;
       case 'tasks':
         return <TasksView initialScope={selectedTaskScope} />;
       case 'calendar':

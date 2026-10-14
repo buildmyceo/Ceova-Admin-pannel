@@ -533,7 +533,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, [isSupabaseConfigured]);
 
-  // Realtime Profile Status Sync (Passive listener for admin status changes like paused or blocked - Zero Database Writes or Pings)
+  // Presence Heartbeat & Realtime Profile Status Sync
   useEffect(() => {
     if (!user?.id) return;
 
@@ -560,10 +560,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .subscribe();
     }
 
+    // Do not ping activity if user is currently blocked or paused
+    if (user.status === 'blocked' || user.status === 'paused') {
+      return () => {
+        if (profileChannel) profileChannel.unsubscribe();
+      };
+    }
+
+    const pingActivity = async () => {
+      const nowIso = new Date().toISOString();
+      if (client && isSupabaseConfigured) {
+        try {
+          await client
+            .from('profiles')
+            .update({ 
+              last_active_at: nowIso,
+              updated_at: nowIso,
+              status: user.status === 'offline' ? 'active' : (user.status || 'active')
+            })
+            .eq('id', user.id);
+        } catch (e) {
+          console.warn('Presence ping:', e);
+        }
+      }
+
+      setSavedAccounts(prev => {
+        const idx = prev.findIndex(a => a.profile.id === user.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { 
+            ...updated[idx], 
+            lastActive: nowIso,
+            profile: { ...updated[idx].profile, last_active_at: nowIso, status: 'active' }
+          };
+          persistAccounts(updated);
+          return updated;
+        }
+        return prev;
+      });
+    };
+
+    // Ping once on mount to establish session activity
+    pingActivity();
+
+    // Gentle 15-minute background refresh only if page is visible (no mousemove/keydown spam)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        pingActivity();
+      }
+    }, 15 * 60 * 1000);
+
     return () => {
       if (profileChannel) profileChannel.unsubscribe();
+      clearInterval(interval);
     };
-  }, [user?.id, isSupabaseConfigured]);
+  }, [user?.id, isSupabaseConfigured, user?.status]);
 
   const loginWithEmail = async (email: string, password: string): Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean; email?: string }> => {
     const client = getSupabaseClient();

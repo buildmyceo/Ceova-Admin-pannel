@@ -12,7 +12,6 @@ interface PortalDataContextType {
   onlineUserIds: Set<string>;
   isUserOnline: (userId: string) => boolean;
   updateMemberStatus: (memberId: string, status: UserStatus) => Promise<{ success: boolean; error?: string }>;
-  createGroup: (group: { name: string; description?: string; color?: string }) => Promise<{ success: boolean; error?: string; department?: Department }>;
 }
 
 const PortalDataContext = createContext<PortalDataContextType | undefined>(undefined);
@@ -121,18 +120,111 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       })
       .subscribe();
 
+    // 2. Setup Instant Realtime Presence WebSocket Channel
+    const presenceChannel = client.channel('ceova-portal-presence', {
+      config: {
+        presence: {
+          key: user?.id || 'anonymous'
+        }
+      }
+    });
+
+    // Cross-tab broadcast channel for instantaneous zero-latency updates
+    let tabBroadcast: BroadcastChannel | null = null;
+    try {
+      tabBroadcast = new BroadcastChannel('ceova-tab-presence-channel');
+      tabBroadcast.onmessage = (event) => {
+        if (event.data?.type === 'ONLINE' && event.data.userId) {
+          setOnlineUserIds(prev => new Set(prev).add(event.data.userId));
+        } else if (event.data?.type === 'OFFLINE' && event.data.userId) {
+          setOnlineUserIds(prev => {
+            const next = new Set(prev);
+            next.delete(event.data.userId);
+            if (user?.id) next.add(user.id);
+            return next;
+          });
+        }
+      };
+      if (user?.id) {
+        tabBroadcast.postMessage({ type: 'ONLINE', userId: user.id });
+      }
+    } catch {
+      // BroadcastChannel optional fallback
+    }
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const activeIds = new Set<string>();
+        Object.keys(state).forEach((key) => {
+          activeIds.add(key);
+          const presences = state[key] as any[];
+          presences?.forEach(p => {
+            if (p.user_id) activeIds.add(p.user_id);
+          });
+        });
+        if (user?.id) activeIds.add(user.id);
+        setOnlineUserIds(activeIds);
+      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        setOnlineUserIds(prev => {
+          const next = new Set(prev);
+          next.add(key);
+          newPresences?.forEach((p: any) => {
+            if (p.user_id) next.add(p.user_id);
+          });
+          return next;
+        });
+      })
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        setOnlineUserIds(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          leftPresences?.forEach((p: any) => {
+            if (p.user_id) next.delete(p.user_id);
+          });
+          if (user?.id) next.add(user.id);
+          return next;
+        });
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED' && user?.id) {
+          await presenceChannel.track({
+            user_id: user.id,
+            full_name: user.full_name,
+            email: user.email,
+            online_at: new Date().toISOString()
+          });
+        }
+      });
+
+    // Handle beforeunload to untrack presence immediately
+    const handleBeforeUnload = () => {
+      if (user?.id) {
+        presenceChannel.untrack();
+        tabBroadcast?.postMessage({ type: 'OFFLINE', userId: user.id });
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
       if (refreshTimer) {
         clearTimeout(refreshTimer);
       }
       client.removeChannel(dbChannel);
+      client.removeChannel(presenceChannel);
+      if (tabBroadcast) {
+        tabBroadcast.close();
+      }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [refreshData, isSupabaseConfigured]);
+  }, [refreshData, isSupabaseConfigured, user?.id]);
 
   const isUserOnline = useCallback((userId: string): boolean => {
     if (!userId) return false;
-    return Boolean(user?.id && user.id === userId);
-  }, [user?.id]);
+    if (user?.id && user.id === userId) return true;
+    return onlineUserIds.has(userId);
+  }, [user?.id, onlineUserIds]);
 
   const updateMemberStatus = useCallback(async (memberId: string, status: UserStatus): Promise<{ success: boolean; error?: string }> => {
     const client = getSupabaseClient();
@@ -163,70 +255,6 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [isSupabaseConfigured, refreshData]);
 
-  const createGroup = useCallback(async (newGroup: { name: string; description?: string; color?: string }): Promise<{ success: boolean; error?: string; department?: Department }> => {
-    const trimmedName = newGroup.name.trim();
-    if (!trimmedName) {
-      return { success: false, error: 'Group name is required.' };
-    }
-
-    // Check if group already exists (case-insensitive)
-    const existing = departments.find(d => d.name.toLowerCase() === trimmedName.toLowerCase());
-    if (existing) {
-      return { success: true, department: existing };
-    }
-
-    const deptId = 'dept-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now());
-    const code = trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
-    const color = newGroup.color || '#3b82f6';
-    const description = newGroup.description?.trim() || `${trimmedName} Group`;
-
-    const deptObj: Department = {
-      id: deptId,
-      name: trimmedName,
-      code,
-      description,
-      color,
-      member_count: 0,
-      status: 'Operational'
-    };
-
-    setDepartments(prev => {
-      const updated = [...prev, deptObj];
-      try {
-        localStorage.setItem(STORAGE_PREFIX + 'departments', JSON.stringify(updated));
-      } catch (_) {}
-      return updated;
-    });
-
-    const client = getSupabaseClient();
-    if (client && isSupabaseConfigured) {
-      try {
-        const { data, error } = await client
-          .from('departments')
-          .insert([{
-            id: deptId,
-            name: trimmedName,
-            code,
-            description,
-            color,
-            member_count: 0
-          }])
-          .select()
-          .maybeSingle();
-
-        if (error) {
-          console.warn('Departments insert warning:', error.message);
-        } else if (data) {
-          deptObj.id = data.id;
-        }
-      } catch (err: any) {
-        console.warn('Departments insert error:', err);
-      }
-    }
-
-    return { success: true, department: deptObj };
-  }, [departments, isSupabaseConfigured]);
-
   const isAdmin = Boolean(user && (user.role === 'admin' || user.role === 'ceo'));
 
   // Security & Visibility Rule: Once any user is blocked or paused by admin,
@@ -248,7 +276,6 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         onlineUserIds,
         isUserOnline,
         updateMemberStatus,
-        createGroup,
       }}
     >
       {children}
