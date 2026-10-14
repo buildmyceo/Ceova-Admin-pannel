@@ -5,7 +5,8 @@ import { UserAvatar } from './UserAvatar';
 import { 
   LayoutDashboard, 
   UserCircle,
-  Users,
+  Users, 
+  GraduationCap,
   CheckSquare,
   BookmarkCheck,
   Calendar,
@@ -13,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 
-export type NavTab = 'dashboard' | 'profile' | 'members' | 'tasks' | 'calendar' | 'notifications' | 'app_dashboard' | 'saved';
+export type NavTab = 'dashboard' | 'profile' | 'members' | 'interns' | 'tasks' | 'calendar' | 'notifications' | 'app_dashboard' | 'saved';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -33,7 +34,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { user, isAdmin } = useAuth();
   const { members } = usePortalData();
-  const pendingCount = members.filter(m => m.status === 'pending').length;
+  const pendingMembersCount = members.filter(m => m.status === 'pending' && m.role !== 'intern').length;
+  const pendingInternsCount = members.filter(m => m.status === 'pending' && m.role === 'intern').length;
 
   const handleNavClick = (tab: NavTab) => {
     onSelectTab(tab);
@@ -93,9 +95,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Users size={17} />
             <span>Members</span>
-            {isAdmin && pendingCount > 0 && (
+            {isAdmin && pendingMembersCount > 0 && (
               <span 
-                title={`${pendingCount} pending invitations awaiting activation`}
+                title={`${pendingMembersCount} pending member invitations awaiting activation`}
                 style={{
                   marginLeft: 'auto',
                   background: 'rgba(245, 158, 11, 0.18)',
@@ -107,7 +109,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   borderRadius: 8
                 }}
               >
-                {pendingCount}
+                {pendingMembersCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item ${currentTab === 'interns' ? 'active' : ''}`}
+            onClick={() => handleNavClick('interns')}
+          >
+            <GraduationCap size={17} />
+            <span>Interns</span>
+            {isAdmin && pendingInternsCount > 0 && (
+              <span 
+                title={`${pendingInternsCount} pending intern invitations awaiting activation`}
+                style={{
+                  marginLeft: 'auto',
+                  background: 'rgba(245, 158, 11, 0.18)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: '#fbbf24',
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 8
+                }}
+              >
+                {pendingInternsCount}
               </span>
             )}
           </button>
