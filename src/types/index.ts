@@ -105,6 +105,33 @@ export interface Task {
 
 export type MeetingCategory = 'executive' | 'standup' | 'review' | 'sprint' | 'general';
 
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+
+export interface MeetingAttendanceRecord {
+  user_id: string;
+  user_name: string;
+  user_email?: string;
+  user_avatar?: string;
+  department?: string;
+  role?: string;
+  status: AttendanceStatus;
+  marked_at?: string;
+  notes?: string;
+}
+
+export interface MeetingAttendance {
+  meeting_id: string;
+  marked_at: string;
+  marked_by_id: string;
+  marked_by_name: string;
+  records: MeetingAttendanceRecord[];
+  summary_notes?: string;
+  total_attendees: number;
+  present_count: number;
+  absent_count: number;
+  late_count?: number;
+}
+
 export interface Meeting {
   id: string;
   title: string;
@@ -122,6 +149,7 @@ export interface Meeting {
   created_by_name: string;
   created_at: string;
   status?: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+  attendance?: MeetingAttendance;
 }
 
 export type NotificationType = 'meeting' | 'task' | 'deliverable' | 'system' | 'message';

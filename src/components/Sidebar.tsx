@@ -9,11 +9,12 @@ import {
   CheckSquare,
   BookmarkCheck,
   Calendar,
+  ClipboardCheck,
   Bell,
   X
 } from 'lucide-react';
 
-export type NavTab = 'dashboard' | 'profile' | 'members' | 'tasks' | 'calendar' | 'notifications' | 'app_dashboard' | 'saved';
+export type NavTab = 'dashboard' | 'profile' | 'members' | 'tasks' | 'calendar' | 'attendance' | 'notifications' | 'app_dashboard' | 'saved';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -128,6 +129,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <Calendar size={17} />
             <span>Calendar</span>
+          </button>
+
+          <button
+            type="button"
+            className={`nav-item ${currentTab === 'attendance' ? 'active' : ''}`}
+            onClick={() => handleNavClick('attendance')}
+          >
+            <ClipboardCheck size={17} />
+            <span>Attendance</span>
           </button>
 
           <button

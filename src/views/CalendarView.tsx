@@ -36,8 +36,11 @@ import {
   User,
   Tag,
   Layers,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck
 } from 'lucide-react';
+import { MarkAttendanceModal } from '../components/MarkAttendanceModal';
 
 const CATEGORY_CONFIG: Record<MeetingCategory, { label: string; color: string; bg: string; border: string }> = {
   executive: { label: 'Executive Sync', color: '#60a5fa', bg: 'rgba(59, 130, 246, 0.12)', border: '#2563eb' },
@@ -146,6 +149,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
   const [isSidePopOpen, setIsSidePopOpen] = useState(true);
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
   const sidePanelRef = useRef<HTMLDivElement>(null);
+
+  // Attendance Modal State
+  const [attendanceMeeting, setAttendanceMeeting] = useState<Meeting | null>(null);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
 
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -1840,6 +1847,77 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                                 {isCopied ? <Check size={13} /> : <Copy size={13} />}
                               </button>
                             </div>
+
+                            {/* Meeting Attendance Status & Action Button */}
+                            <div style={{ marginTop: 8 }}>
+                              {m.attendance ? (
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: 6,
+                                  padding: '6px 10px',
+                                  borderRadius: 7,
+                                  background: 'rgba(16, 185, 129, 0.08)',
+                                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                                  marginBottom: 6
+                                }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: '#34d399', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <CheckCircle2 size={12} />
+                                    {m.attendance.present_count}/{m.attendance.total_attendees} Present
+                                  </span>
+                                  {(() => {
+                                    const myRec = m.attendance.records?.find(r => 
+                                      r.user_id === user?.id || 
+                                      r.user_email?.toLowerCase() === user?.email?.toLowerCase() ||
+                                      r.user_name?.toLowerCase().trim() === user?.full_name?.toLowerCase().trim()
+                                    );
+                                    if (!myRec) return null;
+                                    if (myRec.status === 'present') {
+                                      return <span style={{ fontSize: 10.5, fontWeight: 700, color: '#34d399' }}>You: Attended ✅</span>;
+                                    } else if (myRec.status === 'late') {
+                                      return <span style={{ fontSize: 10.5, fontWeight: 700, color: '#fbbf24' }}>You: Late ⏱</span>;
+                                    } else {
+                                      return <span style={{ fontSize: 10.5, fontWeight: 700, color: '#f87171' }}>You: Absent ❌</span>;
+                                    }
+                                  })()}
+                                </div>
+                              ) : null}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAttendanceMeeting(m);
+                                  setIsAttendanceModalOpen(true);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6,
+                                  background: (!m.attendance && (isAdminUser || user?.id === m.created_by_id))
+                                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%)'
+                                    : 'rgba(255, 255, 255, 0.04)',
+                                  border: (!m.attendance && (isAdminUser || user?.id === m.created_by_id))
+                                    ? '1px solid rgba(16, 185, 129, 0.4)'
+                                    : '1px solid rgba(255, 255, 255, 0.08)',
+                                  color: (!m.attendance && (isAdminUser || user?.id === m.created_by_id))
+                                    ? '#34d399'
+                                    : '#e4e4e7',
+                                  padding: '6px 12px',
+                                  borderRadius: 7,
+                                  fontSize: 11.5,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <ClipboardCheck size={13} />
+                                {m.attendance 
+                                  ? (isAdminUser || user?.id === m.created_by_id ? 'Update Attendance Roster' : 'View Attendance Results')
+                                  : (isAdminUser || user?.id === m.created_by_id ? 'Mark Attendance' : 'View Attendance')}
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -2241,6 +2319,26 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                                 <Edit2 size={11} />
                               </button>
                             )}
+                            <button
+                              type="button"
+                              title={m.attendance ? "View / Update Attendance" : "Mark Attendance"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAttendanceMeeting(m);
+                                setIsAttendanceModalOpen(true);
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: m.attendance ? '#34d399' : '#fbbf24',
+                                padding: 2,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <ClipboardCheck size={12} />
+                            </button>
                             <a
                               href={sanitizeUrl(m.meet_link)}
                               target="_blank"
@@ -2846,6 +2944,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Meeting Attendance Modal */}
+      {isAttendanceModalOpen && attendanceMeeting && (
+        <MarkAttendanceModal
+          isOpen={isAttendanceModalOpen}
+          meeting={attendanceMeeting}
+          onClose={() => {
+            setIsAttendanceModalOpen(false);
+            setAttendanceMeeting(null);
+          }}
+          onAttendanceSaved={(updated) => {
+            setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
+            setAttendanceMeeting(updated);
+          }}
+        />
       )}
     </div>
   );

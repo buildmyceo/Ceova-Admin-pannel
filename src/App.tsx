@@ -14,6 +14,7 @@ import { TasksView } from './views/TasksView';
 import { AppDashboardView } from './views/AppDashboardView';
 import { SavedItemsView } from './views/SavedItemsView';
 import { CalendarView } from './views/CalendarView';
+import { AttendanceView } from './views/AttendanceView';
 import { NotificationsView } from './views/NotificationsView';
 
 import { AuthModal } from './components/AuthModal';
@@ -105,6 +106,8 @@ const PortalMain: React.FC = () => {
         return <TasksView initialScope={selectedTaskScope} />;
       case 'calendar':
         return <CalendarView onNavigate={handleSelectTab} />;
+      case 'attendance':
+        return <AttendanceView onNavigate={handleSelectTab} />;
       case 'notifications':
         return <NotificationsView onNavigate={handleSelectTab} />;
       case 'saved':

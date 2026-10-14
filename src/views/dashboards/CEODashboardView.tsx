@@ -34,11 +34,13 @@ import {
   Paperclip,
   Bell,
   ShieldAlert,
-  PauseCircle
+  PauseCircle,
+  ClipboardCheck
 } from 'lucide-react';
 import { NavTab } from '../../components/Sidebar';
 import { Task, TaskPriority, TaskStatus, Meeting, MeetingCategory, Profile } from '../../types';
 import { MemberStatusModal } from '../../components/MemberStatusModal';
+import { MarkAttendanceModal } from '../../components/MarkAttendanceModal';
 import { UserAvatar } from '../../components/UserAvatar';
 import { getVisibleMeetings, fetchMeetingsFromSupabase } from '../../lib/meetingsService';
 import { sanitizeUrl } from '../../lib/security';
@@ -102,6 +104,10 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
   const isAdmin = role === 'admin' || role === 'ceo';
   const [statusModalMember, setStatusModalMember] = useState<Profile | null>(null);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+
+  // Attendance Modal state
+  const [attendanceMeeting, setAttendanceMeeting] = useState<Meeting | null>(null);
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
 
 
 
@@ -609,6 +615,31 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                         >
                           {isCopied ? <Check size={12} /> : <Copy size={12} />}
                           <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAttendanceMeeting(meet);
+                            setIsAttendanceModalOpen(true);
+                          }}
+                          title={meet.attendance ? "View / Update Attendance" : "Mark Attendance"}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '6px 10px',
+                            borderRadius: 6,
+                            background: meet.attendance ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                            border: meet.attendance ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: meet.attendance ? '#34d399' : 'var(--text-muted)',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <ClipboardCheck size={12} />
+                          <span>{meet.attendance ? 'Attendance' : 'Mark'}</span>
                         </button>
 
                         <a
@@ -1230,6 +1261,21 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
           setStatusModalMember(null);
         }}
       />
+
+      {isAttendanceModalOpen && attendanceMeeting && (
+        <MarkAttendanceModal
+          isOpen={isAttendanceModalOpen}
+          meeting={attendanceMeeting}
+          onClose={() => {
+            setIsAttendanceModalOpen(false);
+            setAttendanceMeeting(null);
+          }}
+          onAttendanceSaved={(updated) => {
+            setMeetings(prev => prev.map(m => m.id === updated.id ? updated : m));
+            setAttendanceMeeting(updated);
+          }}
+        />
+      )}
     </div>
   );
 };

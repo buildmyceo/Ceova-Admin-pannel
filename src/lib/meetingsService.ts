@@ -1,4 +1,4 @@
-import { Meeting, MeetingCategory, Profile } from '../types';
+import { Meeting, MeetingCategory, Profile, MeetingAttendance } from '../types';
 import { addNotification } from './notificationsService';
 import { getSupabaseClient } from './supabase';
 
@@ -122,7 +122,8 @@ export function mapNotificationRowToMeeting(row: any): Meeting {
     created_by_id: meta.created_by_id || row.sender_id || '',
     created_by_name: meta.created_by_name || row.sender_name || 'Admin',
     created_at: meta.created_at || row.created_at || new Date().toISOString(),
-    status: meta.status || 'upcoming'
+    status: meta.status || 'upcoming',
+    attendance: meta.attendance || undefined
   };
 }
 
@@ -299,7 +300,8 @@ export const createMeeting = (
       created_by_id: newMeeting.created_by_id,
       created_by_name: newMeeting.created_by_name,
       created_at: newMeeting.created_at,
-      status: newMeeting.status || 'upcoming'
+      status: newMeeting.status || 'upcoming',
+      attendance: newMeeting.attendance || null
     }
   });
 
@@ -358,7 +360,8 @@ export const updateMeeting = (
       attendees: updatedMeeting.attendee_names || [],
       created_by_id: updatedMeeting.created_by_id,
       created_by_name: updatedMeeting.created_by_name,
-      status: updatedMeeting.status || 'upcoming'
+      status: updatedMeeting.status || 'upcoming',
+      attendance: updatedMeeting.attendance || null
     }
   });
 
@@ -387,7 +390,8 @@ export const updateMeeting = (
           attendees: updatedMeeting.attendee_names || [],
           created_by_id: updatedMeeting.created_by_id,
           created_by_name: updatedMeeting.created_by_name,
-          status: updatedMeeting.status || 'upcoming'
+          status: updatedMeeting.status || 'upcoming',
+          attendance: updatedMeeting.attendance || null
         },
         updated_at: new Date().toISOString()
       })
@@ -395,6 +399,98 @@ export const updateMeeting = (
       .then(({ error }) => {
         if (error) console.warn('Failed updating meeting in Supabase:', error.message);
       });
+  }
+
+  return updatedMeeting;
+};
+
+/**
+ * Update meeting attendance records and sync across local storage and Supabase
+ */
+export const updateMeetingAttendance = async (
+  id: string,
+  attendance: MeetingAttendance,
+  newMeetingStatus: 'upcoming' | 'ongoing' | 'completed' | 'cancelled' = 'completed'
+): Promise<Meeting | null> => {
+  const current = getStoredMeetings();
+  const index = current.findIndex(m => m.id === id);
+  if (index === -1) return null;
+
+  const existing = current[index];
+  const updatedMeeting: Meeting = {
+    ...existing,
+    status: newMeetingStatus,
+    attendance
+  };
+
+  current[index] = updatedMeeting;
+  saveMeetings([...current]);
+
+  // Dispatch attendance notification to meeting attendees
+  const presentRate = Math.round((attendance.present_count / (attendance.total_attendees || 1)) * 100);
+  addNotification({
+    title: `Attendance Finalized: ${updatedMeeting.title}`,
+    message: `${attendance.marked_by_name || 'Meeting Host'} marked attendance for "${updatedMeeting.title}". Result: ${attendance.present_count}/${attendance.total_attendees} attended (${presentRate}%). Check your attendance scorecard in the portal.`,
+    type: 'meeting',
+    link: updatedMeeting.meet_link,
+    sender_id: attendance.marked_by_id,
+    sender_name: attendance.marked_by_name,
+    target_type: updatedMeeting.target_type === 'all' ? 'all' : 'members',
+    recipient_ids: updatedMeeting.target_type === 'all' ? [] : (updatedMeeting.attendee_ids || []),
+    recipient_names: updatedMeeting.target_type === 'all' ? ['Everyone'] : (updatedMeeting.attendee_names || []),
+    user_id: updatedMeeting.target_type === 'all' ? 'all' : (updatedMeeting.attendee_ids?.[0] || 'all'),
+    meeting_id: updatedMeeting.id,
+    meta: {
+      meeting_id: updatedMeeting.id,
+      title: updatedMeeting.title,
+      description: updatedMeeting.description || null,
+      date: updatedMeeting.date,
+      start_time: updatedMeeting.start_time,
+      end_time: updatedMeeting.end_time || null,
+      duration_minutes: updatedMeeting.duration_minutes || 30,
+      meet_link: updatedMeeting.meet_link,
+      category: updatedMeeting.category,
+      target_type: updatedMeeting.target_type,
+      attendee_ids: updatedMeeting.attendee_ids || [],
+      attendees: updatedMeeting.attendee_names || [],
+      created_by_id: updatedMeeting.created_by_id,
+      created_by_name: updatedMeeting.created_by_name,
+      status: newMeetingStatus,
+      attendance
+    }
+  });
+
+  // Sync to existing meeting row in Supabase
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase
+        .from('notifications')
+        .update({
+          meta: {
+            meeting_id: updatedMeeting.id,
+            title: updatedMeeting.title,
+            description: updatedMeeting.description || null,
+            date: updatedMeeting.date,
+            start_time: updatedMeeting.start_time,
+            end_time: updatedMeeting.end_time || null,
+            duration_minutes: updatedMeeting.duration_minutes || 30,
+            meet_link: updatedMeeting.meet_link,
+            category: updatedMeeting.category,
+            target_type: updatedMeeting.target_type,
+            attendee_ids: updatedMeeting.attendee_ids || [],
+            attendees: updatedMeeting.attendee_names || [],
+            created_by_id: updatedMeeting.created_by_id,
+            created_by_name: updatedMeeting.created_by_name,
+            status: newMeetingStatus,
+            attendance
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('meeting_id', id);
+    } catch (err) {
+      console.warn('Failed syncing attendance to Supabase:', err);
+    }
   }
 
   return updatedMeeting;
