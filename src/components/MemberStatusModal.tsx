@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Profile, UserStatus } from '../types';
 import { usePortalData } from '../context/PortalDataContext';
+import { UserAvatar } from './UserAvatar';
 import { 
   ShieldAlert, 
   PauseCircle, 
@@ -183,27 +184,14 @@ export const MemberStatusModal: React.FC<MemberStatusModalProps> = ({
             border: '1px solid #27272a'
           }}
         >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: '#27272a',
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}
-          >
-            {member.avatar_url ? (
-              <img src={member.avatar_url} alt={member.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
-                {(member.full_name || 'U').charAt(0).toUpperCase()}
-              </span>
-            )}
-          </div>
+          <UserAvatar
+            src={member.avatar_url}
+            name={member.full_name}
+            size={36}
+            fontSize={14}
+            borderRadius="50%"
+            border="1px solid #3f3f46"
+          />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {member.full_name}

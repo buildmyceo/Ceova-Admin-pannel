@@ -12,6 +12,7 @@ import {
 import { getSupabaseClient } from '../lib/supabase';
 import { sanitizeUrl, isSafeHttpUrl } from '../lib/security';
 import { NavTab } from '../components/Sidebar';
+import { UserAvatar } from '../components/UserAvatar';
 import { 
   Calendar as CalendarIcon, 
   Plus, 
@@ -2728,25 +2729,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onNavigate }) => {
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <div style={{
-                                width: 24,
-                                height: 24,
-                                borderRadius: '50%',
-                                background: '#2563eb',
-                                color: '#ffffff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                overflow: 'hidden'
-                              }}>
-                                {m.avatar_url ? (
-                                  <img src={m.avatar_url} alt={m.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  m.full_name?.charAt(0) || 'U'
-                                )}
-                              </div>
+                              <UserAvatar
+                                src={m.avatar_url}
+                                name={m.full_name}
+                                size={24}
+                                fontSize={11}
+                              />
                               <div>
                                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>
                                   {m.full_name}

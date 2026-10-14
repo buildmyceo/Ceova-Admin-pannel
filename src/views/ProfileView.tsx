@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { UserAvatar } from '../components/UserAvatar';
 import { getSupabaseClient } from '../lib/supabase';
 import { sanitizeSocialLink, sanitizeUrl, validateAttachmentFile } from '../lib/security';
 import { 
@@ -451,30 +452,17 @@ export const ProfileView: React.FC = () => {
                 onClick={() => fileInputRef.current?.click()}
                 title="Click to upload or change profile photo"
               >
-                <div 
+                <UserAvatar
+                  src={user?.avatar_url}
+                  name={user?.full_name}
                   className="user-avatar-wrap"
-                  style={{ 
+                  border="4px solid #0d0d0f"
+                  style={{
                     width: 'clamp(84px, 18vw, 114px)', 
-                    height: 'clamp(84px, 18vw, 114px)', 
-                    borderRadius: '50%',
-                    border: '4px solid #0d0d0f',
-                    background: '#161618',
-                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.12)',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative'
+                    height: 'clamp(84px, 18vw, 114px)',
+                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.12)'
                   }}
-                >
-                  {user?.avatar_url ? (
-                    <img src={sanitizeUrl(user.avatar_url)} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'clamp(28px, 6vw, 38px)', fontWeight: 700, color: '#ffffff' }}>
-                      {user?.full_name?.charAt(0) || 'U'}
-                    </div>
-                  )}
-                </div>
+                />
 
                 {/* Camera quick-action mini button on corner of avatar */}
                 <button

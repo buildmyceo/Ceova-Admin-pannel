@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { UserAvatar } from './UserAvatar';
 import { 
   User, 
   LogOut, 
@@ -199,15 +200,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="navbar-user-chip"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
-              <div className="user-avatar-wrap" style={{ width: 32, height: 32 }}>
-                {user.avatar_url ? (
-                  <img src={user.avatar_url} alt={user.full_name} className="avatar-img" />
-                ) : (
-                  <div className="avatar-fallback" style={{ fontSize: 12 }}>
-                    {user.full_name.charAt(0)}
-                  </div>
-                )}
-              </div>
+              <UserAvatar
+                src={user.avatar_url}
+                name={user.full_name}
+                size={32}
+                fontSize={12}
+                className="user-avatar-wrap"
+              />
 
               <div className="navbar-user-info" style={{ textAlign: 'left', lineHeight: 1.2 }}>
                 <div className="navbar-user-name" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
@@ -241,31 +240,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   alignItems: 'center',
                   gap: 10
                 }}>
-                  <div style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 10,
-                    background: (user.role === 'admin' || user.role === 'ceo') 
-                      ? 'rgba(59, 130, 246, 0.2)' 
-                      : user.role === 'intern' 
-                        ? 'rgba(245, 158, 11, 0.2)' 
-                        : 'rgba(255, 255, 255, 0.1)',
-                    border: user.role === 'intern' ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(255, 255, 255, 0.15)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    fontSize: 13,
-                    overflow: 'hidden',
-                    flexShrink: 0
-                  }}>
-                    {user.avatar_url ? (
-                      <img src={user.avatar_url} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      user.full_name.charAt(0).toUpperCase()
-                    )}
-                  </div>
+                  <UserAvatar
+                    src={user.avatar_url}
+                    name={user.full_name}
+                    size={34}
+                    fontSize={13}
+                    borderRadius={10}
+                    border={user.role === 'intern' ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(255, 255, 255, 0.15)'}
+                  />
                   <div style={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.25 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -353,26 +335,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                           className={!isActive ? 'nav-item-account-hover' : ''}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                            <div style={{
-                              width: 26,
-                              height: 26,
-                              borderRadius: '50%',
-                              background: (acc.profile.role === 'admin' || acc.profile.role === 'ceo') ? 'var(--accent-primary, #3b82f6)' : acc.profile.role === 'intern' ? '#f59e0b' : '#64748b',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#ffffff',
-                              fontSize: 11,
-                              fontWeight: 600,
-                              overflow: 'hidden',
-                              flexShrink: 0
-                            }}>
-                              {acc.profile.avatar_url ? (
-                                <img src={acc.profile.avatar_url} alt={acc.profile.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : (
-                                (acc.profile.full_name || 'U').charAt(0).toUpperCase()
-                              )}
-                            </div>
+                              <UserAvatar
+                                src={acc.profile.avatar_url}
+                                name={acc.profile.full_name}
+                                size={26}
+                                fontSize={11}
+                              />
 
                             <div style={{ minWidth: 0, flex: 1, textAlign: 'left', lineHeight: 1.2 }}>
                               <div style={{ 

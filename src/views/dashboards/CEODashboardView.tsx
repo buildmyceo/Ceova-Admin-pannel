@@ -39,6 +39,7 @@ import {
 import { NavTab } from '../../components/Sidebar';
 import { Task, TaskPriority, TaskStatus, Meeting, MeetingCategory, Profile } from '../../types';
 import { MemberStatusModal } from '../../components/MemberStatusModal';
+import { UserAvatar } from '../../components/UserAvatar';
 import { getVisibleMeetings, fetchMeetingsFromSupabase } from '../../lib/meetingsService';
 import { sanitizeUrl } from '../../lib/security';
 
@@ -248,26 +249,17 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
           <div className="dashboard-banner-identity" style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             {/* User Avatar */}
             <div style={{ position: 'relative' }}>
-              <div style={{
-                width: 68,
-                height: 68,
-                borderRadius: '50%',
-                background: '#18181c',
-                border: '2px solid rgba(255, 255, 255, 0.18)',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                {user?.avatar_url ? (
-                  <img src={user.avatar_url} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <span style={{ fontSize: 26, fontWeight: 700, color: '#ffffff' }}>
-                    {user?.full_name?.charAt(0).toUpperCase() || 'U'}
-                  </span>
-                )}
-              </div>
+              <UserAvatar
+                src={user?.avatar_url}
+                name={user?.full_name}
+                size={68}
+                fontSize={26}
+                borderRadius="50%"
+                border="2px solid rgba(255, 255, 255, 0.18)"
+                style={{
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)'
+                }}
+              />
               {/* Online Dot */}
               <span style={{
                 position: 'absolute',
@@ -1072,26 +1064,14 @@ export const CEODashboardView: React.FC<CEODashboardViewProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: '#27272a',
-                      overflow: 'hidden',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      border: isSuspended ? '2px solid #ef4444' : '1px solid #3f3f46'
-                    }}>
-                      {m.avatar_url ? (
-                        <img src={m.avatar_url} alt={m.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
-                          {(m.full_name || 'U').charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
+                    <UserAvatar
+                      src={m.avatar_url}
+                      name={m.full_name}
+                      size={44}
+                      fontSize={16}
+                      borderRadius="50%"
+                      border={isSuspended ? '2px solid #ef4444' : '1px solid #3f3f46'}
+                    />
 
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { usePortalData } from '../context/PortalDataContext';
+import { UserAvatar } from './UserAvatar';
 import { 
   LayoutDashboard, 
   UserCircle,
@@ -158,13 +159,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Click to view and edit profile photo & details"
             style={{ cursor: 'pointer' }}
           >
-            <div className="user-avatar-wrap">
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt={user.full_name} className="avatar-img" />
-              ) : (
-                <div className="avatar-fallback">{user.full_name.charAt(0)}</div>
-              )}
-            </div>
+            <UserAvatar
+              src={user.avatar_url}
+              name={user.full_name}
+              size={36}
+              fontSize={14}
+              className="user-avatar-wrap"
+            />
             <div className="user-meta">
               <div className="name">{user.full_name}</div>
               <div className="user-sub-label">

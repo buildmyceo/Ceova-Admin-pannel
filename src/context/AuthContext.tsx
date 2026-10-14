@@ -571,7 +571,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const nowIso = new Date().toISOString();
       if (client && isSupabaseConfigured) {
         try {
-          const { error } = await client
+          await client
             .from('profiles')
             .update({ 
               last_active_at: nowIso,
@@ -579,16 +579,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               status: user.status === 'offline' ? 'active' : (user.status || 'active')
             })
             .eq('id', user.id);
-          
-          if (error && error.message?.includes('last_active_at')) {
-            await client
-              .from('profiles')
-              .update({ 
-                updated_at: nowIso,
-                status: user.status === 'offline' ? 'active' : (user.status || 'active')
-              })
-              .eq('id', user.id);
-          }
         } catch (e) {
           console.warn('Presence ping:', e);
         }
@@ -610,28 +600,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     };
 
+    // Ping once on mount to establish session activity
     pingActivity();
-    const interval = setInterval(pingActivity, 2 * 60 * 1000);
 
-    const handleUserActivity = () => {
-      const lastPing = parseInt(sessionStorage.getItem('ceova_last_ping_ts') || '0', 10);
-      const now = Date.now();
-      if (now - lastPing > 60000) {
-        sessionStorage.setItem('ceova_last_ping_ts', now.toString());
+    // Gentle 15-minute background refresh only if page is visible (no mousemove/keydown spam)
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
         pingActivity();
       }
-    };
-
-    window.addEventListener('mousemove', handleUserActivity, { passive: true });
-    window.addEventListener('keydown', handleUserActivity, { passive: true });
-    window.addEventListener('click', handleUserActivity, { passive: true });
+    }, 15 * 60 * 1000);
 
     return () => {
       if (profileChannel) profileChannel.unsubscribe();
       clearInterval(interval);
-      window.removeEventListener('mousemove', handleUserActivity);
-      window.removeEventListener('keydown', handleUserActivity);
-      window.removeEventListener('click', handleUserActivity);
     };
   }, [user?.id, isSupabaseConfigured, user?.status]);
 

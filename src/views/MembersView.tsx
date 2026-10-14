@@ -38,6 +38,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
+import { UserAvatar } from '../components/UserAvatar';
 import { Profile } from '../types';
 import { MemberStatusModal } from '../components/MemberStatusModal';
 
@@ -956,26 +957,16 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   {/* Avatar & Online Dot */}
                   <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: -36, marginBottom: 14 }}>
                     <div style={{ position: 'relative' }}>
-                      <div style={{
-                        width: 68,
-                        height: 68,
-                        borderRadius: '50%',
-                        border: '3px solid #0d0d0f',
-                        background: '#161618',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1)'
-                      }}>
-                        {member.avatar_url ? (
-                          <img src={member.avatar_url} alt={member.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <span style={{ fontSize: 24, fontWeight: 700, color: '#ffffff' }}>
-                            {(member.full_name || 'U').charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
+                      <UserAvatar
+                        src={member.avatar_url}
+                        name={member.full_name}
+                        size={68}
+                        fontSize={24}
+                        border="3px solid #0d0d0f"
+                        style={{
+                          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+                        }}
+                      />
 
                       {/* Status indicator ring & dot (Instant Sync, Solid Dot, No Neon Glow) */}
                       <div 
@@ -1685,26 +1676,13 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                     >
                       <td style={{ padding: '14px 20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div style={{
-                            width: 38,
-                            height: 38,
-                            borderRadius: '50%',
-                            background: '#161618',
-                            border: member.status === 'pending' ? '1.5px solid #f59e0b' : '1px solid rgba(255, 255, 255, 0.1)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            overflow: 'hidden',
-                            position: 'relative'
-                          }}>
-                            {member.avatar_url ? (
-                              <img src={member.avatar_url} alt={member.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <span style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
-                                {(member.full_name || 'U').charAt(0).toUpperCase()}
-                              </span>
-                            )}
-                          </div>
+                          <UserAvatar
+                            src={member.avatar_url}
+                            name={member.full_name}
+                            size={38}
+                            fontSize={15}
+                            border={member.status === 'pending' ? '1.5px solid #f59e0b' : '1px solid rgba(255, 255, 255, 0.1)'}
+                          />
                           <div>
                             <div style={{ fontWeight: 700, color: '#ffffff', fontSize: 13.5 }}>
                               {member.full_name}

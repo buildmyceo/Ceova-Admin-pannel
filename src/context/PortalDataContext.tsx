@@ -86,14 +86,37 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const client = getSupabaseClient();
     if (!client || !isSupabaseConfigured) return;
 
-    // 1. Listen for database changes on profiles and departments
+    let refreshTimer: any = null;
+    const triggerDebouncedRefresh = () => {
+      if (refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        refreshData();
+      }, 3000);
+    };
+
+    // 1. Listen for database changes on profiles and departments (debounced & filtered)
     const dbChannel = client
       .channel('ceova-realtime-portal-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        refreshData();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload: any) => {
+        // If only activity timestamp changed, do not re-fetch all profiles (saves egress and log quota)
+        if (payload?.eventType === 'UPDATE' && payload?.new && payload?.old) {
+          const n = payload.new;
+          const o = payload.old;
+          const isStructural =
+            n.full_name !== o.full_name ||
+            n.role !== o.role ||
+            n.department !== o.department ||
+            n.status !== o.status ||
+            n.avatar_url !== o.avatar_url ||
+            n.email !== o.email ||
+            n.designation !== o.designation;
+          if (!isStructural) return;
+        }
+        triggerDebouncedRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'departments' }, () => {
-        refreshData();
+        triggerDebouncedRefresh();
       })
       .subscribe();
 
@@ -185,6 +208,9 @@ export const PortalDataProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
       client.removeChannel(dbChannel);
       client.removeChannel(presenceChannel);
       if (tabBroadcast) {
