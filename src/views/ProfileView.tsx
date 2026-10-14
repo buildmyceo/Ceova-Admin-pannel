@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { UserAvatar } from '../components/UserAvatar';
 import { getSupabaseClient } from '../lib/supabase';
 import { sanitizeSocialLink, sanitizeUrl, validateAttachmentFile } from '../lib/security';
+import { resolveCoverUrl, getMemberCoverStyle } from '../lib/coverUtils';
 import { 
   User, 
   Mail, 
@@ -267,47 +268,77 @@ export const ProfileView: React.FC = () => {
     return sanitizeSocialLink(platform, rawValue);
   };
 
-  const renderCoverPhoto = () => (
-    <div style={{ 
-      position: 'relative', 
-      width: '100%', 
-      aspectRatio: '16 / 9', 
-      backgroundColor: '#09090b',
-      backgroundImage: coverUrl ? `url("${sanitizeUrl(coverUrl)}")` : 'none',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      borderTopLeftRadius: 'var(--radius-xl)',
-      borderTopRightRadius: 'var(--radius-xl)',
-      overflow: 'hidden'
-    }}>
-      {/* Subtle overlay */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: coverUrl ? 'rgba(0,0,0,0.22)' : 'transparent',
-        pointerEvents: 'none'
-      }} />
+  const renderCoverPhoto = () => {
+    const defaultStyle = getMemberCoverStyle(user || undefined);
+    const resolvedUrl = coverUrl ? resolveCoverUrl(sanitizeUrl(coverUrl)) : '';
+    const activeBg = resolvedUrl ? `url("${resolvedUrl}")` : defaultStyle.backgroundImage;
 
-      {!coverUrl && (
-        <div 
-          onClick={() => coverInputRef.current?.click()}
-          style={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            height: '100%', 
-            color: 'var(--text-subtle)',
-            cursor: 'pointer'
-          }}
-          title="Click to upload cover photo (16:9 • 1280 × 720)"
-        >
-          <Camera size={34} opacity={0.4} style={{ color: '#ffffff' }} />
-          <span style={{ fontSize: 12, marginTop: 8, color: '#a1a1aa', fontWeight: 600 }}>
-            Click to upload cover photo (16:9 • 1280 × 720)
-          </span>
-        </div>
-      )}
+    return (
+      <div style={{ 
+        position: 'relative', 
+        width: '100%', 
+        aspectRatio: '16 / 9', 
+        backgroundColor: defaultStyle.backgroundColor,
+        backgroundImage: activeBg,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        borderTopLeftRadius: 'var(--radius-xl)',
+        borderTopRightRadius: 'var(--radius-xl)',
+        overflow: 'hidden'
+      }}>
+        {/* Subtle grid pattern overlay */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px)',
+          backgroundSize: '16px 16px',
+          opacity: resolvedUrl ? 0.2 : 0.45,
+          pointerEvents: 'none'
+        }} />
+
+        {/* Subtle gradient overlay */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: resolvedUrl ? 'rgba(0,0,0,0.25)' : 'transparent',
+          pointerEvents: 'none'
+        }} />
+
+        {!coverUrl && (
+          <div 
+            onClick={() => coverInputRef.current?.click()}
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              height: '100%', 
+              color: 'var(--text-subtle)',
+              cursor: 'pointer',
+              position: 'relative',
+              zIndex: 1
+            }}
+            title="Click to upload custom cover photo (16:9 • 1280 × 720)"
+          >
+            <div style={{
+              width: 44,
+              height: 44,
+              borderRadius: '50%',
+              background: 'rgba(0, 0, 0, 0.5)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 8,
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)'
+            }}>
+              <Camera size={20} style={{ color: '#ffffff' }} />
+            </div>
+            <span style={{ fontSize: 12.5, color: '#e4e4e7', fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.6)' }}>
+              Click to customize executive cover photo (16:9)
+            </span>
+          </div>
+        )}
 
       {/* Floating cover buttons: always visible so user can easily upload/change */}
       <div style={{ position: 'absolute', top: 14, right: 14, display: 'flex', alignItems: 'center', gap: 8, zIndex: 10 }}>
@@ -361,6 +392,7 @@ export const ProfileView: React.FC = () => {
       </div>
     </div>
   );
+};
 
   if (!isEditing) {
     return (

@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { NavTab } from '../components/Sidebar';
 import { UserAvatar } from '../components/UserAvatar';
+import { getMemberCoverStyle } from '../lib/coverUtils';
 import { Profile } from '../types';
 import { MemberStatusModal } from '../components/MemberStatusModal';
 
@@ -905,18 +906,41 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                   boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
                 }}
               >
-                {/* 1. Card Top Cover Banner - 16:9 Aspect Ratio */}
-                <div style={{
-                  width: '100%',
-                  aspectRatio: '16 / 9',
-                  position: 'relative',
-                  backgroundColor: '#161618',
-                  backgroundImage: member.cover_url ? `url(${member.cover_url})` : 'none',
-                  backgroundPosition: 'center',
-                  backgroundSize: 'cover',
-                  backgroundRepeat: 'no-repeat',
-                  borderBottom: '1px solid #222225'
-                }}>
+                {/* 1. Card Top Cover Banner - 16:9 Aspect Ratio with Executive Presets & Proxied Images */}
+                {(() => {
+                  const coverStyle = getMemberCoverStyle(member);
+                  return (
+                    <div style={{
+                      width: '100%',
+                      aspectRatio: '16 / 9',
+                      position: 'relative',
+                      backgroundColor: coverStyle.backgroundColor,
+                      backgroundImage: coverStyle.backgroundImage,
+                      backgroundPosition: 'center',
+                      backgroundSize: 'cover',
+                      backgroundRepeat: 'no-repeat',
+                      borderBottom: '1px solid #222225',
+                      overflow: 'hidden'
+                    }}>
+                      {/* Modern High-Tech Grid Pattern Overlay */}
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px)',
+                        backgroundSize: '16px 16px',
+                        opacity: coverStyle.isCustom ? 0.18 : 0.45,
+                        pointerEvents: 'none'
+                      }} />
+                      {/* Bottom Gradient Fade into Card */}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: '45%',
+                        background: 'linear-gradient(to top, rgba(13, 13, 15, 0.88) 0%, transparent 100%)',
+                        pointerEvents: 'none'
+                      }} />
                   {/* Top Right Role Pill - Solid Colors, No Neon */}
                   <div style={{
                     position: 'absolute',
@@ -951,6 +975,8 @@ export const MembersView: React.FC<MembersViewProps> = ({ onNavigate }) => {
                     </span>
                   </div>
                 </div>
+                  );
+                })()}
 
                 {/* 2. Card Body Content */}
                 <div style={{ padding: '0 18px 18px', flex: 1, display: 'flex', flexDirection: 'column' }}>
