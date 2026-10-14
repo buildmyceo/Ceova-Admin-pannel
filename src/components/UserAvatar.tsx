@@ -95,6 +95,18 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
     );
   }
 
+  // Route Supabase storage URLs through our same-origin proxy to bypass local network/Cisco DNS blocks
+  const resolvedSrc = useMemo(() => {
+    if (!src) return undefined;
+    if (src.includes('supabase.co/storage/')) {
+      const parts = src.split('/storage/');
+      if (parts[1]) {
+        return `/supabase-storage/${parts[1]}`;
+      }
+    }
+    return src;
+  }, [src]);
+
   return (
     <div 
       className={className} 
@@ -102,7 +114,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
       title={title || name || undefined}
     >
       <img
-        src={src}
+        src={resolvedSrc}
         alt={name || 'Avatar'}
         onError={() => setHasError(true)}
         style={{

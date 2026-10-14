@@ -60,6 +60,10 @@
   ],
   "rewrites": [
     {
+      "source": "/supabase-storage/:match*",
+      "destination": "https://yuvkddpfcokqctomsbun.supabase.co/storage/:match*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

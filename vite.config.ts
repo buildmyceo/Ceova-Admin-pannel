@@ -34,6 +34,15 @@ export default defineConfig(({ mode }) => {
   const resendApiKey = env.RESEND_API || env.VITE_RESEND_API || env.VITE_RESEND_API_KEY || ''
   return {
     plugins: [react(), ceovaVersionPlugin()],
+    server: {
+      proxy: {
+        '/supabase-storage': {
+          target: 'https://yuvkddpfcokqctomsbun.supabase.co/storage',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/supabase-storage/, '')
+        }
+      }
+    },
     define: {
       'process.env.RESEND_API': JSON.stringify(resendApiKey),
       'import.meta.env.RESEND_API': JSON.stringify(resendApiKey),
